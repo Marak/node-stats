@@ -1,0 +1,656 @@
+[00:01] <Tim_Smart> Cainus: How is a depreciation warning a bug?
+[00:01] <Cainus> it shouldn't show to the user
+[00:01] <Tim_Smart> it should only pop up once, anyway, unless you are creating child processes
+[00:02] Harrison has joined the channel
+[00:02] <Tim_Smart> If it doesn't get written to stderr, then people won't take note of it. The way to fix it is to remove process.mixin calls
+[00:02] kriskowal has joined the channel
+[00:03] <Cainus> my app loads in foreign code though
+[00:03] <Cainus> so I wanted it to handle that nicely
+[00:04] <Tim_Smart> Cainus: Have you tried over-riding process.mixin with your own function?
+[00:04] <Tim_Smart> It *should* keep reference
+[00:04] <Cainus> yeah I could monkey patch node, if that's what you mean ;)
+[00:05] <Tim_Smart> ah, I mean in your code that calls require
+[00:05] <Tim_Smart> let me try it quickly...
+[00:05] <Cainus> yeah me too... that's why I said monkey-path, not patch
+[00:05] <Cainus> err monkey-patch
+[00:07] <Cainus> just seems like something that should be fixed in node.. not a huge deal... I bet most people are writing server apps with node, so it's no big deal what gets pumped to stdio
+[00:09] <Tim_Smart> yeah over-riding process.mixin works fine. Will just have to implement your own mixin function
+[00:09] <isaacs> what's this about process.mixin?
+[00:10] <Tim_Smart> isaacs: Cainus doesn't like it writing depreciation warnings to stderr
+[00:10] <isaacs> oh, well... then don't use process.mixin
+[00:10] <isaacs> it's going to be gone soon.
+[00:10] <Tim_Smart> isaacs: I think it was in libraries he was using
+[00:10] <isaacs> i see.
+[00:10] <Cainus> guess I really need to monkey-patch process.stdio.writeError()
+[00:10] <isaacs> then the bug is with those libraries, not with node.
+[00:11] <Cainus> deprecation != bug though
+[00:11] <isaacs> Cainus: !!!!
+[00:11] kriszyp has joined the channel
+[00:11] <Cainus> heh
+[00:11] <isaacs> yikes, changing process.stdio.writeError is scary
+[00:11] <isaacs> using deprecated features is a bug.
+[00:11] <Cainus> of course it's not
+[00:11] <Cainus> or the functionality would be removed
+[00:12] <Tim_Smart> complain to the libraries authors then :p
+[00:12] <cpojer> well then maybe add a new method to node that outputs deprecation warnings :P
+[00:12] <isaacs> Cainus: it was decided that removing process.mixin would be too abrupt and obnoxious, even for nodejs
+[00:12] <Cainus> process.mixin isn't really the point
+[00:12] <isaacs> a lot of libs rely on it, and actually, given its brokenness, this is something that they should change soon
+[00:12] <Cainus> it's the scheme of showing the user deprecation warnings
+[00:13] <isaacs> Cainus: what's wrong with spitting warnings out to stderr?  what's the alternative there?
+[00:13] <Cainus> stderr is fine if I can redir it somehow
+[00:13] <isaacs> Cainus: sure.  node myprog.js 2>/dev/null
+[00:13] <Tim_Smart> Cainus: That is up to your terminal
+[00:13] <Tim_Smart> or that ----^
+[00:13] <isaacs> unix processes get three pipes for io.  one in, two out.
+[00:13] <broofa> My $.02 on deprecation: Even if the function is gone, the deprecation message provides a useful pointer to where it went/what the new API is.
+[00:14] <isaacs> broofa: in this case, there will be no replacement.
+[00:14] <jgoulah> are there any examples out there of using FileReadStream
+[00:14] <broofa> isaacs: even that is useful.  it keeps you from having to search around for a possible replacement.
+[00:14] <isaacs> broofa: or, if there is, it'll be some collection of functions in an object.js or something.
+[00:14] <Cainus> ahh..  node myprog.js 2>/dev/null  works well
+[00:14] <isaacs> broofa: that's why the message says that it's going away, and tells you to update your code to not use it.
+[00:14] <Cainus> thanks isaacs
+[00:14] <isaacs> Cainus: np!
+[00:15] <broofa> fwiw, I think the optimal (but not always feasible) approach is to leave deprecated APIs in place for at least one dot-release.  With warnings about what's going to happen to them in the next release.
+[00:15] <Cainus> broofa: the question is if the user needs to see it or not ;)
+[00:15] <isaacs> Cainus: fyi, stdout is &1 and stderr is &2.  you can also do myprog 2>&1 etc.
+[00:15] <isaacs> broofa: that's kinda where we're at with process.mixin
+[00:16] <broofa> Cainus: by 'user', I suspect you mean 'admin'/'developer'.  i.e. whether or not they should appear in log files.
+[00:16] <isaacs> broofa: there's a stderr message, and then in a little while, it'll start throwing
+[00:16] <broofa> sounds like I'm not saying anything new then. :)
+[00:16] <Cainus> no... I don't mean developer... I mean user ;)
+[00:16] <isaacs> Cainus: you're showing stderr to the user?
+[00:16] <isaacs> Cainus: that seems like Doing It Wrong.
+[00:17] <broofa> ACTION agrees w/ isaacs
+[00:17] <isaacs> Cainus: like, 10 years of bad php practices being repeated.
+[00:17] <Cainus> isaacs: that's the default of course... but now I'm piping elsewhere
+[00:17] <isaacs> Cainus: just out of curiousity, what's the "user" in this casE?
+[00:17] <isaacs> er... "who" that is
+[00:17] <Cainus> i'm not writing a web app at all, in case that's what you're thinking
+[00:18] <isaacs> ah, i see
+[00:18] <isaacs> well... in that case, don't you kinda WANT stderr to be seen?
+[00:18] <isaacs> i mean, what if there's, like, an error or something?
+[00:18] <Cainus> isaacs: I'd like to see it as a developer, but not as a user
+[00:18] <isaacs> Cainus: right.  but what about when your app crashes in production because osmething bad happens?
+[00:19] <Cainus> well I'll pipe it somewhere better than /dev/null ;)
+[00:19] <Cainus> heheh
+[00:19] <isaacs> hehe, ok
+[00:19] <isaacs> btw, whichever lib you're using that uses process.mixin, you should remove it and send them a patch
+[00:19] <Cainus> thanks for the pointer man... that's a big help
+[00:20] <Cainus> yeah I'm going to patch it too
+[00:20] <isaacs> most folks love free bug fixes ;)
+[00:20] <Cainus> this guy seems to be MIA so I might just fork
+[00:21] <Cainus> haven't heard from him about my last patch in almost a month
+[00:28] dnolen has joined the channel
+[00:40] alexiskander has joined the channel
+[00:50] <Cainus> hmmmmmmmmmm so what's the substitute for process.mixin()?  the API docs are still suggesting its usage
+[00:51] <Cainus> file i/o with process.compile() ?
+[00:52] <inimino> Cainus: totally different thing
+[00:52] <inimino> Cainus: mixin() is just copying object properties around; write your own or use one from a library
+[00:53] <Cainus> ah yeah thanks
+[00:54] <Cainus> all I really needed was require()... I didn't need to pollute my scope
+[00:54] <inimino> ah
+[00:54] <Cainus> still learning obviously :)
+[00:57] <inimino> like everyone :)
+[01:17] mattly has joined the channel
+[01:18] binary42 has joined the channel
+[01:34] cloudhead has joined the channel
+[01:36] binary42 has joined the channel
+[01:39] rauchg has joined the channel
+[01:52] <jgoulah> what is the best way to read a file line by line? the read stream is close but since it gets chunks no guarantee if its a full line or not
+[01:52] <jgoulah> just append all that together and split?
+[01:56] mattly has joined the channel
+[02:07] rictic has joined the channel
+[02:08] <rauchg> jgoulah: look for \n 
+[02:08] <rauchg> if there isn't one buffer the chunk
+[02:14] <jgoulah> yeah i got it, cool
+[02:18] <jgoulah> how about if i wanted to actually tail a file
+[02:19] <jgoulah> like almost receive an event when something is written and only output that
+[02:19] <jgoulah> is that possible
+[02:29] mattly has joined the channel
+[02:30] <jgoulah> ah found a way, wonder if its the best way :)
+[02:36] jed has joined the channel
+[02:54] <rauchg> jgoulah: fs.watchFile
+[02:56] softdrink has joined the channel
+[03:00] <jgoulah> ah
+[03:02] <jed> is there anything i need to do to reflect changes i've made to lib/http.js?
+[03:04] <jed> ^^ okay, the answer is apparently "make install", FYI.
+[03:05] <jgoulah> rauchg: so that tells me when it changes how do i get the data
+[03:05] <jgoulah> i had been doing like this http://paste.scsys.co.uk/40699
+[03:06] <rauchg> jed: you can edit /usr/local/lib/node/libraries/http.js directly
+[03:06] <jed> rauchg: ah, thanks!
+[03:06] <rauchg> jgoulah: that also works 
+[03:07] <rauchg> i think that'll perform well
+[03:07] <jgoulah> ok
+[03:15] bentomas has joined the channel
+[03:24] mattly has joined the channel
+[03:26] <inimino> jed: you can also use NODE_PATH=~/node/lib
+[03:28] <jed> inimino: ah, thanks.
+[03:52] mikeal has joined the channel
+[03:59] dandean has joined the channel
+[04:05] _ry has joined the channel
+[04:13] okito has joined the channel
+[04:20] <CIA-77> node: 03Ryan Dahl 07master * rffeb472 10/ wscript : small wscript error - http://bit.ly/aEFWRA
+[04:20] <CIA-77> node: 03Scott González 07master * rd2ec5c2 10/ src/node.js : Fixed typo in comment for require.registerExtension(). - http://bit.ly/aTL2Jm
+[04:20] <CIA-77> node: 03Ryan Dahl 07master * r7be0d06 10/ doc/index.html : FreeBsd->Solaris on homepage - http://bit.ly/aAclkt
+[04:20] <CIA-77> node: 03Herbert Vojčík 07master * r0f08bd8 10/ src/node_idle_watcher.cc : Only Ref in idle watcher when wasn't already active. - http://bit.ly/9dnb60
+[04:25] jed has joined the channel
+[04:29] erikvold has joined the channel
+[04:34] PyroPeter has joined the channel
+[04:46] <CIA-77> node: 03Herbert Vojčík 07master * r49d30c6 10/ (src/node_idle_watcher.cc src/node_idle_watcher.h): Only Ref in idle watcher when wasn't already active. - http://bit.ly/aAcQEu
+[04:46] <_ry> forced push sorry
+[04:51] RayMorgan has joined the channel
+[05:04] mikeal has joined the channel
+[05:10] <tmpvar> hey _ry is there a reason why you wanted to use avro over another solution?
+[05:24] indiefan has joined the channel
+[05:37] whoahbot has joined the channel
+[05:40] zuk has joined the channel
+[05:40] <zuk> anyone know how I might read from a serial stream (ttyUSB)?
+[05:41] <zuk> trying to do it with createReadStream
+[05:41] <zuk> but it just closes out with an 'end' event after a few bytes
+[05:47] whoahbot has joined the channel
+[05:51] aryounce has joined the channel
+[05:56] micheil has joined the channel
+[05:57] <_ry> zuk: how do you do it in normal posix?
+[06:07] bradb has joined the channel
+[06:14] binary42 has joined the channel
+[06:15] binary42_ has joined the channel
+[06:20] ditesh|cassini has joined the channel
+[06:23] unregistered has joined the channel
+[06:29] JimBastard has joined the channel
+[06:38] okito has joined the channel
+[06:42] derferman has joined the channel
+[06:44] <JimBastard> coffee time
+[06:47] mikeal has joined the channel
+[06:52] <derferman> so, I have been busy at work creating node documentation based using  Sphnix. 
+[06:52] <derferman> it is in a super alpha state
+[06:52] <derferman> but you can see the current version here
+[06:52] <derferman> http://dev.kyleconroy.com/nodedocs/
+[06:53] <derferman> and the code is up on github
+[06:53] <derferman> http://github.com/derferman/node_docs
+[06:54] <_ry> derferman: oh intersting!
+[06:55] <derferman> _ry: Yeah, I like where it is going
+[06:55] <_ry> derferman: do you know about http://github.com/ry/node_docs
+[06:55] <derferman> yeah, I actually forked that project
+[06:55] <_ry> ah okay
+[06:56] <derferman> I personally wasn't a fan of the current layout, so I thought I would create a version myself
+[06:56] <_ry> can we use the markdown for this sphnix?
+[06:57] <_ry> oh i see, rst
+[06:57] <derferman> sadly not, sphinx only support reST
+[06:57] <derferman> I was looking for something similar to Sphnix, but markdown based
+[06:57] <derferman> haven't found anything
+[06:57] <derferman> I could have sworn I saw a project on hacker news that was just that
+[06:57] <_ry> yeah i like how sphinx looks but markdown seems to be more popular
+[06:57] <micheil> hmm...
+[06:58] <derferman> after writing reST for about a day, I understand why. I really prefer markdown
+[06:58] <micheil> _ry: if it could use ruby as a service for just serving the files up, then I could make my Doco project a little bit more advanced and we could use that
+[06:59] <micheil> _ry: doco currently supports textile with mustache templates, although, could easily support markdown
+[06:59] <micheil> and from the work that I've done, everything that is done in Doco could be done easily in node
+[07:00] <micheil> derferman: does sphinx support mulitple documentation versions?
+[07:00] <derferman> micheil: Yeah, I am pretty sure
+[07:01] <derferman> the django team uses sphnix
+[07:01] <derferman> and I know their documentation is versioned
+[07:01] <micheil> the dojo team uses sphinx (last I knew)
+[07:02] <micheil> or atleast, I think it's sphinx
+[07:02] <_ry> hm.. 
+[07:02] <_ry> can you build man pages from sphinx?
+[07:03] <mikeal> _ry: does HttpRequest.write return false when it can't write immediately yet?
+[07:03] <micheil> _ry: probably not
+[07:03] <_ry> mikeal: no, not yet.
+[07:03] <mikeal> i don't think dojo uses sphinx
+[07:03] <mikeal> django uses sphinx
+[07:03] <mikeal> i use sphinx for all my Python docs
+[07:03] <mikeal> it works for Python, for anything else it's not worth it
+[07:04] <_ry> asciidoc isn't horrible either :)
+[07:05] <mikeal> if the docs has anchor tags I wouldn't have any complaints
+[07:05] <mikeal> we should just copy the directory after each release and link to the older docs
+[07:05] <_ry> yeah
+[07:05] <mikeal> other than that, i don't know what everyone is complaining about
+[07:05] <micheil> hmm..
+[07:05] <_ry> that's a simple solution
+[07:06] <derferman> I feel like we should have a good foundation, because eventually the docs will be much bigger, no?
+[07:06] <mikeal> i like simple :)
+[07:06] <derferman> with tutorials and such
+[07:06] <mikeal> i hope not
+[07:06] <mikeal> i hope the docs stay small because the API stays simple
+[07:06] <mikeal> if we have some amazing doc system someone might think they can start making stuff to complicated so long as it's properly documented :P
+[07:06] <derferman> mikeal: agreed, but documentation can include so much more than just api reference
+[07:07] mattly has joined the channel
+[07:07] <micheil> _ry: you could setup a url structuring where by it's /:tag/:module
+[07:07] <mikeal> there is a place for tutorials and all that
+[07:07] <micheil> :tag being either a Git tag or HEAD
+[07:08] <mikeal> can someone explain this new require proposal to me?
+[07:08] <micheil> which means the default docs may point to /stable/index
+[07:08] <mikeal> i understand what it does, but not why what it does is necessary 
+[07:08] <micheil> if you wanted docs for 0.1.12 => /0.1.12/index
+[07:09] <micheil> _ry: which may fit in nicely with what I'm hoping to have in the next version of howtonode, in some ways
+[07:13] <micheil> _ry: then in order to release a new version of the documentation, you simply copy the previous docs into a new directory which is that version number, eg, 0.1.32
+[07:13] <micheil> then edit the documentation for that
+[07:13] <micheil> and then compile and push
+[07:14] <_ry> micheil: yeah
+[07:14] <_ry> soemthing like that..
+[07:14] <micheil> and it'd probably be possible to programmatically figure out the latest version, and make that respond to :stable
+[07:15] <micheil> (and some day node will be getting a git module, when I get around to finishing the writing of it)
+[07:17] BryanWB has joined the channel
+[07:26] r11t has joined the channel
+[07:26] piranha has joined the channel
+[07:28] <aryounce> So... anyone taken a look at /usr/local/lib/node/libraries/mjsunit.js lately?
+[07:28] <aryounce> It's got wackiness like this:     start = "Fail" + "ure:"; (line 55)
+[07:29] <aryounce> odd
+[07:30] <unregistered> when I use the underscore library it inserts itself into the global namespace. is there some way to prevent this?
+[07:30] <unregistered> or would I have to edit it to behave properly with require?
+[07:31] r11t has joined the channel
+[07:31] <jed> http://github.com/documentcloud/underscore/blob/master/underscore.js#L563-564
+[07:31] <jed> maybe?
+[07:32] kriskowal has joined the channel
+[07:33] <unregistered> jed: thanks that looks like the proper way to do it.
+[07:33] <jed> unregistered: np.
+[07:35] <unregistered> it looks like underscore makes some small effort to respect the CommonJS standard.
+[07:36] <unregistered> but it returns an object that you have to use like this modname._.func()
+[07:36] <unregistered> and it still inserts _ into the global namespace anyway.
+[07:37] <unregistered> but making my own wrapper to call the function you linked me to should solve both problems.
+[07:40] <JimBastard> hey whaddup jed
+[07:40] <JimBastard> you around nyc next week?
+[07:40] <jed> hey JimBastard.
+[07:41] <jed> alas, no. won't be back to the US until mid-april. you having another party? heh.
+[07:41] <JimBastard> yaya javascript party
+[07:41] <JimBastard> ^_^
+[07:41] <jed> hawman.
+[07:44] <unregistered> oh doh. underscore's mixin function only adds to the underscore object. it's not like process.mixin 
+[07:44] <unregistered> where do I find a good alternative to process.mixin since it's going to be deprecated?
+[07:45] <JimBastard> thats what i was saying on the mailing list
+[07:45] <JimBastard> im not sure
+[07:46] <JimBastard> maybe port underscore
+[07:46] <JimBastard> or just just coffee script?
+[07:51] <unregistered> i'd rather not maintain my own copy of underscore though.
+[07:51] <unregistered> well maybe this is a function underscore needs.
+[07:52] <JimBastard> it has it i think
+[07:52] <JimBastard> i dunno
+[07:54] <unregistered> it has a .mixin function but that only "mixes into" the underscore object
+[07:55] <unregistered> maybe it's there under a different name? I'm not seeing it. It's the whole reason I was looking at the library in the first place :)
+[07:56] <unregistered> but it seems useful to me in general
+[07:57] <unregistered> i really ought to subscribe the node mailing list
+[08:06] mattly has joined the channel
+[08:07] <unregistered> JimBastard: oh doh. found it. it's called extend
+[08:07] <unregistered> in underscore
+[08:07] qFox has joined the channel
+[08:29] schell has joined the channel
+[08:32] bpot has joined the channel
+[08:41] <derferman> Silly problem, I am getting a "Error: Cannot find module 'fs'"
+[08:41] <derferman> just doing a simple "var fs = require("fs");"
+[08:55] <JimBastard> you gotta love nyc. i just ordered a whole cheesecake and Belgium waffles with bacon for delivery at 4:54 am
+[08:55] <JimBastard> online
+[08:57] sh1mmer has joined the channel
+[08:57] <sh1mmer> hey
+[08:58] <JimBastard> sup
+[08:58] <sh1mmer> is the example on the node.org homepage broken on ry/head
+[08:58] <sh1mmer> or am I doing something dumb
+[09:00] <JimBastard> which example, and its possible
+[09:00] <JimBastard> whats the gist of it
+[09:00] <sh1mmer> the web server
+[09:00] <JimBastard> whats the error message
+[09:00] <sh1mmer> writeHead isn't a method of res
+[09:01] <JimBastard> yeah
+[09:01] mattly has joined the channel
+[09:02] <JimBastard> 		resp.sendHeader(200,{'Content-Type':'text/html'});			
+[09:02] <sh1mmer> ah cool
+[09:02] <JimBastard> read the api
+[09:02] <sh1mmer> can I help update the homepage?
+[09:02] <sh1mmer> I
+[09:03] <sh1mmer> I'm just reading the module now
+[09:03] <JimBastard> im not sure if the docs are on github
+[09:03] <JimBastard> is _ry  alive
+[09:03] <sh1mmer> I just set up a brand new Slicehost
+[09:03] <sh1mmer> so I wanted to check it wasn't me before diving deeper
+[09:03] <sh1mmer> so thanks for the quick sanity check :)
+[09:03] <JimBastard> purple monkey dishwasher
+[09:04] schell has joined the channel
+[09:09] felixge has joined the channel
+[09:09] felixge has joined the channel
+[09:14] <sztanpet> did twitter just roll back like two days?
+[09:20] <cpojer> yes
+[09:20] <cpojer> something is going on
+[09:24] <unregistered> is there some way to tell if a file is being included via require or is being run directly?
+[09:25] <unregistered> like the __name__ == '__main__' convention from python
+[09:29] <jed> unregistered: i'm using this: http://github.com/jed/fab/blob/master/lib/node.js#L106
+[09:31] <unregistered> nice, thanks
+[09:42] jed has joined the channel
+[09:50] lifo has joined the channel
+[09:54] pdelgallego has joined the channel
+[09:54] micheil has joined the channel
+[09:59] ditesh has joined the channel
+[10:01] micheil has joined the channel
+[10:04] mattly has joined the channel
+[10:07] tmpvar has joined the channel
+[10:09] Tim_Smart has joined the channel
+[10:11] <ashb> unregistered: the commonjs convention there is require.main === module
+[10:11] <ashb> not sure if node supports that or not
+[10:12] <tmpvar> JimBastard, you dead?
+[10:13] <ashb> unregistered: yeah it looks like it should
+[10:16] maritz has joined the channel
+[10:23] <Tim_Smart> tmpvar: Yeah I hacked him to death, with Javascript
+[10:36] javajunky has joined the channel
+[10:38] OSInet has joined the channel
+[10:53] mattly has joined the channel
+[10:57] pdelgallego has joined the channel
+[11:03] pdelgallego has joined the channel
+[11:06] shirro has joined the channel
+[11:16] trochala has joined the channel
+[11:17] trochala has joined the channel
+[11:18] <trochala> Hello, I want to read from a process output on a "per-line" manner, is there a nodejs helper for that?
+[11:21] markwubben has joined the channel
+[11:26] OSInet has left the channel
+[11:28] unomi has joined the channel
+[11:36] <javajunky> trochala: don't thinkt here's a util method, btu thought it called 'data' on line ends anyway, it definiately does on process.stdio , perhaps not on execs 
+[11:42] <trochala> javajunky: I am using createChildProcess
+[11:43] felixge has joined the channel
+[11:43] felixge has joined the channel
+[11:46] <javajunky> trochala: fraid I've never used it
+[11:47] ijsthijs has joined the channel
+[11:51] ditesh has joined the channel
+[11:53] jed has joined the channel
+[11:54] mattly has joined the channel
+[12:02] ijsthijs_ has joined the channel
+[12:03] teemow has joined the channel
+[12:21] ditesh|cassini has joined the channel
+[12:23] ijsthijs has joined the channel
+[12:33] codeswing has joined the channel
+[12:34] ditesh has joined the channel
+[12:42] ijsthijs has joined the channel
+[12:45] kriszyp has joined the channel
+[12:59] mattly has joined the channel
+[13:15] xueyu has joined the channel
+[13:25] javajunky has joined the channel
+[13:40] xueyu_ has joined the channel
+[14:05] drostie has joined the channel
+[14:26] piranha has joined the channel
+[14:32] piranha has joined the channel
+[14:33] javajunky has joined the channel
+[14:40] micheil has joined the channel
+[14:54] xueyu has joined the channel
+[14:56] binary42 has joined the channel
+[15:00] bengl has joined the channel
+[15:20] MattJ has joined the channel
+[15:27] OSInet has joined the channel
+[15:27] xueyu_ has joined the channel
+[15:34] okito has joined the channel
+[15:35] whoahbot has joined the channel
+[15:42] alex-desktop has joined the channel
+[15:50] dnolen has joined the channel
+[15:51] OSInet has left the channel
+[16:01] xueyu has joined the channel
+[16:22] keeto has joined the channel
+[16:22] stepheneb has joined the channel
+[16:25] mattly has joined the channel
+[16:31] hecticjeff has joined the channel
+[16:33] dnolen has joined the channel
+[16:34] javajunky has joined the channel
+[16:37] pdelgallego has joined the channel
+[16:38] dnolen has joined the channel
+[16:41] maushu has joined the channel
+[16:50] felixge has joined the channel
+[16:50] felixge has joined the channel
+[16:52] pdelgallego has joined the channel
+[16:55] ijsthijs has joined the channel
+[16:58] OhMeadhbh has joined the channel
+[16:58] pdelgallego has joined the channel
+[17:11] OhMeadhbh_ has joined the channel
+[17:17] javajunky has joined the channel
+[17:20] qFox has joined the channel
+[17:28] xueyu_ has joined the channel
+[17:35] xueyu_ has joined the channel
+[18:00] dnolen_ has joined the channel
+[18:02] <javajunky> um, is 'this.values= {} ' no longer valid ?
+[18:04] <ashb> javajunky: should be
+[18:08] <javajunky> I'm getting a weird error out of node :(
+[18:08] <ashb> it helps if oyu paste the exact code (including the surroundings) and the exact error
+[18:09] <javajunky> Cannot set property values of #<an Object> which has only a getter 
+[18:09] <javajunky> ;) yeah was on that :) 
+[18:09] <javajunky> s'coming out of JSObject::LookupCallbackSetterInPrototypes in objects.cc
+[18:09] <ashb> that means |this| is a special kind of object
+[18:09] <ashb> and values is readonly
+[18:10] <javajunky> interesting, ok, cool I'll take a looksie thanks
+[18:10] <javajunky> (this is not my code)
+[18:13] dsboulder has joined the channel
+[18:13] aho has joined the channel
+[18:16] dsboulder has left the channel
+[18:17] <javajunky> ashb: So would you expect: JSON.stringify(this)  to show 'values' in the result ?
+[18:17] <ashb> that depends entirely on what |this| is - objects can provide custom JSON serializations
+[18:18] dsboulder has joined the channel
+[18:19] <javajunky> well tbh I'm a bit perplexed, as this is (from my perspective) a trivial case, there's no Calls or Apply(s) involved, and this is falling over inside the  'constructor' ( http://github.com/christkv/node-mongodb-native/blob/master/lib/mongodb/bson/collections.js#L6 ) 
+[18:20] cloudhead has joined the channel
+[18:20] <javajunky> the entry point to there was http://github.com/christkv/node-mongodb-native/blob/master/lib/mongodb/collection.js#L183
+[18:20] <javajunky> as you can see nothing unusual (to my naieve eyes ) :(
+[18:20] <ashb> grep for getter or Getter or \bget\b
+[18:20] dsboulder has joined the channel
+[18:21] dsboulder has left the channel
+[18:21] <javajunky> yeah there's a 'get' method
+[18:21] <ashb> wouldn't be a get method i dont think
+[18:21] <ashb> but something like __defineGetter__ or { get values: }
+[18:21] <ashb> type thing
+[18:21] dsboulder has joined the channel
+[18:22] dsboulder has left the channel
+[18:22] <ashb> this.className = 'OrderedHash';
+[18:22] <ashb> wth is that for
+[18:22] dsboulder has joined the channel
+[18:22] <javajunky> nope, nothing like that present
+[18:22] <ashb> not quite sure then
+[18:22] <javajunky> no idea (not my code) .. I imagine so he can later do  (if foo.className === 'OrderedHash' ) etc. tests ... 
+[18:22] <ashb> foo.constructor.name == "OrderedHash"
+[18:23] <javajunky> its really weird … if I change it to something other than values its fine.
+[18:23] <ashb> or foo instanceof OrderedHash
+[18:23] <javajunky> this isn't my code, I"m just trying to work with it :)
+[18:23] <ashb> try this.__lookupGetter__("values")
+[18:23] <ashb> and print/debug the return value of that
+[18:24] <javajunky>  function values() {
+[18:24] <javajunky>     return this.keys.map('key -> this[key]', this)
+[18:24] <javajunky>   }
+[18:24] <javajunky> hmm so it does exist, where the hell has that come from.
+[18:24] <ashb> so somwhere its getting a getter assigned but no setter
+[18:25] <ashb> grep for "function values"
+[18:25] <ashb> ?
+[18:25] <cpojer> jo javajunky
+[18:25] <cpojer> whats the problem with node mongodb
+[18:26] <javajunky> collection.count …doesn't ..at the mo ;0
+[18:26] <cpojer> some of the code is a mess
+[18:26] jherdman has left the channel
+[18:26] <javajunky> ashb: was doing that, no hits :(
+[18:26] <cpojer> I have started to refactor some things already but it would take ages to make everything better
+[18:27] <ashb> javajunky: not sure then. are you checking your project too?
+[18:27] <cpojer> ashb: from what I know the className thing has something to do with a bug in an earlier version of node
+[18:27] <javajunky> ashb: ;) yeah 
+[18:27] <ashb> cpojer: fair enough.
+[18:29] isaacs has joined the channel
+[18:30] <javajunky> damnit, I can't find that function *ANYWHERE* ;)
+[18:30] <dsboulder> Hey - I know process.compile doesn't inherit the local scope, but does anyone know if it's possible to write a version of process.compile in C that simply acts like eval() but allows you to pass in a filename for better stack traces?
+[18:32] <dsboulder> I don't know the limitations of Script::New & Script::Compile, but I've been trying to write a version of .compile that executed in the current scope...
+[18:41] voodootikigod_ has joined the channel
+[18:49] pdelgallego has joined the channel
+[18:49] whoahbot has joined the channel
+[18:49] ako has joined the channel
+[18:56] mikeal has joined the channel
+[19:07] javajunky has joined the channel
+[19:10] drostie has joined the channel
+[19:13] stepheneb has joined the channel
+[19:14] schell has joined the channel
+[19:19] aguynamedben has joined the channel
+[19:19] <schell> i asked this yesterday but didn't seem to stir anything up: is there any way to catch all exceptions to halt script exit? (in order to perform some cleanup after an error)
+[19:22] dsboulder has joined the channel
+[19:29] <ashb> schell: istr there is a global error event
+[19:29] maushu has joined the channel
+[19:29] <inimino> there is, something on process
+[19:29] <inimino> or rather, a global uncaught exception handler
+[19:29] <schell> oh so easy
+[19:29] <schell> i see it right there on the docs
+[19:30] <schell> thanks - and thanks for not just saying RTFM
+[19:31] kriszyp has joined the channel
+[19:32] <ashb> i would if i knew it was actually mentioned in there ;)
+[19:34] teemow has joined the channel
+[19:34] <schell> hehe
+[19:37] dnolen has joined the channel
+[19:42] joshbuddy has joined the channel
+[19:42] jspiros has joined the channel
+[19:48] jviereck has joined the channel
+[19:50] derferman has joined the channel
+[19:51] <javajunky> cpojer: If you're interested I just 'fixed' another isue that was driving me crazy  in the mongo driver.. http://github.com/ciaranj/node-mongodb-native/tree/fix_double_callbacks
+[19:52] rictic has joined the channel
+[19:52] <cpojer> javajunky: just send a pull request to christkv!
+[19:52] <cpojer> thanks for your contributions :)
+[19:54] <javajunky> cpojer: already had ;)
+[19:55] <javajunky> I'm absoluted b*****red If I can figure out this Cannot set property values issue out though :(
+[19:56] <cpojer> I'm still working on the ideas on how to wrap the whole functionality
+[19:56] <cpojer> ORM like
+[19:56] <cpojer> its a bit hard
+[19:56] <javajunky> *something* *Somewhere* is adding the values getter, but I've no idea where;) 
+[19:56] <cpojer> well I would argue that most of the code should be rewritten in a much cleaner way
+[19:57] <javajunky> I quite like the absence of the impedence mis-match that I normally have :) (using OO -> ORM -> ER) .. fairly happy with MODEL -> Documents … makes a refreshing change :) 
+[19:57] <cpojer> yeah it is quite awesome already
+[19:57] <javajunky> <g> I've no energy to argue, just pushing on with whats available :)
+[19:58] <cpojer> and you don't really need an ORM, I'm just thinking about simple wrappers
+[19:58] <cpojer> like so you can just do myObject.save()
+[19:58] <javajunky> I *wish* I had better fu for this values issue, I can't create a test case to replicate it, and I can't see what could be causing it, arghh
+[19:59] <javajunky> I suppose, but that breaks down when you want to use some of the more useful features like adding to child arrays etc.
+[19:59] <javajunky> ?
+[20:01] <cpojer> my google chrome just broke
+[20:03] <cpojer> what the fuck
+[20:04] <javajunky> cpojer: Simple question ;) … Can I do something along the lines of : http://pastebin.com/0ni6UN2k  …as I think this is the route of my problems.
+[20:05] <cpojer> why would you do that
+[20:05] <cpojer> you can remove the second db.collection thing
+[20:05] <cpojer> I suppose
+[20:06] <javajunky> yes I'm aware of that ;) but whats *actually* happening is several intermediate 'callbacks'
+[20:06] <javajunky> (I've simplified.
+[20:10] mattly has joined the channel
+[20:14] indiefan has joined the channel
+[20:21] aho has joined the channel
+[20:23] <javajunky> nope, nested 'collection' calls appear to be 'ok' (perhaps not semantically) …  I have no idea what the hell is adding this flipping 'values' property thats shooting me in the foot :(
+[20:37] micheil_mbp has joined the channel
+[20:37] RayMorgan has joined the channel
+[20:39] dnolen has joined the channel
+[20:48] indiefan has joined the channel
+[20:50] teemow has joined the channel
+[20:51] pdelgallego has joined the channel
+[20:52] MattJ100 has joined the channel
+[20:54] Cainus has joined the channel
+[20:55] indiefan has joined the channel
+[20:59] softdrink has joined the channel
+[21:22] dsboulder has joined the channel
+[21:29] hassox has joined the channel
+[21:30] steadicat has joined the channel
+[21:37] ithinkihaveacat has joined the channel
+[21:48] jashkenas has joined the channel
+[21:49] mattly has joined the channel
+[21:49] <jashkenas> 'afternoon #node.js
+[21:50] <jashkenas> How are y'all mixing in other modules safely, without either polluting global scope or resorting to "with" ... any tips?
+[21:50] <jashkenas> If I've got a helper module that defines 20-odd functions, and I'd like to require and have those functions available in another module, ideally as local variables...
+[21:51] <jashkenas> Is there a good way to go about doing it?
+[21:51] <jashkenas> process.mixin pollutes global scope from there on, and JavaScript doesn't offer a mechanism for defining local variables dynamically, from an object hash, no? (Or even looping over each key/value...)
+[21:52] <jashkenas> So I'm stuck either referring to the functions with a namespace prefix, or importing each function one-by-one.
+[21:53] derferman has joined the channel
+[21:53] pdelgallego has joined the channel
+[21:54] morgan has joined the channel
+[21:57] Tim_Smart has joined the channel
+[21:58] <isaacs> can anyone recommend a very simple "i know nothing about nginx and want to use it on a node server" tutorial?
+[21:58] <Tim_Smart> isaacs: I'm planning on writing one soon
+[21:58] <isaacs> jashkenas: i usually stick with the namespace prefix
+[21:58] <javajunky> isaacs: I just threw a conf up on my new linode, if you want it ?
+[21:59] <javajunky> (it really is a I know nothing conf though)
+[21:59] <isaacs> javajunky: sure why not :)
+[21:59] <isaacs> Tim_Smart: even like a "put _this_file_ at /var/nginx/blerg and then start it and fill in these bits"
+[21:59] <Tim_Smart> isaacs: It will similar to my monit one
+[22:00] <isaacs> ACTION knows apache, lighttpd, and a little TomCat, but the kids love the nginx, apparently
+[22:00] <jashkenas> isaacs: Thanks. For now I'm just going to import the individual functions -- the module that uses the greatest number of them only has five, so it's not too much of a burden.
+[22:00] <jashkenas> But I think it would be a killer feature for secure modules if Node had an alternative to process.mixin
+[22:00] <javajunky> isaacs: prepare to be underwhelemed ;) http://pastebin.com/VRjk7Tp9
+[22:00] <jashkenas> That hooked into V8 to define local variables, instead of attaching them to the global object.
+[22:01] <jashkenas> Then you could have the best of both worlds.
+[22:01] <isaacs> jashkenas: you CAN do it using with magic, but that's hideous for performance.
+[22:01] <jashkenas> With eval(), sure.
+[22:01] <isaacs> (globals aren't good, eithc)
+[22:01] <isaacs> there was a patch submitted to the list a while back.
+[22:01] <jashkenas> Right, I want local variables at the top of the module that disappear when the wrapper function ends.
+[22:01] <isaacs> with (scopeObj) { function mixin (obj) { for (var i in obj) scope[i] = obj[i] };   /* teh codez here */ }
+[22:02] <jashkenas> Sure, eval() or with()
+[22:02] <inimino> jashkenas: I use short module prefixes
+[22:02] <isaacs> and then in "teh codez", you do mixin(require("foo"))
+[22:02] <micheil> erm.. why would you want to be using globals?
+[22:02] <isaacs> with is just slightly less evil than eval.  the problem is that both are pretty impossible to optimize
+[22:03] <inimino> eval() probably has much lower performance impact
+[22:03] <Tim_Smart> instead of eval, I like to use new Function()();
+[22:03] <isaacs> but at least eval doesn't affect ALL the code in the function
+[22:03] <inimino> but don't take my word for it :)
+[22:03] <isaacs> inimino: you remember that whole hullabaloo about import(), right?
+[22:03] <inimino> you could export a short string from each module, that, when eval'd, will declare local variables
+[22:03] <Tim_Smart> nodejs_v8: new Function('return 1 + 1;')();
+[22:03] <nodejs_v8> Tim_Smart: 2
+[22:03] <isaacs> made a vanilla http server like 12% slower, and if you actually used a lot of sets and gets, it's way worse.
+[22:03] <inimino> isaacs: um, not sure
+[22:04] <inimino> isaacs: was that with(), or eval()?
+[22:04] <isaacs> that was using with()
+[22:04] <inimino> yeah, ok
+[22:04] <isaacs> and then a mixin function that tacked stuff onto the scope obj
+[22:04] <inimino> that's not surprising :)
+[22:05] <Tim_Smart> process.mixin = myMixinFunction; Problem solved
+[22:05] <javajunky> gahhhh WHERE THE HELL is this values getter coming from !!!
+[22:05] <isaacs> "Well, screw you then!  I'm gonna write my own module loader!  with.... BLACKJACK!! and Hookers!!  ... on second though, skip the module loader"
+[22:05] <inimino> hehe
+[22:05] <isaacs> javajunky: where's the code yoer' struggling with?  you've been at this all morning 
+[22:05] <javajunky> (all day actually GMT :) ) 
+[22:05] <isaacs> yikes!!
+[22:06] brianm has joined the channel
+[22:06] <javajunky> Sadly I've not been able to localise a test case :( .. its *something* in my setup … but I'm as yet unable to locate :) 
+[22:07] <isaacs> Tim_Smart: oh, no, animated favicon!
+[22:07] <Tim_Smart> where >.>
+[22:07] <isaacs> Tim_Smart: on howtonode.com
+[22:07] <isaacs> er, howtonode.org
+[22:08] <Tim_Smart> lolwut, who did that
+[22:08] <isaacs> weird, starts at the bottom, then rises up
+[22:08] <Tim_Smart> going back to the days of geocity?
+[22:09] <isaacs> hahah
+[22:09] <isaacs> yeah, you know what howtonode really needs?
+[22:09] <isaacs> a black background
+[22:09] <isaacs> also, the text isn't centered.  you should probably fix that
+[22:10] <isaacs> maybe add some E-mail images.  if you use the CompuServe GIF format, you can make them spin around so you don't miss them.
+[22:10] <isaacs> oh, and flames.  needs more flames, definitely.
+[22:10] <isaacs> (not insults, i mean pictures of fire)
+[22:10] <javajunky> does anyone out there recognise this function: 
+[22:10] <javajunky> function values() {
+[22:10] <javajunky>     return this.keys.map('key -> this[key]', this)
+[22:10] <javajunky>   }
+[22:11] <javajunky> it must be generic, and I'm very very keen to locate what is adding it this exported function
+[22:11] <isaacs> javajunky: what stuff are you using?
+[22:12] <inimino> javajunky: grep your code for that quoted string
+[22:12] <isaacs> javajunky: i mean, can't you grep for that?
+[22:12] <isaacs> inimino: lulz
+[22:13] <javajunky> isaacs: yeah I've grepped everything I can for that (including node)
+[22:13] <Tim_Smart> what e-mail modules are around for node atm?
+[22:13] <inimino> I don't think we'd all be using node if it contained code that looked like that...
+[22:14] aryounce has joined the channel
+[22:14] confounds has joined the channel
+[22:14] <isaacs> Tim_Smart: http://github.com/miksago/node-smtp and http://github.com/craigw/email.js are listed on ry/node/modules
+[22:15] <isaacs> javajunky: right, but, which libs are you using, apart from nodejs itself
+[22:16] sveimac has joined the channel
+[22:16] <javajunky> found it
+[22:16] <javajunky> finalkly
+[22:17] <inimino> where is it?
+[22:17] <javajunky>  find / -exec grep 'key ->' {} /dev/null \; ;)
+[22:17] <inimino> :)
+[22:17] <inimino> you can use grep -R too
+[22:17] <javajunky> in 'ext' .. I'll track it down, thank you for forcing me to re-run my greps
+[22:17] <javajunky> raelly ? .. did not know that
+[22:17] <inimino> yep
+[22:17] <inimino> grep -R 'key ->'
+[22:19] <javajunky> yeah I've found it, express depends on ext which manipulates the Object prototype, hmm
+[22:19] <inimino> ew
+[22:22] <javajunky> bleughr thats a day I'm not getting back! .. thanks for the assist 
+[22:26] OhMeadhbh has joined the channel
+[22:27] jashkenas has joined the channel
+[22:38] pdelgallego has joined the channel
+[22:40] pdelgallego has joined the channel
+[22:41] <CIA-77> node: 03Jed Schmidt 07master * r004faf3 10/ lib/http.js : Added check to make sure writeHead() is called before write(), to prevent silent failure. - http://bit.ly/a6xkN4
+[22:56] hassox has joined the channel
+[23:01] dnolen has joined the channel
+[23:09] morgan has joined the channel
+[23:14] okito has joined the channel
+[23:33] voodootikigod_ has joined the channel
+[23:40] JimBastard has joined the channel

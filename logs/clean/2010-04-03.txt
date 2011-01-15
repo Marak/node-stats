@@ -1,0 +1,502 @@
+[00:01] brainproxy has joined the channel
+[00:01] tilgovi has joined the channel
+[00:12] mikeal has joined the channel
+[00:13] botanicus has joined the channel
+[00:21] jbowman has joined the channel
+[00:24] charlesjolley has joined the channel
+[00:29] mattly has joined the channel
+[00:29] <malkomalko> anybody have a good article/blog post on hooking up your node server in production to recover quickly from failures so it doesn't crash?
+[00:30] <mjr__> _ry: I think there's something funny with the tcp6 / tcp4 handling recently.  If I have something listening on what netstat calls "tcp46", then node will still think it is listening on the same port.
+[00:31] <mjr__> and after I start the second one, I'll see in netstat:
+[00:31] <mjr__> tcp4       0      0  *.8000                 *.*                    LISTEN
+[00:31] <mjr__> tcp46      0      0  *.8000                 *.*                    LISTEN
+[00:32] malkomalko_ has joined the channel
+[00:32] steadicat has joined the channel
+[00:32] <_ry> mjr__: what version
+[00:32] <mjr__> The 46 one some other thing, and the tcp4 is node.
+[00:32] <mjr__> head as of a few seconds ago
+[00:32] <mjr__> the listen doesn't throw an error, and I'd sure expect it to.
+[00:33] <_ry> hm
+[00:35] <mjr__> It after the listen call, it gets an fd: type: 'tcp4', fd: 5
+[00:35] <mjr__> But its not actually listening to anything as far as I can tell.  This is OSX.
+[00:36] Asparagusto has joined the channel
+[00:38] Asparagusto has left the channel
+[00:39] <mjr__> Sadly, I've no more time to debug this.
+[00:40] <mjr__> Heading to the Trappist in Oakland for beers.
+[00:40] <_ry> seems like it should fail on bind...
+[00:41] <_ry> not sure what tcp46 should be..
+[00:46] softdrink has joined the channel
+[00:47] robrighter has joined the channel
+[00:50] botanicus has joined the channel
+[00:51] <jbowman> are you opening 2 different sockets, one for tcp4 and one for tcp6? I don't think you can open a single socket to cover both
+[00:52] <CIA-77> node: 03Ryan Dahl 07openssl * r1293106 10/ lib/net.js : Fix style in SSL patch - http://bit.ly/9LZAOZ
+[00:55] <mikeal> what is going on at the trappist?
+[00:55] <mikeal> the one day I don't go in to the office ;)
+[00:58] devinus has joined the channel
+[01:03] unomi has joined the channel
+[01:04] devinus has joined the channel
+[01:09] steadicat has joined the channel
+[01:15] dnolen has joined the channel
+[01:16] isaacs has joined the channel
+[01:16] devinus has joined the channel
+[01:19] mrjjwright has joined the channel
+[01:32] kriszyp has joined the channel
+[01:36] andy_l has joined the channel
+[01:40] andy_l has joined the channel
+[01:45] <devinus> _ry: holy shit, you removed the entire multipart library!
+[01:45] sh1m has joined the channel
+[01:49] bmizerany has joined the channel
+[01:54] <_ry> devinus: yeah, if i can't maintain it, it can't stay
+[01:54] RayMorgan has joined the channel
+[01:54] <devinus> _ry: i think that last function in there was an example of that...made me laugh
+[02:04] <fictorial_away> _ry: now that I have redis-node-client all set with 0.1.33, I'm trying to bring it up to speed to HEAD... I built and installed node from HEAD and without changing any of my code, I get a unit test failure regarding non-ASCII strings
+[02:04] <fictorial_away> it's weird
+[02:05] <fictorial> http://gist.github.com/353999
+[02:05] <_ry> wow http really sucks
+[02:05] <fictorial> I have a setEncoding('binary')
+[02:05] <_ry> fictorial: hmm
+[02:06] <_ry> maybe you should setEncoding('utf8'
+[02:07] <fictorial> I'm a little confused to be honest.  Redis doesn't care about encodings.  It's binary safe.  Anyway, changing it to utf8 still fails with the same type of error, but different values: AssertionError: "\u00f6" == "\ufffd" 
+[02:08] <fictorial> I'm just wondering if this is ringing any bells b/c it doesn't make any sense to me without diving deep into this.
+[02:09] <_ry> oh
+[02:09] <_ry> so if you don't setEncoding()
+[02:09] <_ry> you'l get a buffer from the 'data' event
+[02:09] <_ry> instead of a string
+[02:09] <_ry> (that's the new binary type)
+[02:10] <devinus> whats a good convention for tests ? is there some node-waf stuff i could use?
+[02:10] <_ry> you should probably try to use that
+[02:10] <fictorial> yes, that is in my todo list -- to see if I should be using string vs buffer
+[02:11] <fictorial> buffer makes more sense intuitively but I don't know much about it - I glanced at the c++ code and there's not a lot to it
+[02:11] <fictorial> but what I'm missing is where a buffer is used vs a string - are there updated docs for this?
+[02:11] <fictorial> you mention that "data" event returns a buffer
+[02:12] <fictorial> what I'm doing now is appending each chunk to an internal _string_ then checking for formatted replies therein
+[02:12] <fictorial> how do I create a buffer?  how do I append to it?  I need to learn that
+[02:12] <_ry> there aren't docs yet
+[02:13] <fictorial> ok
+[02:13] <_ry> test/simple/test-buffer.js
+[02:13] <_ry> has basic usage
+[02:13] <fictorial> bingo - ok I'll look at it now
+[02:13] <fictorial> thanks
+[02:13] <_ry> you can't expand a buffer - it's fixed size
+[02:13] alexiskander has joined the channel
+[02:13] <fictorial> interesting
+[02:14] <fictorial> what do you recommend as far as handling chunks of data received from a tcp stream? seems like it would get a little hairy when for instance a redis reply spans two data events
+[02:15] mikeal has joined the channel
+[02:16] <_ry> keep a stateful parser
+[02:16] <_ry> you don't need to - you can use binary
+[02:17] <_ry> but this is an alternative
+[02:17] <_ry> which should provide better performance
+[02:18] confounds has joined the channel
+[02:18] <fictorial> indeed, and is binary safe - I'm not sure I grok what you are driving at with a stateful parser... keep the last few buffers around from each data event and know when to skip to the next as per the reply format, etc.?
+[02:18] <_ry> fictorial: er, i mean a state machine parser
+[02:18] <jbowman> is it acceptable to ask a question that might be more javascript related, than node.js specific in this channel? It is javascript in a node.js app but I think it may be a general javascript concept I'm not getting
+[02:18] <_ry> do it a character at a time :)
+[02:18] <_ry> jbowman: sure
+[02:19] <fictorial> no, I understand a state machine of course -- I'm not following how that maps to buffers, sorry
+[02:19] <jbowman> _ry: thanks, here goes
+[02:19] <jbowman> can someone tell me why req.method is printed correctly here: http://gist.github.com/354003 but is undefined here: http://gist.github.com/354002 ? 
+[02:19] <_ry> for (var i = 0 ; i < buffer.length ;i++) { switch (buffer[i]) {   case 'H' : state = ...
+[02:19] <jbowman> If I use prototype, the function isn't able to access the variables of the parent? that doesn't seem right
+[02:20] <fictorial> _ry: ok I see what you mean.  ouch.
+[02:21] <devinus> jbowman: het
+[02:21] <devinus> jbowman: one sec
+[02:22] <_ry> fictorial: checkout my amqp lib: http://github.com/ry/node-amqp/blob/d148cb1dc986d258f1d6aa2216c22d013bc2d594/amqp.js#L150
+[02:22] <jbowman> k
+[02:22] <devinus> jbowman: the prototype wont have access to the req, correct. you must save it in the constructor yes
+[02:23] <devinus> jbowman: req would be undefined in your save function in #2 no?
+[02:23] <devinus> jbowman: js oo can be tricky :)
+[02:24] <fictorial> _ry: ok, I get it.  You don't concern yourself with read data spanning data events because you just have the current parser state.
+[02:24] steadicat has joined the channel
+[02:25] <jbowman> devinus: correct, #2 the req is undefined, I'm just trying to figure out the difference between adding the method using prototype and declaring the function inside object when I create it. I think I might be having some python to js brain frying going on :)
+[02:25] <devinus> jbowman: right, in JS oo is prototype based
+[02:26] <devinus> so in your constributor, do this._req = req;
+[02:26] <devinus> then in your save
+[02:26] <_ry> alright. i'm going home. bye
+[02:26] <devinus> var req = this._req;
+[02:26] <devinus> now you have req :)
+[02:27] <ssteinerX> jbowman: even in Python, you'd have to assign it to self._req to have it available elsewhere since it's only a parameter to a method
+[02:27] <jbowman> devinus: ah ha... I think I get it now.
+[02:28] <devinus> jbowman: use my lrucache as inspiration: http://pastie.org/901284
+[02:28] <jbowman> ssteinerX: I think I tried that originally, but was messing up the syntax at some point
+[02:28] <jbowman> devinus: that helps a lot. thanks!
+[02:28] <ssteinerX> use this instead of self and, with weird Javascript, make sure that "this" points to what you think it does, that bites me at least once a day
+[02:29] figital has joined the channel
+[02:30] <jbowman> when I originally was trying to use "this" somehow I was getting it to be entirely undefined "{}" when I called it in the method. But, that was several rewrites ago and I'm not sure what I was doing then. Sorry, getting a self taught crash course in this
+[02:34] PowerToExt has joined the channel
+[02:38] wasabist has joined the channel
+[02:44] RayMorgan has joined the channel
+[02:48] cpleppert has joined the channel
+[02:48] steadicat has joined the channel
+[02:55] <fictorial> Can someone point me to where operator[] is defined for Buffer?  That is, what is called for b[0]= here:  http://gist.github.com/354045
+[02:55] <fictorial> ACTION needs to learn more of the v8 api
+[02:59] dgathright has joined the channel
+[03:07] maritz has joined the channel
+[03:15] joshbuddy has joined the channel
+[03:17] brainproxy has joined the channel
+[03:32] cpleppert has joined the channel
+[03:32] confounds has joined the channel
+[03:34] kriskowal has joined the channel
+[03:47] rtomayko has joined the channel
+[03:47] creationix has joined the channel
+[03:47] PyroPete1 has joined the channel
+[03:51] kriszyp has joined the channel
+[03:53] cpleppert has joined the channel
+[03:54] sztanphet has joined the channel
+[04:03] <JimBastard> yeah i got to pitch hook.io and node.js to the guy who owns 4chan
+[04:03] <JimBastard> he was at the hackathon
+[04:03] <JimBastard> moot
+[04:04] <JimBastard> he wasnt really into it >.<
+[04:04] <halorgium> JimBastard: i had a look at that finally
+[04:05] <halorgium> are you hoping to get people to host and integrate hook.io's together?
+[04:10] dnolen has joined the channel
+[04:12] <JimBastard> halorgium:  doing the p2p type stuff is planned for sure, but thats months away
+[04:13] <JimBastard> v1.0 will be more about easily integrating with web apis 
+[04:15] grantmichaels has joined the channel
+[04:15] grantmichaels has joined the channel
+[04:18] grantmichaels has joined the channel
+[04:18] <JimBastard> you could easily make two hook.io instances talk to each other via http listeners and actions, but it wouldn't really be SOA. it would be more of two apps talking to each others apis
+[04:22] <halorgium> JimBastard: gotcha, so not trying to abstract integration yet (or ever?)
+[04:24] mikeal has joined the channel
+[04:25] nefD has joined the channel
+[04:25] bmizerany has joined the channel
+[04:29] kriskowal has joined the channel
+[04:31] <JimBastard> how do you mean halorgium ? im kinda drunk also
+[04:31] <JimBastard> really if anyone wants to advance any of the features they can, its all open-source on github
+[04:31] <JimBastard> we accept pull requests for the live site
+[04:31] <halorgium> JimBastard: via hook.io ? ;)
+[04:32] <halorgium> git -> github -> post-receive -> hook.io -> redeploy ;)
+[04:32] <JimBastard> well, github 
+[04:32] <JimBastard> ill be happy when we support like the top 5 web apis
+[04:32] <JimBastard> fancy stuff later
+[04:33] <JimBastard> git hub post commit support will be in v0.1
+[04:33] <JimBastard> err
+[04:33] <JimBastard> v0.2 sorry
+[04:33] <JimBastard> v0.1 will be for jsconf
+[04:55] nsm has joined the channel
+[04:58] binary42 has joined the channel
+[04:59] silentrob has joined the channel
+[05:54] xer0x has joined the channel
+[05:54] micheil has joined the channel
+[06:15] micheil has joined the channel
+[06:16] mikeal has joined the channel
+[06:17] darkf has joined the channel
+[06:17] kriskowal has joined the channel
+[06:36] micheil has joined the channel
+[06:45] steadicat has joined the channel
+[06:46] mikeal has joined the channel
+[06:46] cpleppert has joined the channel
+[06:56] javajunky has joined the channel
+[07:00] cpleppert has joined the channel
+[07:01] cpleppert has joined the channel
+[07:09] felixge has joined the channel
+[07:18] javajunky has joined the channel
+[07:26] dgathright_ has joined the channel
+[07:31] <halorgium> anyone know how i'd get node finding gnutls on ubuntu?
+[07:31] <halorgium> i just get: Checking for gnutls >= 2.5.0             : fail
+[07:33] mrjjwright has joined the channel
+[07:33] <fictorial_Zzz> _ry: regarding your state machine parser concept for redis-node-client with buffers: I got it all worked out now. http://gist.github.com/354228 
+[07:34] <halorgium> ah, needed libcurl-gnutls...
+[07:36] steadicat has joined the channel
+[07:52] javajunky has joined the channel
+[07:53] CodeOfficer has joined the channel
+[07:54] teemow has joined the channel
+[08:02] javajunky has joined the channel
+[08:12] Iveaux has joined the channel
+[08:16] qFox has joined the channel
+[08:30] <sh1mmer> I got crypto to compile ok
+[08:31] <sh1mmer> but I'm getting an error that node can't see it
+[08:31] <sh1mmer> what's the obvious thing I'm doing wrong? ;)
+[09:17] xla has joined the channel
+[09:17] xla has joined the channel
+[09:22] nsm has joined the channel
+[09:23] markwubben has joined the channel
+[09:30] mjr_ has joined the channel
+[09:41] botanicus has joined the channel
+[09:50] nsm has joined the channel
+[09:50] <botanicus> Hey guys. I'm getting "deprecation warning: process.mixin will be removed from node-core future releases." -- why it will be removed and also - is there any replacement for this?
+[10:07] <isaacs> botanicus: the replacement is to do a for/in loop yourself, or use one of the many object merging libraries out there.
+[10:08] <isaacs> botanicus: process.mixin involves a lot of edge cases, and no one could agree on how it should work, so it got pushed into userspace
+[10:08] <botanicus> isaacs: OK, thanks
+[10:19] mfeiri has joined the channel
+[10:49] mfeiri_ has joined the channel
+[11:01] ssteinerX has joined the channel
+[11:12] kriszyp has joined the channel
+[11:22] malkomalko has joined the channel
+[11:40] tlrobinson_ has joined the channel
+[11:46] jazgot has joined the channel
+[12:02] <maritz> fictorial_Zzz: redis-client tests don't complete with node 0.1.33 and redis 1.3.8. is that known or should i open an issue?
+[12:12] tisba has joined the channel
+[12:16] tlrobinson_ has joined the channel
+[12:17] MattJ has joined the channel
+[12:37] botanicus has joined the channel
+[12:42] confounds has joined the channel
+[12:51] ashiso has joined the channel
+[12:53] mfeiri_ has joined the channel
+[13:08] felixge has joined the channel
+[13:10] micha_f has joined the channel
+[13:16] olivvv_ has joined the channel
+[13:38] malkomalko has joined the channel
+[13:43] derbumi has joined the channel
+[13:47] derbumi has joined the channel
+[13:50] r11t has joined the channel
+[13:53] malkomalko_ has joined the channel
+[13:58] mrjjwright has joined the channel
+[13:58] pjb3 has joined the channel
+[13:59] maushu has joined the channel
+[14:00] derbumi has joined the channel
+[14:01] figital has joined the channel
+[14:02] derbumi has joined the channel
+[14:08] derbumi has joined the channel
+[14:12] malkomalko_ has joined the channel
+[14:13] derbumi has joined the channel
+[14:15] derbumi has left the channel
+[14:15] alex-desktop has joined the channel
+[14:16] malkomalko_ has joined the channel
+[14:29] jazgot_ has joined the channel
+[14:30] derbumi has joined the channel
+[14:33] rolfb has joined the channel
+[14:41] nsm has joined the channel
+[14:43] wasabist has joined the channel
+[14:44] derbumi has joined the channel
+[14:45] sh1mmer has joined the channel
+[14:45] rtl has joined the channel
+[14:46] eyzn has left the channel
+[14:48] derbumi_ has joined the channel
+[14:50] cruxst has joined the channel
+[14:50] <cruxst> Does node.js run on an iPad?
+[14:50] <cruxst> Because I just got one.
+[14:54] <confounds> cruxst: sorry to hear that
+[14:58] felixge has joined the channel
+[14:58] felixge has joined the channel
+[15:00] <mjr_> Have the iPads been jailbroken yet?
+[15:00] <mjr_> I'll bet node would build on a jailbroken one.
+[15:05] mau has joined the channel
+[15:07] micheil has joined the channel
+[15:12] softdrink has joined the channel
+[15:15] javajunky has joined the channel
+[15:20] CodeOfficer has joined the channel
+[15:21] mau2 has joined the channel
+[15:29] quirkey has joined the channel
+[15:34] steadicat has joined the channel
+[15:38] <fictorial_Zzz> maritz: hmm, they were working for me. what are you running? 
+[15:38] <fictorial> maritz: open an issue with more details and I'll check it out -- thanks!
+[15:47] mynyml has joined the channel
+[15:47] <mynyml> what has process.mixin been replaced with?
+[15:48] felixge has joined the channel
+[15:48] felixge has joined the channel
+[15:50] xla has joined the channel
+[15:56] cpleppert has joined the channel
+[16:00] pdelgallego has joined the channel
+[16:05] maushu has joined the channel
+[16:06] mrjjwright has joined the channel
+[16:06] mrjjwright has left the channel
+[16:06] johnw has joined the channel
+[16:06] johnw has left the channel
+[16:07] mrjjwright has joined the channel
+[16:08] <felixge> _ry: what's up with the multipart hate?
+[16:09] <sztanphet> 04.03|00:48:46 _ry i'm going to remove multipart
+[16:10] <sztanphet> 04.03|00:50:28 _ry it should be like a 50 line thing
+[16:10] <sztanphet> 04.03|00:50:34 _ry it's hundreds and hundreds
+[16:10] <sztanphet> 04.03|00:59:08 _ry maushu: i'm not going to maintain it
+[16:10] <sztanphet> 04.03|00:59:12 _ry not in this state
+[16:10] <sztanphet> sorry about the spam
+[16:10] <felixge> sztanphet: thanks
+[16:13] <felixge> I guess I'll wait for isaac to discuss a battle plan
+[16:20] <mikeal> does anyone have a favorite btree implementation in javascript?
+[16:26] dnolen has joined the channel
+[16:27] tav has joined the channel
+[16:29] RayMorgan has joined the channel
+[16:35] <xla> what's the preferred way for node addons c or c++ for the bindings?
+[16:44] <gwoo> hey felixge 
+[16:44] <felixge> gwoo: heya
+[16:44] <gwoo> _ry: did not want to maintain it
+[16:44] <felixge> mikeal: couchdb rewrite on node? finally! :)
+[16:45] <gwoo> sick
+[16:45] <gwoo> because he thought the code was ugly
+[16:45] <mikeal> i'm working on browsercouch
+[16:45] <felixge> well, multipart is a bit of an ugly format
+[16:45] <gwoo> yeah
+[16:45] <mikeal> and i'd like to find a btree that i could serialize and persist with localstorage
+[16:45] <felixge> it's http, only nested recursively 
+[16:45] <mikeal> but i don't think there are any
+[16:45] <gwoo> felixge: i think he is someone will pick up the package and maintain it
+[16:45] <gwoo> he wanted to do a rewrite
+[16:45] <felixge> mikeal: I found 1 js btree implementation at some point
+[16:45] <gwoo> mikeal: that would be sick
+[16:46] <felixge> but not sure if it would be any good
+[16:46] <felixge> it was no file system specific
+[16:46] <felixge> * not
+[16:46] <mikeal> they rely really heavily references and duplicates require silly hacks
+[16:46] <mikeal> so i may have to write a new one from scratch
+[16:46] <felixge> gwoo: who is 'he' ?
+[16:46] <gwoo> _ry
+[16:47] <felixge> ryan will pick up it up and maintain it?
+[16:47] <gwoo> no he wants someone else to
+[16:47] <mikeal> yeah, all the btree's for javascript are kind of text book
+[16:47] <mikeal> bah
+[16:47] <felixge> : )
+[16:48] <felixge> gwoo: well, if I was gonna do a module for it again it would only focus on file uploads. And it will have both read & write support
+[16:48] <felixge> as I also need to send file uploads in node
+[16:49] <gwoo> does the same mutlipart format apply to other things like email?
+[16:49] kriszyp has joined the channel
+[16:52] sztanpet has joined the channel
+[16:55] <mikeal> is there something I can name an object property
+[16:56] <mikeal> that will exclude it from JSON.stringify?
+[16:57] <mjr_> if you do createProperty, doesn't it default to non-enumerable, and hence non-stringifyable?
+[16:58] <mikeal> createProperty doesn't work in all browsers :(
+[16:58] <mjr_> Oh right.  I thought you meant in node
+[16:58] <mikeal> i'll just use a function with a closure that returns the thing i care about
+[17:01] isaacs has joined the channel
+[17:04] nsm has joined the channel
+[17:06] Aria has joined the channel
+[17:07] derferman has joined the channel
+[17:08] malte has joined the channel
+[17:10] ashiso has joined the channel
+[17:12] <isaacs> felixge: how about a multipart module that isn't tied to node?
+[17:13] <isaacs> that would be better anyway
+[17:13] <felixge> isaacs: yeah
+[17:13] <felixge> isaacs: I would also like a multipart writer
+[17:13] <isaacs> right
+[17:13] <felixge> but personally, I'm really focused on file uploads
+[17:13] <isaacs> for obvious reasons
+[17:13] <mrjjwright> I rewrote the restler mutlipart writer to support streaming and be cleaner
+[17:13] <felixge> right
+[17:13] <mrjjwright> i tested it on flickr uploads
+[17:14] <felixge> isaacs: So I guess if I was going to be contribute to / create a module, my main requirement would be simplicity
+[17:15] <isaacs> var parser = require("multipart").parser();  parser.write(chunk); parser.write(chunk); parser.close();
+[17:15] <isaacs> then have it emit events
+[17:15] <felixge> isaacs: about the events
+[17:15] <isaacs> partbegin, partend, etc.
+[17:15] <felixge> I think I liked my first api more
+[17:15] <mrjjwright> yeah I reworite it to be interface is generic, it's not tied to http anymore
+[17:15] <felixge> where 'part' would be an event
+[17:16] <isaacs> parser.onpartbegin = function (part) {...}
+[17:16] <felixge> and you just attach your data listeners inside of each part
+[17:16] <mrjjwright> but it isn't tested with new net2 apis yet
+[17:16] <mrjjwright> http://github.com/mrjjwright/flickrnode/blob/master/lib/multipartform.js
+[17:16] <felixge> but that wouldn't work for nested stuff, right?
+[17:16] <isaacs> felixge: not very well
+[17:16] <isaacs> felixge: it's better just to have one message stream that emits events for each bit as it starts and ends
+[17:16] <isaacs> then you can go straight on through, nesting and all
+[17:16] <felixge> I guess yeah
+[17:17] <mrjjwright> I did follow the excellent python lib poster for test cases and to make sure the content calculation was perfect
+[17:17] <mrjjwright> content size*
+[17:18] <isaacs> mrjjwright: this is pretty nice
+[17:19] <isaacs> mrjjwright: clean up your tabs and spaces.  pick one, stick to it.
+[17:19] <isaacs> mrjjwright: http://github.com/mrjjwright/flickrnode/blob/master/lib/multipartform.js#L145-166
+[17:19] <isaacs> also, depends on process.mixin, which is no good
+[17:19] <mrjjwright> ouch, sure thing, I tried to follow the 2 space convention of restler, obviously didn't
+[17:20] <mrjjwright> oh this needs to be updated to post net2, as does all of restler
+[17:20] <mrjjwright> which I plan to do when things get stable
+[17:20] jazgot has joined the channel
+[17:20] <mrjjwright> i will rewrite this with buffers and streams, etc...
+[17:21] <isaacs> mrjjwright: you should make this not depend on nodejs at all
+[17:21] <mrjjwright> you can use this as a reference for proper streaming uploads however, as I said it does work with flickr uploads
+[17:21] <mrjjwright> oh ok
+[17:21] <mrjjwright> good idea
+[17:21] <isaacs> i mean, there's no reason, really
+[17:21] <isaacs> it should just be a commonjs thing
+[17:22] <mrjjwright> yeah i removed the http dependency so commonjs would be more logical
+[17:22] Yuffster has joined the channel
+[17:22] <isaacs> the thing i kinda liked about the one I wrote is that it had support for any type of multipart, not just form-data
+[17:24] <mrjjwright> isaacs: cool, where is that?
+[17:24] <isaacs> well, it WAS in lib/multipart.js ;)
+[17:24] <mrjjwright> oh you are the man, ha
+[17:25] <isaacs> but, yeah, it was married to http/node, didn't have a writer for sending (only a parser for reading) and not enough test coverage.
+[17:27] <mrjjwright> do you want to collaborate on rewriting it?  I could the client and you could do the server
+[17:27] <mrjjwright> and we could have common test cases
+[17:27] <isaacs> mrjjwright: that's not so bad.  maybe we could have lib/parser.js and lib/writer.js
+[17:27] <isaacs> in a single multipart-js project
+[17:27] <mrjjwright> sure
+[17:28] <isaacs> both should work similarly, though.  sax-style, events fired with foo.onevent = function () {} rather than using fancy EventEmitter stuff, handling writing as little as 1 char at a time, etc.
+[17:29] <mrjjwright> sure
+[17:29] <isaacs> might want to use node's Buffer binary stuff, or whatever the commonjs equivalent is
+[17:29] <mrjjwright> ok
+[17:29] <mrjjwright> I am all into the sax style parsing now because I have been doing some yajl work
+[17:30] <isaacs> yeah, streaming is nice
+[17:30] <mrjjwright> ha, exactly: http://gist.github.com/348535
+[17:31] <mrjjwright> I plan to port what I am calling a top-level streaming parser for yajl to node
+[17:31] <mrjjwright> but anyway, will you create the github project and put a rough outline of the interface there and I will follow along with the client
+[17:31] <isaacs> ok
+[17:31] <mrjjwright> I will track your conventions closely
+[17:31] <mrjjwright> I enjoy doing that
+[17:31] <isaacs> suresure :)
+[17:32] <isaacs> i'll start this today.  first, this stupid needy meatbag of mine is demanding food.
+[17:32] <mrjjwright> oh don't talk like that, ha, my kids are watching matilda
+[17:32] <isaacs> haha
+[17:32] <mrjjwright> I will start to picture you as Danny Devito
+[17:32] <isaacs> yikes!
+[17:32] <isaacs> that could be bad for my reputation
+[17:32] <mrjjwright> haha
+[17:33] <mrjjwright> just send me a message on github when it's up, thanks!
+[17:33] <isaacs> yep, will do.  see ya!
+[17:33] <mrjjwright> and we should message the node group 
+[17:33] <mrjjwright> i willd o that
+[17:33] rictic has joined the channel
+[17:34] <mrjjwright> in case anybody else wants to join in or merge efforts
+[17:39] <mrjjwright> well, actually I will wait and make sure we actually get somewhere first.
+[17:41] RayMorgan has joined the channel
+[17:44] sh1mmer has joined the channel
+[17:44] towski has joined the channel
+[17:45] dgathright has joined the channel
+[17:52] teemow has joined the channel
+[18:10] cloudhead has joined the channel
+[18:17] markwubben has joined the channel
+[18:23] aho has joined the channel
+[18:23] Yuffster_ has joined the channel
+[18:24] RayMorgan has joined the channel
+[18:31] ashiso has joined the channel
+[18:39] malkomalko_ has joined the channel
+[18:55] mau has joined the channel
+[19:05] dnolen has joined the channel
+[19:06] ayo has joined the channel
+[19:09] mrjjwright has joined the channel
+[19:09] xla has joined the channel
+[19:09] mrjjwright has left the channel
+[19:10] mrjjwright has joined the channel
+[19:12] towski has joined the channel
+[19:15] admc has joined the channel
+[19:16] derferman has joined the channel
+[19:23] sztanphet has joined the channel
+[19:31] cpleppert has joined the channel
+[19:40] rolfb has joined the channel
+[19:41] sh1mmer has joined the channel
+[19:43] softdrink has joined the channel
+[19:45] xer0x has joined the channel
+[19:47] BRMatt has joined the channel
+[20:02] mfeiri_ has joined the channel
+[20:14] sudoer has joined the channel
+[20:16] derferman has joined the channel
+[20:23] markwubben has joined the channel
+[20:25] Aria has joined the channel
+[20:33] binary42 has joined the channel
+[20:33] felixge has joined the channel
+[20:33] felixge has joined the channel
+[20:40] cruxst has joined the channel
+[20:45] drostie has joined the channel
+[20:46] cpleppert has left the channel
+[20:47] figital has joined the channel
+[20:47] rtl has joined the channel
+[20:53] fizx has joined the channel
+[20:55] bmizerany has joined the channel
+[21:07] binary42 has joined the channel
+[21:12] rictic has joined the channel
+[21:43] Iveaux has joined the channel
+[21:50] tisba has joined the channel
+[22:01] derferman has joined the channel
+[22:01] ashiso has joined the channel
+[22:02] rtomayko has joined the channel
+[22:02] javajunky has joined the channel
+[22:12] fizx has joined the channel
+[22:23] tlrobinson has joined the channel
+[22:32] isaacs has joined the channel
+[22:58] mikeal has joined the channel
+[23:00] voodootikigod_ has joined the channel
+[23:03] rtl has joined the channel
+[23:05] mrjjwright has joined the channel
+[23:18] darkf has joined the channel
+[23:19] jashkenas has joined the channel
+[23:26] cloudhead has joined the channel
+[23:32] cruxst has joined the channel
+[23:32] binary42 has joined the channel
+[23:57] broofa has joined the channel

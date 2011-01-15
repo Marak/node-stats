@@ -1,0 +1,897 @@
+[00:01] RayMorgan__ has joined the channel
+[00:04] mikeal: i'll write a quick test
+[00:04] mikeal: that isn't embedded in all this garbage
+[00:07] aryounce has joined the channel
+[00:18] charlesjolley has joined the channel
+[00:18] blakemizerany has joined the channel
+[00:18] isaacs: Tim_Smart: added require.uncached that all the cool mailing list kids seem to love.
+[00:18] isaacs: also async version, and tests
+[00:18] Tim_Smart: require.uncache, for hot reloading?
+[00:19] tilgovi has joined the channel
+[00:19] mikeal: you moved the caching to use the filename right?
+[00:22] isaacs: Tim_Smart: well, require.uncached(id) will load the module without consulting the cache
+[00:22] Tim_Smart: OK cool
+[00:22] isaacs: basically, it sets it up so that the new Module object will have its own unique cache object rather than inheriting from the parent
+[00:22] isaacs: mikeal: yes.
+[00:22] isaacs: mikeal: it uses the absolute id (like /path/to/the/module) and also the resolved filename
+[00:23] mikeal: sweet
+[00:23] isaacs: hm... now that i'm thinking about this though, that means that a grandchild will not be pulled from cache...
+[00:23] isaacs: so, say A -> B uncached.  then B->A, you want to get the cached version.
+[00:23] isaacs: so my approach is unnecessarily sandboxed.
+[00:24] mikeal: until i see a use case where code is constantly re-requiring and it's just written really poorly, I would be fine with just never caching :)
+[00:24] isaacs: otherwise it'll blow up on cycles.
+[00:24] isaacs: lame
+[00:24] isaacs: uncached require() is really a bad idea in like 99+% of cases.
+[00:24] isaacs: you don't want to require() at run-time.
+[00:25] isaacs: require() is a slow load-time operation
+[00:26] mikeal: i have the sneaky suspicion that even if you never cached them, the load times for applications would still be faster than Python :)
+[00:26] isaacs: ok, fixed
+[00:26] isaacs: mikeal: unless you had a require() cycle
+[00:27] isaacs: then the load times for applications would be longer than the load time of the universe.
+[00:27] mikeal: yeah, people shouldn't do that
+[00:27] mikeal: i mean, it's good to protect them from it
+[00:27] isaacs: why note?
+[00:27] isaacs: not?
+[00:27] mikeal: by making it not suck
+[00:27] isaacs: npm does that
+[00:27] isaacs: hell, node itself does that
+[00:27] isaacs: path requires fs which requires path
+[00:27] mikeal: wait, what do yo mean by "require cycle"
+[00:27] dnolen has joined the channel
+[00:28] isaacs: i mean a.js has require("b") and b.js has require("a")
+[00:28] mikeal: oh, circular import
+[00:28] isaacs: if they're cached, then that's fine
+[00:28] mikeal: those blow up in Python :)
+[00:28] isaacs: but if they're both doing require.uncached, then it'll blowup
+[00:28] isaacs: well, python is dumb.
+[00:28] mikeal: yup
+[00:28] mikeal: :)
+[00:28] isaacs: it's like a very slightly cooler VB
+[00:28] isaacs: VERY slightly.
+[00:29] mikeal: i've just spent a huge amount of time dealing with Python packaging
+[00:29] arlolra has joined the channel
+[00:29] mikeal: because if you have a moderately popular Python project all you do is deal with install complaints :(
+[00:29] isaacs: i dodge that bullet by avoiding python :)
+[00:30] mikeal: that's my current approach :)
+[00:30] frodenius has joined the channel
+[00:30] frodenius has joined the channel
+[00:30] admc_ has joined the channel
+[00:30] CIA-77: node: 03Ryan Dahl 07master * ra01d8a0 10/ (3 files in 2 dirs): 
+[00:30] CIA-77: node: Timer clean ups
+[00:30] CIA-77: node: Also bugfix getting pointer to C++ class in watcher - http://bit.ly/aoICA9
+[00:32] cainus_ has joined the channel
+[00:34] RayMorgan has joined the channel
+[00:36] blakemiz_ has joined the channel
+[00:46] _ry: mikeal: i'm not around much this week - but yeah, there's some funky stuff going on in master
+[00:47] _ry: mikeal: get a unit get running and i'll try to take a look at it
+[00:49] creationix has joined the channel
+[00:52] creationix: _ry: what do I need to get the new api docs in a finished state.  I really need to close the project and move on
+[00:53] creationix: I've got v0.1.31 fully converted to markdown and an engine that can read it
+[00:56] _ry: creationix: we need to get the markdown into master - but before that i think there ought to be scripts that can build what we have now...
+[00:57] _ry: the new docs site looks good but it's not good enough to switch yet
+[00:57] _ry: i think there should be a transition
+[00:57] _ry: HEAD -> HEAD with markdown  and then later HEAD with markdown -> HEAD with markdown and new website
+[00:58] creationix: sounds good
+[00:58] creationix: the markdown is plenty easy to read on it's own
+[00:58] _ry: yeah i like markdown
+[00:58] creationix: I'm not sure I can convert it automatically without access to the internals of an asciidoc parser
+[00:59] _ry: yeah don't convert it automatically
+[00:59] creationix: maybe it's just my lack of ascii-doc knowledge, but the existing docs don't seem very consistent in their formatting 
+[00:59] _ry: it's a one time thing, it should just be done with vim and/or by hand
+[01:00] creationix: do you need all the versions converted, or just the latest release
+[01:00] creationix: it would take ages by hand to do all 30+ versions
+[01:00] _ry: :%s/+\(\w\+\)+/`\1`/g (or whatever
+[01:00] creationix: yeah, that's a start
+[01:00] _ry: just HEAD
+[01:00] _ry: the old stuff is just going to be archive
+[01:01] creationix: cool
+[01:01] _ry: but this should be done in a single commit - switch to markdown + scripts for generating website
+[01:01] creationix: what html should it generate? the current docs page?
+[01:01] _ry: yeah
+[01:02] creationix: ok, that shouldn't be too hard
+[01:02] creationix: would it be safe to diff the api.txt from 0.1.31 with HEAD and then apply the changes to my markdown manually
+[01:02] _ry: yes
+[01:02] creationix: would be a lot faster than converting HEAD by hand
+[01:03] _ry: there aren't so many changes
+[01:03] creationix: ok, now the challenge is to keep up with the speed of api changes in node ;)
+[01:03] _ry: there are a bucnh of doc changes that need to go in for net2
+[01:03] _ry: but we can hold off until you get that converted
+[01:03] _ry: then do those changes in markdown
+[01:04] _ry: ryan@mac% git diff v0.1.31..HEAD -- doc/api.txt | wc -l                                  [~/projects/node]  6:03PM 261
+[01:04] _ry: er
+[01:05] _ry: 261
+[01:05] _ry: :)
+[01:07] aryounce has joined the channel
+[01:07] _ry: creationix: it's mostly remvoing stuff
+[01:07] _ry: should be really easy
+[01:09] Tim_Smart has joined the channel
+[01:09] creationix: cool
+[01:09] creationix: _ry: I love the hostname of your man :P
+[01:10] creationix: *mac
+[01:11] creationix: also, a question, is the new net2 stuff documented yet?
+[01:11] CIA-77: node: 03Ryan Dahl 07master * r3238944 10/ lib/net.js : Don't use sys.puts for debug in net.js - http://bit.ly/aooSUh
+[01:11] _ry: no
+[01:12] _ry: most of it's the same
+[01:12] _ry: but, i want to write up a bit about unix sockets
+[01:12] Tim_Smart: _ry: Have you got an quick example / gist of using a socket with child process?
+[01:12] _ry: Tim_Smart: no
+[01:13] Tim_Smart: OK. That's cool.
+[01:13] Tim_Smart: ACTION needs to play a bit more when he has time
+[01:13] _ry: Tim_Smart: but basically the parent can listen on /tmp/node.sock
+[01:13] _ry: Tim_Smart: the children can connect to it
+[01:14] Tim_Smart: yup, and use sendFD to set up a socketpair
+[01:14] _ry: we need to think about how you can pass a server fd around
+[01:15] _ry: i think now you'd have to use the low-level interface
+[01:15] gf3_ has joined the channel
+[01:15] gf3|lol has joined the channel
+[01:15] _ry: create the server, listen on a port
+[01:15] _ry: well
+[01:15] _ry: ACTION shrugs
+[01:15] _ry: not going to think about it now :)
+[01:15] _ry: it should be possible
+[01:15] Tim_Smart: Hmm well, my concern atm is if you have multiple node process, all trying to access node.sock
+[01:16] Tim_Smart: so maybe suffix the pid or something
+[01:16] steadicat has joined the channel
+[01:17] isaacs: mikeal: replied
+[01:17] mikeal: sweet
+[01:18] isaacs: bit of a rant against relying on semver
+[01:22] deanlandolt: isaacs: your point about relying on semver is a good one...technically semver says you can do *anything* when < 1.0
+[01:22] deanlandolt: but it's still sexy to rely on semver...perhaps we could /fix/ semver :D
+[01:22] isaacs: deanlandolt: yeah, like you can /fix/ communism and make it work for real, this time.
+[01:22] isaacs: never. gonna. happen.
+[01:23] deanlandolt: all i mean by fix is just make it consistent -- no <1.0 exception
+[01:23] isaacs: most programs of any complexity have at least a few edge cases that don't get test coverage, maybe many.
+[01:23] stepheneb has joined the channel
+[01:23] deanlandolt: of course...so maybe we should be more honest about our version numbers
+[01:24] deanlandolt: when you /know/ you've broken your api, bump
+[01:24] isaacs: if your prog works with foo 1.2.3, and the foo devs have every intention to not change any APIs in a breaking way, but they releast 1.2.4 that changes some internal edge case you relied upon, then your stuff breaks.
+[01:24] deanlandolt: ehh, good point...it's not that simple
+[01:24] deanlandolt: but it'd be really sweet if it were :D
+[01:24] isaacs: now, if you know you're not doing anything outrageous with it, then you can say, "I'll trust that it'll work for any 1.2.x"
+[01:24] isaacs: but the *package manager* should not be making that call.
+[01:24] deanlandolt: sure enough -- the packager should
+[01:25] isaacs: right
+[01:26] isaacs: which means, the package.json spec, while it may require something semver-compliant in the "version" field, must not rely heavily on semver semantics in the dependencies field.
+[01:26] deanlandolt: and i'll bite that the packager /should/ have more power...if and when you can install and require two versions of the same package then dep hell goes away and it's not a big deal
+[01:26] isaacs: you can do that now with npm.
+[01:26] isaacs: it's all just symlinks and require.paths juggling
+[01:26] deanlandolt: fair enough
+[01:26] isaacs: i mean, it's not as if we're dealing with /usr/bin here
+[01:27] isaacs: tusk handles that with virtual envs using sea
+[01:27] cedricv has joined the channel
+[01:27] isaacs: which is similar in some ways to npm's links, but a bit more all-encompassing
+[01:28] kriszyp has joined the channel
+[01:29] isaacs: kriskowal: lolz "By my estimate, it is unlikely that the intended purpose of require.uncached is entirely wholesome."
+[01:30] kriskowal: yeh
+[01:30] isaacs: i like handing users loaded guns and pointing to their toes.
+[01:30] kriskowal: busy day, geez
+[01:31] isaacs: srsly
+[01:32] ditesh|cassini has joined the channel
+[01:33] kriskowal: also the es-meeting is tomorrow
+[01:33] kriskowal: lots of chatter
+[01:36] isaacs: mikeal: your proposed vendor support added to npm in 64e47a4
+[01:36] mikeal: sweet
+[01:37] mikeal: where is the es-meeting?
+[01:38] kriskowal: i have no idea. it's prolly at moz or google
+[01:38] kriskowal: i opted to keep my vacation time this month
+[01:41] mikeal: hehe
+[01:42] quirkey has joined the channel
+[01:49] JimBastard: ohh shit its quirkey time
+[01:50] quirkey: JimBastard: haha - not for long - its LOST time soon
+[01:53] RayMorgan has joined the channel
+[01:57] creationix: _ry: http://gist.github.com/341901
+[01:57] creationix: I got lost in the child process section and just did it from scratch to make sure I got the diff right
+[02:00] joshholt has joined the channel
+[02:04] bpot has joined the channel
+[02:15] hassox has joined the channel
+[02:21] creationix: _ry: or sorry, I just realized I forgot to write scripts, ignore the last patch please
+[02:33] isaacs: creationix: markdown for the doc instead of asciidoc!?  awesome!!
+[02:33] creationix: yep, I'm writing a converter to generate the html for the main site and step one will be done
+[02:33] creationix: hmm, I may need to generate the man page too
+[02:34] creationix: where was that markdown to man converter we mentioned the other day
+[02:37] isaacs: creationix: http://rtomayko.github.com/ronn/ronn.1.html
+[02:38] isaacs: creationix: also, looks like you're leaking a global "key" var here: http://github.com/creationix/proto/blob/master/lib/proto.js#L10
+[02:38] creationix: that's it thanks
+[02:38] isaacs: should be var key = keys[i];
+[02:38] creationix: isaacs: yikes, thanks
+[02:38] isaacs: also 37 and 24
+[02:38] isaacs: you'll see a slight speedup if you add the var there, too
+[02:38] isaacs: since globals are slow
+[02:39] creationix: wow how did I miss that, thanks a lot
+[02:41] isaacs: np
+[02:42] isaacs: probably had it vared somewhere else and then moved the code around
+[02:42] isaacs: i do that a lot
+[02:42] isaacs: that's why i var stuff as close to its usage as possible.
+[02:42] isaacs: oh, btw, if you could make node's docs look like this: http://rtomayko.github.com/ronn/ronn.1.html then that'd be HAWT
+[02:47] technoweenie has joined the channel
+[02:52] nsm has joined the channel
+[02:55] arlolra has joined the channel
+[02:57] creationix: isaacs: Do you know how to load a man file without installing it first
+[02:58] isaacs: creationix: not sure, but i think you can do man filename
+[02:58] isaacs: man man should tell you
+[02:59] isaacs: oh, or save the file locally and do: man -M .
+[02:59] isaacs: man -M . foo
+[02:59] ditesh|cassini has joined the channel
+[02:59] Tim_Smart: killall man :o
+[03:04] creationix: this works
+[03:04] creationix: nroff -man node.man | less
+[03:04] creationix: but I thought there was something shorter
+[03:06] nsm has joined the channel
+[03:07] mikeal has joined the channel
+[03:09] softdrink has joined the channel
+[03:12] inimino: creationix: man ./foo
+[03:12] creationix: ahh, the dot
+[03:13] creationix: http://static.creationix.com/node.html
+[03:13] creationix: It's not formatted right everywhere, but it's a start
+[03:13] creationix: _ry: what do you think about the ronn format for the html too?
+[03:13] isaacs: aww, doesn't allow # markings
+[03:14] isaacs: no id attribs in teh marketup
+[03:14] joshholt: creationix: very nice
+[03:15] isaacs: and, now that i try to actually read this, it's quite obnoxious to have it in a monospace font
+[03:15] creationix: yeah, I'm thinking it's a pain to actually use
+[03:16] creationix: looks cool though
+[03:16] joshholt: isaacs: aggree ... creationix: diavalo is nice
+[03:19] sh1mmer has joined the channel
+[03:36] isaacs has joined the channel
+[03:36] Tim_Smart has joined the channel
+[03:48] micheil has joined the channel
+[03:53] blakemizerany has joined the channel
+[03:58] JimBastard has joined the channel
+[04:01] JimBastard: is Crockford lurking?
+[04:01] JimBastard: aight...attempting to start him up
+[04:07] CrockBot has joined the channel
+[04:07] JimBastard: crap he's here
+[04:07] JimBastard: who is this douglas crockford guy?
+[04:07] CrockBot: “I’m your father, John”   janl
+[04:09] bpot has joined the channel
+[04:10] JimBastard: im taking bets on how long it will take for crockbot to get g-lined (no cheating)
+[04:10] JimBastard: who's in?
+[04:11] Tim_Smart has left the channel
+[04:13] CodeOfficer has joined the channel
+[04:13] JimBastard: sup CodeOfficer 
+[04:13] CodeOfficer: hey bro :)
+[04:14] JimBastard: this is where we make the magic happen
+[04:14] CodeOfficer: thanks for the heads up
+[04:22] PyroPete1 has joined the channel
+[04:28] mattly has joined the channel
+[04:29] charlesjolley has joined the channel
+[04:32] okito has joined the channel
+[04:32] dnolen has joined the channel
+[04:35] tiglionabbit has joined the channel
+[04:36] rektide: http://pastebin.com/eZiJAaDz
+[04:36] rektide: my response handler to an http client never gets triggered
+[04:37] rektide: i'm not sure what obvious thing i'm obviously missing
+[04:42] sh1mmer has joined the channel
+[04:47] cedricv has joined the channel
+[04:55] isaacs has joined the channel
+[05:10] RayMorgan has joined the channel
+[05:13] JimBastard has joined the channel
+[05:13] JimBastard: did CrockBot go crazy yet?
+[05:13] CrockBot: Chuck Norris checks his code with JSLint.   tobeytailor
+[05:13] JimBastard: 10-4
+[05:20] rektide: neglected the request.close()
+[05:20] rektide: ffff
+[05:23] mikeal has joined the channel
+[05:28] sztanpet has joined the channel
+[05:29] _ry: rektide: check the latest ry/master for fix
+[05:29] _ry: still working out bugs with net2
+[05:30] rektide: it looked like user error, i just had to add request.close()
+[05:31] rektide: i follow master pretty closely
+[05:33] kennethkalmer has joined the channel
+[05:35] kriszyp has joined the channel
+[05:43] tiglionabbit has joined the channel
+[05:46] mikeal: _ry: sweet! that last commit fixed my bug
+[06:01] markwubben has joined the channel
+[06:02] hassox has joined the channel
+[06:03] hassox has left the channel
+[06:16] admc has joined the channel
+[06:17] sh1m has joined the channel
+[06:20] mjr_ has joined the channel
+[06:33] mikeal has joined the channel
+[06:34] CodeOfficer has joined the channel
+[06:43] sztanphet has joined the channel
+[06:48] aryounce has joined the channel
+[06:53] tiglionabbit has joined the channel
+[06:59] tiglionabbit_ has joined the channel
+[07:17] okito has joined the channel
+[07:23] tiglionabbit_: hm
+[07:24] tiglionabbit_: I want to serve static files.  What libraries work?  I'm tempted to use node-paperboy, since it doesn't have inversion of control, and allows me to attempt to serve a static file first and then fall back to dynamic content...  but it uses promises
+[07:25] micheil: try... paperboy
+[07:25] micheil: oh
+[07:26] micheil: tiglionabbit_: it's probably an issue of just getting around to updating to the new apis
+[07:26] tiglionabbit_: hm
+[07:26] tiglionabbit_: wonder if I can update it?  It's just one file after all.  hm
+[07:28] tiglionabbit_: darn it, I don't understand the error in my backtrace for the example.  Hm.  How do you debug stuff in node?
+[07:29] tiglionabbit_: oh hey, promise exists in the version of node I'm using.  Must be failing for a different reason
+[07:29] tiglionabbit_: I thought that was taken out though
+[07:29] tiglionabbit_: I'm using v0.1.32-18-g5d5c8cf
+[07:29] micheil: promises were taken out, afaik
+[07:31] tiglionabbit_: then why does require('events').Promise return a function?
+[07:31] erikcorry|away has joined the channel
+[07:32] micheil: no idea
+[07:32] tiglionabbit_: hm, paperboy is failing because fs.stat() called on a file that does exist is returning undefined
+[07:32] siculars: hi gang, question on http.createClient... if i wanted to test weather a connection was made, would i put a try/catch around the http.createClient invocation or around the request invocation... 
+[07:33] micheil: tiglionabbit_: hmm
+[07:35] micheil: let me remake node and fork paperboy
+[07:35] tiglionabbit_: it crashes here: http://github.com/felixge/node-paperboy/blob/master/lib/paperboy.js#L129
+[07:35] micheil: yeah, okay
+[07:37] okito has joined the channel
+[07:37] tiglionabbit_: does the addCallback style not work anymore?
+[07:38] micheil: umm.. no
+[07:40] tiglionabbit_: how exactly is that implemented anyway?  I see fs.stat is defined here.  It doesn't appear to return anything.  http://github.com/ry/node/blob/master/lib/fs.js#L201
+[07:42] mjr_: var fs = process.binding('fs');
+[07:42] tiglionabbit_: hm, the only mention of addCallback in the source code is here: http://github.com/ry/node/blob/master/lib/multipart.js#L88  so how is it defined?
+[07:42] piranha has joined the channel
+[07:43] tiglionabbit_: mjr_: huh?
+[07:43] mjr_: it is in the C++
+[07:48] tiglionabbit_: http://friendpaste.com/6muQPLiSYo1xfaIeJQIGUK
+[07:49] tiglionabbit_: mjr_: how is it supposed to work?
+[07:53] tiglionabbit_: hello?
+[07:53] mjr_: Just looking at the code.  I hadn't ever looked at this part.
+[07:53] mjr_: What's your question then?   How does node do the binding, or what is the API for stat?
+[07:54] tiglionabbit_: my question is how do I serve static files?  Paperboy looks good, but it doesn't work
+[07:54] tiglionabbit_: because stat doesn't seem to work
+[07:54] micheil: tiglionabbit_: wait a little while, I'm forking and patching.
+[07:55] tiglionabbit_: so I thought, oh, I can fix it, right?  But then I looked into it and I have no idea how addCallback is supposed to work.
+[07:55] tiglionabbit_: thanks micheil =]
+[07:56] tiglionabbit_: so I guess part of my question is how are you supposed to use fs.stat?
+[07:56] tiglionabbit_: since http://github.com/felixge/node-paperboy/blob/master/lib/paperboy.js#L129 is failing to
+[07:58] tiglionabbit_: hm, docs say the callback's first argument is err anyway
+[07:59] mjr_: http://gist.github.com/342085
+[07:59] mjr_: that is how fs.stat works.
+[07:59] mjr_: Now we both know.
+[07:59] tiglionabbit_: so, addCallback doesn't work anymore, right?
+[07:59] tiglionabbit_: was that part of promises?
+[08:00] mjr_: Yeah, that's the old way
+[08:00] mjr_: or, one of many older ways.
+[08:00] tiglionabbit_: got it.  Then you should probably remove it from here too: http://github.com/ry/node/blob/master/lib/multipart.js#L88
+[08:00] tiglionabbit_: though I suppose it's protected there
+[08:01] mjr_: That multipart stuff is another place I've never looked.
+[08:08] QuietKnight has joined the channel
+[08:12] kixxauth has joined the channel
+[08:16] cedricv has joined the channel
+[08:17] micheil: tiglionabbit_: http://github.com/Miksago/node-paperboy
+[08:17] christkv has joined the channel
+[08:21] tiglionabbit_: awesome, thank you!
+[08:21] tiglionabbit_: works great
+[08:24] mjr_: I like how with node something like paperboy.js is mostly just mime types.
+[08:25] kjeldahl has joined the channel
+[08:31] kjeldahl has joined the channel
+[08:31] Gruni has joined the channel
+[08:32] tiglionabbit_: well how complex could it be?
+[08:37] pdelgallego has joined the channel
+[08:38] tiglionabbit_: does the file 'package.json' in node-paperboy serve any purpose?
+[08:40] tiglionabbit_: is it for commonjs?  Odd I can't just require it
+[08:42] tisba has joined the channel
+[08:44] kjeldahl has joined the channel
+[08:45] tiglionabbit_: micheil: while you're at it, you could change the example in the readme to look like the real one
+[08:45] micheil: later.
+[08:48] tiglionabbit_: :P it's just a copy-paste
+[08:51] juvenn has joined the channel
+[08:52] teemow has joined the channel
+[08:55] juvenn has left the channel
+[09:00] micheil: yeah, I need to get work done thought
+[09:10] mpoz2 has joined the channel
+[09:15] nsm has joined the channel
+[09:20] al3x__ has joined the channel
+[09:25] Tim_Smart has joined the channel
+[09:28] okito has joined the channel
+[09:36] javajunky has joined the channel
+[09:56] javajunky has joined the channel
+[10:04] rnewson has joined the channel
+[10:15] kennethkalmer has joined the channel
+[10:35] MattJ has joined the channel
+[10:46] joshholt has joined the channel
+[10:50] hassox has joined the channel
+[10:53] nsm has left the channel
+[10:56] juvenn has joined the channel
+[11:03] juvenn has joined the channel
+[11:03] juvenn has left the channel
+[11:19] tiglionabbit has joined the channel
+[11:22] rolfb has joined the channel
+[11:32] Monk has joined the channel
+[11:41] tiglionabbit has joined the channel
+[11:44] joshholt has joined the channel
+[11:54] christkv has joined the channel
+[11:58] kriszyp has joined the channel
+[11:59] stepheneb has joined the channel
+[12:22] alex-desktop has joined the channel
+[12:25] kixxauth has joined the channel
+[12:26] mfeiri has joined the channel
+[12:33] kixxauth has joined the channel
+[12:38] OSInet has joined the channel
+[12:39] maushu has joined the channel
+[12:52] rnewson has joined the channel
+[12:53] confounds has joined the channel
+[13:04] jed_ has joined the channel
+[13:04] juvenn has joined the channel
+[13:04] juvenn has left the channel
+[13:12] okito has joined the channel
+[13:21] JAAulde has joined the channel
+[13:23] jherdman has joined the channel
+[13:28] maushu: gf3|lol: lol.
+[13:29] superbobry has joined the channel
+[13:29] gf3|lol: lol
+[13:30] superbobry has left the channel
+[13:30] ssteinerX has joined the channel
+[13:30] maushu: double lol
+[13:31] maushu: gf3|lol: Anyways, for the sandbox what I decided to do is using a tcp socket that sends requests and returns results. It seems the only way to secure calls to not secure resources like fs and sys.
+[13:32] gf3|lol: nice
+[13:32] gf3|lol: is it on GH?
+[13:32] maushu: No, it was just a quick prototype.
+[13:33] maushu: I'm still waiting for node.js to get stable regarding net2 so we can use unix sockets.
+[13:34] juvenn has joined the channel
+[13:34] juvenn has left the channel
+[13:34] gf3|lol: mmm
+[13:34] gf3|lol: maushu: cool, ping me when I can check it out
+[13:34] maushu: Oki.
+[13:35] maushu: The other idea was using the stdio but that complicates stuff.
+[13:35] juvenn has joined the channel
+[13:35] juvenn has left the channel
+[13:57] weilawei has joined the channel
+[13:57] weilawei: Hi!
+[13:58] weilawei: Can anyone with experience testing async code spare me a minute to talk about gotchas and such?
+[13:59] maushu: Gotchas? Hmm.. async code doesn't run a linear way?
+[13:59] maushu: That's the only gotcha that comes to mind.
+[13:59] alex-desktop has joined the channel
+[14:00] stepheneb has joined the channel
+[14:00] weilawei: mashu: understood.. ive got a framework, it runs fine.. doesn't have tests though. it's very small and behaves, but im to the point where i realize i need to do this to go any further
+[14:00] dnolen has joined the channel
+[14:00] weilawei: and since I'm not great at testing, I figured I should get some tips on async testing and then go build a little harness
+[14:01] weilawei: learning experience, right?
+[14:04] kixxauth has joined the channel
+[14:05] stepheneb has joined the channel
+[14:06] jherdman_ has joined the channel
+[14:06] kixxauth has joined the channel
+[14:08] kixxauth has joined the channel
+[14:11] ssteinerX has left the channel
+[14:12] joshbuddy has joined the channel
+[14:14] softdrink has joined the channel
+[14:15] joshbuddy has joined the channel
+[14:16] gf3 has joined the channel
+[14:18] kixxauth has joined the channel
+[14:21] kixxauth has joined the channel
+[14:22] OSInet has left the channel
+[14:22] CIA-77: node: 03Ryan Dahl 07master * r3546106 10/ lib/http.js : Add req.connection and res.connection - http://bit.ly/aAzUCg
+[14:22] OSInet has joined the channel
+[14:22] pmuellr has joined the channel
+[14:26] kjeldahl has joined the channel
+[14:28] pmuellr has left the channel
+[14:29] weilawei: _ry: didn't break my app today :)
+[14:29] weilawei: just compiled and ran the latest node version
+[14:30] pmuellr has joined the channel
+[14:30] weilawei: i think this.socket should go
+[14:32] aryounce has joined the channel
+[14:35] tbassetto has joined the channel
+[14:36] OSInet has left the channel
+[14:38] tisba_ has joined the channel
+[14:41] kjeldahl has joined the channel
+[14:44] kixxauth has joined the channel
+[14:45] dnolen has joined the channel
+[14:46] Yuffster has joined the channel
+[14:46] tbassetto has left the channel
+[14:47] tbassetto has joined the channel
+[14:48] stepheneb has joined the channel
+[14:49] tbassetto has left the channel
+[14:52] gwoo has joined the channel
+[14:57] binary42 has joined the channel
+[15:02] micheil has joined the channel
+[15:05] sh1m has joined the channel
+[15:06] stepheneb has joined the channel
+[15:06] maushu: (Also, it has been suggested that in the future, brewing will require water.)
+[15:06] maushu: WAT. BLASPHEMY!
+[15:07] maushu: True dwarves don't need any stinking water!
+[15:09] kixxauth has joined the channel
+[15:10] joshbuddy has joined the channel
+[15:11] alexiskander has joined the channel
+[15:13] binary42 has joined the channel
+[15:18] kixxauth has joined the channel
+[15:34] ssteinerX has joined the channel
+[15:36] kixxauth has joined the channel
+[15:45] pjb3 has joined the channel
+[15:47] juvenn has joined the channel
+[15:47] juvenn has left the channel
+[15:47] qFox has joined the channel
+[15:50] ashb: does node expand ~ when opening files?
+[15:51] ashb: "~/foo" etc
+[15:54] RayMorgan has joined the channel
+[15:55] steadicat has joined the channel
+[15:57] xavi_ has joined the channel
+[15:57] MattJ: ashb: I'd doubt it, but haven't confirmed
+[16:00] mikeal has joined the channel
+[16:02] maritz has joined the channel
+[16:03] gwoo has joined the channel
+[16:03] mjr_: it does not do tilde expansion.
+[16:09] weilawei: mjr_: does the path module?
+[16:10] bpot has joined the channel
+[16:12] silentrob has joined the channel
+[16:15] _ry: ashb: no
+[16:15] ashb: anything to do it?
+[16:16] _ry: hm.. nope
+[16:16] ashb: i keep flip-flopping on where the right place to do it is
+[16:17] ashb: also ~other_user/ expansion would be nice
+[16:18] cpojer has joined the channel
+[16:20] _ry: ashb: yeah - there are a bunch of places where paths are interpreted - it'd be nice if node had a way of dealing with that
+[16:20] ashb: i wonder if path objects should deal with it
+[16:20] ashb: i guess you need some way of distinguishing between ~ and \~
+[16:21] _ry: expanding ~user is difficult
+[16:21] _ry: i wonder how bash does it
+[16:21] ashb: getpwent
+[16:21] _ry: passwd lookup?
+[16:21] ashb: typically
+[16:21] JimBastard has joined the channel
+[16:21] ashb: or that family of calls
+[16:21] _ry: ~ is just $HOME, i suppose
+[16:21] ashb: again, typically is
+[16:22] _ry: but passwd look ups are i/o and would need to be done in a thread...
+[16:22] _ry: so - it gets annoying
+[16:22] ashb: yes - but you'd typiucally resolve it just before opening the file which is i/o anyway
+[16:23] ashb: (or doing a dir list etc)
+[16:23] ashb: not always, but frequently
+[16:23] _ry: yeah
+[16:24] ashb: getpwnam sorry
+[16:24] ashb: getpwent iteratres
+[16:24] JimBastard: i got pwn'd once
+[16:24] JimBastard: right Crockford
+[16:25] JimBastard: ohh crap
+[16:25] ashb: & off to protest about the Digital Economy Bill
+[16:25] JimBastard: crockbot fail
+[16:25] sh1mmer has joined the channel
+[16:25] mikeal: voodootikigod: i think i may have prematurely submitted a talk
+[16:25] voodootikigod: ?
+[16:25] ashb: mikeal: conference driven development FTW
+[16:25] mikeal: i swich tabs and when i returned the proposal window was gone
+[16:26] voodootikigod: for what
+[16:26] voodootikigod: trackb?
+[16:26] mikeal: yeah
+[16:26] voodootikigod: not open until April 1
+[16:26] JimBastard: damn the logs don't show people leaving
+[16:26] kennethkalmer has joined the channel
+[16:26] mikeal: then why does it give me a window?
+[16:26] JimBastard: did anyone see what happened to CrockBot?
+[16:26] voodootikigod: because originally i wasn't planning on posting it
+[16:27] ashb: 05:52 -!- CrockBot [~js-irc@hook.io] has quit [Ping timeout: 240 seconds]
+[16:27] ashb: mine do
+[16:27] voodootikigod: but to allow leroux and others to start building apps
+[16:27] voodootikigod: I posted it
+[16:27] voodootikigod: working to remove that
+[16:27] voodootikigod: but ran out of time
+[16:27] JimBastard: thanks ashb
+[16:27] mikeal: JimBastard: i took it down because you were going to run it
+[16:27] JimBastard: naah i turned him on last night
+[16:27] JimBastard: he timed out this morning
+[16:27] mikeal: "You must already be attending JSConf to speak on Track B." didn't see that :(
+[16:28] mikeal: my talk was titled "node.js + CouchDB === crazy delicious"
+[16:29] voodootikigod: yea
+[16:29] voodootikigod: have to be attending
+[16:29] voodootikigod: and we do check
+[16:29] mikeal: haha, it would be funny if you let someone speak but not attend :)
+[16:30] mikeal: have security escort them to the podium 
+[16:30] mikeal: then to the airport
+[16:31] mikeal: yeah, it makes sense, if you didn't do that then you'd have hundreds of proposals for everyone who forgot to buy a ticket :)
+[16:32] KungFuHamster: what's a good software for monitoring web traffic by domain on a linux host that produces pretty graphs over time and that's easy to set up and use?
+[16:33] mikeal: i usually just parse a log in to JSON and then use flot to create graphs in the browser
+[16:35] mikeal: voodootikigod: what is Crockford's talk about?
+[16:35] mikeal: because it sounds awesome
+[16:36] voodootikigod: not entirely sure
+[16:36] voodootikigod: he left it vague
+[16:36] voodootikigod: un sure
+[16:36] isaacs has joined the channel
+[16:36] voodootikigod: probably a dissertation on "terrorist fist jabbing"
+[16:36] voodootikigod: :)
+[16:36] kennethkalmer has joined the channel
+[16:37] mikeal: hahaha
+[16:38] mikeal: he should have slides that just refresh crockfordfacts.com every 30 seconds
+[16:39] voodootikigod: i mgiht just inject the video feed
+[16:40] voodootikigod: when he looks at the screen
+[16:40] voodootikigod: switch it back
+[16:40] JimBastard: LOL
+[16:40] technoweenie has joined the channel
+[16:40] mikeal: hahaha
+[16:40] JimBastard: at least you didnt root my box when i did that node_debug talk with no security
+[16:40] JimBastard: although that mysterious file aaaaaaaaaaa is still there
+[16:41] kennethkalmer has joined the channel
+[16:41] JimBastard: someone at the talk did that
+[16:41] dnolen has joined the channel
+[16:41] dandean has joined the channel
+[16:44] kennethkalmer has joined the channel
+[16:53] mjr__ has joined the channel
+[16:56] softdrink has joined the channel
+[17:00] hober has joined the channel
+[17:01] aguynamedben has joined the channel
+[17:01] okito has joined the channel
+[17:18] brandon_beacher has joined the channel
+[17:18] r11t has joined the channel
+[17:19] BinaryPie has joined the channel
+[17:25] CodeOfficer has joined the channel
+[17:31] rtomayko has joined the channel
+[17:32] bronson has joined the channel
+[17:35] dgathright has joined the channel
+[17:36] kriszyp has joined the channel
+[17:39] mattly has joined the channel
+[17:40] sztanpet has joined the channel
+[17:41] brandon_beacher has joined the channel
+[17:42] stepheneb has joined the channel
+[17:45] mattly has joined the channel
+[17:47] juvenn has joined the channel
+[17:47] juvenn has left the channel
+[17:48] sveisvei has joined the channel
+[17:58] joshbuddy has joined the channel
+[18:01] Gruni has joined the channel
+[18:01] mikeal has joined the channel
+[18:03] mattly has joined the channel
+[18:06] KungFuHamster has joined the channel
+[18:12] indiefan has joined the channel
+[18:13] dgathright has joined the channel
+[18:14] voodootikigod_ has joined the channel
+[18:22] okito has joined the channel
+[18:26] JimBastard: yeah 33 followers
+[18:26] JimBastard: http://github.com/Marak
+[18:26] JimBastard: ^_^
+[18:28] Elfix has joined the channel
+[18:29] tbassetto has joined the channel
+[18:31] stephenlb has joined the channel
+[18:32] binary42: JimBastard: ha! http://drp.ly/FvBew
+[18:34] stepheneb has joined the channel
+[18:39] joshbuddy has joined the channel
+[18:39] joshbuddy has joined the channel
+[18:44] javajunky has joined the channel
+[18:50] JimBastard: wtf binary42 
+[18:50] JimBastard: stop hacking my shit
+[18:51] JimBastard: yeah still showing 33 here
+[18:51] JimBastard: strange
+[18:51] binary42: no hacks. Don't think I'm following though. }}:-) I rarely follow people now. Just too much in my feed already.
+[18:51] binary42: GitHub's caching is pretty ghetto.
+[18:52] JimBastard: i like following lots of people
+[18:52] JimBastard: its rare for me to find someone who does a bunch of crap status updates on github
+[18:52] binary42: I wish I could follow people just to get their public gists. Those are always fun to see.
+[18:52] JimBastard: i havent had to unfollow anyone
+[18:52] JimBastard: i see public gists
+[18:53] JimBastard: any project that i really need to see updates for im gonna be checking manually anyway
+[18:53] binary42: I do to.. I'm saying I don't care about the rest of the data.
+[18:53] JimBastard: got ya
+[18:53] JimBastard: i'll defintely be hooking into the github api
+[18:53] mjr__: Anybody used the new Buffer and/or HTTP parsing outside of the normal API?
+[18:53] JimBastard: depending on what they expose i should be able to extend funcitonality a bit
+[18:54] mjr__: I'm grinding through data from a packet capture, and I want to use node to decode the HTTP bits that it finds.
+[18:56] pedrobelo has joined the channel
+[18:58] kixxauth has joined the channel
+[19:07] stalled has joined the channel
+[19:08] around has joined the channel
+[19:08] around: Hello there.
+[19:08] around: I am trying to use node.js with Flash AMF.. is there a library I should look into?
+[19:10] around: Come on guys, I need clues.
+[19:10] around: Anything similar to ZendAMF/SabreAMF/amfPHP for Node?
+[19:12] drostie has joined the channel
+[19:12] cpojer has joined the channel
+[19:13] mjr__: I learned JavaScript so I wouldn't have to deal with Flash.
+[19:13] javajunky has joined the channel
+[19:13] around: mjr_: those are two completely separate things, my friend. #nodejs is no place for holywars.
+[19:15] around: Big ups to _ry.
+[19:16] drostie: around: aww, no holy wars?
+[19:17] around: drostie: not on the menu today, sir.
+[19:17] drostie: not even ones where we fight over whether Crockford is a saint or a demigod?
+[19:17] gwoo: around: http://wiki.github.com/ry/node/modules
+[19:18] mjr__: aww, no crockbot anymore I guess.
+[19:18] around: gwoo: thanks, Garrett
+[19:19] maushu has joined the channel
+[19:21] JimBastard: hey binary42  you seen this yet, http://pusherapp.com/
+[19:22] binary42: JimBastard: Looks pretty limited.
+[19:22] binary42: WebSockets aren't really event standardized yet.
+[19:22] mjr__: "Fall back to Flash for crap browsers"
+[19:22] binary42: (I use them but only in tightly controlled cases)
+[19:22] JimBastard: yeah, looks like a subset of hook.io functionality
+[19:23] JimBastard: i think i could add some websocket support pretty easily
+[19:23] binary42: mjr__: No matter, they are talking about changing the protocol.
+[19:23] JimBastard: also, this is a blackbox....no source code
+[19:23] JimBastard: pure Saas sucks
+[19:23] binary42: Yeah. Not so impressed.
+[19:23] JimBastard: i was Saas where i can download the code
+[19:23] JimBastard: want*
+[19:23] dnolen has joined the channel
+[19:24] binary42: Well, I don't care much there but I can say that websockets isn't the best way to achieve low latency comm in call cases.
+[19:24] JimBastard: do you think polling is a better option?
+[19:24] JimBastard: i mean if you are in the browser those are your only two choices?
+[19:24] binary42: In some cases, yes.
+[19:24] JimBastard: unless you do real sockets with flash?
+[19:24] binary42: The big difference here is internet topology and the limits regarding the speed of light.
+[19:24] binary42: ;-)
+[19:25] binary42: I've done a lot of testing.
+[19:25] KungFuHamster: ACTION 's ears perk up.
+[19:25] JimBastard: i trust your judgement
+[19:25] binary42: If you really care about realtime, you need more than one protocol.
+[19:25] JimBastard: you could have just told me you had a dream about it
+[19:25] KungFuHamster: I've been playing around with sockets in Flex/Flash
+[19:25] binary42: websockets are great though.
+[19:26] JimBastard: so yeah binary42  i think im gonna do a talk at scurvyconf
+[19:26] binary42: Do it!
+[19:26] JimBastard: for sure,  gonna get drunk and ramble about hook.io
+[19:27] mjr__: In what cases is polling faster than websockets?
+[19:27] binary42: We should add a requirement to scurvyconf that all speakers must be holding a beer.
+[19:27] KungFuHamster: are websockets efficient, bandwidth-wise?
+[19:27] JimBastard: i thought that was a requirement
+[19:27] binary42: mjr__: if you are using HTTP CDNs or caches.
+[19:27] JimBastard: i might produce an interactive video so i don't have to talk much and i can dance during my presentation
+[19:28] JimBastard: maybe open up with "Final Countdown"
+[19:28] JimBastard: we'll see...
+[19:28] binary42: hehehe.
+[19:28] mjr__: oh, but surely websockets are faster for the comet-style interactions, right?
+[19:29] blakemizerany has joined the channel
+[19:29] binary42: mjr__: Some of them, yes. It's not always clear. It can depend on the payload size.
+[19:30] silentrob has joined the channel
+[19:30] binary42: Direct TCP links can be pretty flaky with lost packets on mobile connections.
+[19:30] mjr__: I'm working on a network analyzer to characterize the latency of messages through xhrs.
+[19:30] binary42: HTTP can sometimes boost reliability here.
+[19:30] kennethkalmer has joined the channel
+[19:31] kriszyp has joined the channel
+[19:31] binary42: In the end, if you are broadcasting data to more than one person in the same region, CDN pushing can be a lot faster over HTTP while using pings on websockets to instruct a pull.
+[19:32] binary42: There are other cases to consider too but I need to focus on something else for a bit. ;-)
+[19:33] mjr__: How can HTTP boost reliability vs. raw TCP?  Just because it is more likely to use REST semantics, and therefore more likely to be retryable?
+[19:33] binary42: Nah.
+[19:33] binary42: Because a proxy can handle the TCP connection reliably while the flaky side is a shorter distance to travel to the proxy or CDN.
+[19:34] rnewson: did the net2 merge do anything to improve the chunked transfer code? I reran my wedge test since then and it still appears broken.
+[19:34] mjr__: Well, sure, if you get proxied by someone on the other end of your flaky link, then that's different.
+[19:35] binary42: Yeah. Well, it's quite viable these days and usually more help than not.
+[19:35] binary42: Also, keep in mind that it's higher cost to initiate a new websocket if your connection breaks up regularly.
+[19:35] binary42: (more round-tripping).
+[19:36] binary42: Anyway, websockets are great. Most people shouldn't care too much about the difference since most people don't need "real" realtime.
+[19:36] mjr__: rnewson: did you isolate the part where it was getting stuck?
+[19:37] rnewson: mjr__: I did not, sadly. Last I heard _ry believed he understood the problem and implied the fix was hard.
+[19:37] mjr__: binary42: I'm excited about them because the differences in XHR implementations are too great.
+[19:37] rnewson: It's internal to node.js, it suffices only to generate a large response body for it to wedge.
+[19:37] JimBastard: binary42 is there a good jQuery plugin floating around for doing websockets? i.e. one that will fall back to an embed'd flash and handle all the ExternalInterface crap for you?
+[19:38] binary42: JimBastard: The API is too simple to wrap. Not sure why you'd need a plugin.
+[19:38] JimBastard: i think i heard of a few, but nothing awesome yet
+[19:38] JimBastard: fall back
+[19:38] JimBastard: so you can embed a swf for non-compat browsers
+[19:38] binary42: There isn't a simple parallel way to match the two on fallback.
+[19:39] binary42: Ah. You mean flash.
+[19:39] JimBastard: yeah
+[19:39] binary42: Yeah. There are a couple.
+[19:39] JimBastard: you mess with any yet?
+[19:39] binary42: I'm not too interested in that case though. I'd rather just use a real message server.
+[19:39] JimBastard: understood
+[19:39] JimBastard: in that case you'd use just the swf?
+[19:39] cpleppert has joined the channel
+[19:39] binary42: One that supports long polls, continuous pulls, websockets, etc..
+[19:39] JimBastard: or are you talking about outside the browser
+[19:40] binary42: Nah. I rarely use flash.
+[19:40] JimBastard: im talking about the client
+[19:40] binary42: I mean I'd have something server side that just mediates anything I need.
+[19:40] JimBastard: you'd rather fallback to long-poll?
+[19:40] binary42: Yup.
+[19:40] JimBastard: that makes sense
+[19:40] binary42: Flash overhead sucks.
+[19:48] juvenn has joined the channel
+[19:48] juvenn has left the channel
+[19:53] Connorhd: JimBastard: I started a node module/jquery plugin to do websockets and fall back to long polling http://github.com/Connorhd/node_webstream
+[19:53] JimBastard: cool beans
+[19:53] JimBastard: ill check it out, im interested in the landscape
+[19:54] Connorhd: its rather "alpha" right now, but the basics work
+[19:54] JimBastard: im gonna have to step up the JS api for hook.io, maybe websockets could be a v1.0 feature
+[19:55] JimBastard: maybe not
+[19:55] JimBastard: still worth looking into though
+[19:55] Connorhd: I think js.io does this kind of thing too
+[19:57] konobi: mjr__: iirc it's to do with TCP window sizes
+[19:59] mjr__: window sizes on which?
+[20:00] konobi: HTTP vs plain TCP
+[20:07] okito has joined the channel
+[20:08] Tim_Smart has joined the channel
+[20:08] stepheneb_ has joined the channel
+[20:10] JimBastard: js.io seems to have major lag 
+[20:10] JimBastard: i was trying the demo out 
+[20:10] JimBastard: it was WAY off
+[20:17] aho has joined the channel
+[20:21] OSInet has joined the channel
+[20:24] Tim_Smart: js.io is doing a full HTTP request for every action... fail
+[20:27] javajunky: is creationix in here  ? 
+[20:30] RayMorgan has joined the channel
+[20:31] JimBastard: so im pretty sure most of the twitter javascript plugins can be exploited
+[20:31] JimBastard: the one we use at work seems to be very escapable
+[20:32] indiefan has joined the channel
+[20:33] mikeal: so
+[20:33] mikeal: i'm reading from the filesystem
+[20:33] mikeal: and i need to know what the file encoding is before I do an HTTP PUT
+[20:34] mikeal: what is the best way to do that?
+[20:34] JimBastard: you mean mime type?
+[20:35] mikeal: i just need to know if it's utf8 or ascii
+[20:35] mikeal: or binary
+[20:35] JimBastard: ahh
+[20:35] JimBastard: its not safe to just force binary right? lol
+[20:35] mikeal: nope :)
+[20:35] kriszyp: if you getting it from a binary source, and sending it to a binary target (http) than you won't lose anything by staying in binary
+[20:36] JimBastard: i would inspect the fs object? the info should be there?
+[20:36] mikeal: not that i can see
+[20:36] mikeal: Stat doesn't have it
+[20:36] kriszyp: do you need to know the charset for the Content-Type header though?
+[20:36] JimBastard: i think ive just forced binary before and not had any issues
+[20:36] kriszyp: file's don't have an encoding
+[20:36] kriszyp: it is the meaning of the files that has the encoding
+[20:37] kriszyp: determining the charset is sniffing/hieristic exercise
+[20:37] kriszyp: just sending a file to an http server (with a PUT) can just be done with binary though
+[20:37] mikeal: no, the request.write() is failing when i have the wrong encoding
+[20:37] mikeal: i'll try just binary for everything
+[20:38] mikeal: that seems to work
+[20:38] JimBastard: hell yeah
+[20:38] mikeal: weird
+[20:38] mikeal: utf8 would fail on ascii encoding but binary works fine
+[20:39] OSInet has left the channel
+[20:40] JimBastard: well, its always gonna be a binary file right?
+[20:41] QuietKnight has joined the channel
+[20:41] mjr__: As long as you don't care to look at the contents with JS, shouldn't binary always work?
+[20:42] mikeal: these files are all ascii actually
+[20:46] sztanphet has joined the channel
+[20:53] joshbuddy has joined the channel
+[20:54] mjr__: Sometimes uncaught exceptions do a stack trace, and sometimes they just cause node to silently exit with code 0.
+[21:02] mattly has joined the channel
+[21:10] RayMorgan has joined the channel
+[21:15] okito has joined the channel
+[21:19] okito has joined the channel
+[21:22] siculars: hey gang, is there a way to catch http.createClient errors? like if the host/port/path (via request) are wedged in some fashion?
+[21:23] _ry: siculars: listen for 'error'
+[21:23] micheil_mbp has joined the channel
+[21:24] siculars: oho! an addListener('error',...) ! it's not in the creatClient docs but part of the createServer docs section. i'll give it a go. thanks _ry. 
+[21:29] technoweenie has joined the channel
+[21:33] sh1mmer has joined the channel
+[21:33] indiefan has joined the channel
+[21:35] hellp has joined the channel
+[21:37] cpojer has joined the channel
+[21:47] confounds has left the channel
+[21:48] kriskowal has joined the channel
+[21:48] jed has joined the channel
+[21:49] sztanpet has joined the channel
+[21:54] pedrobelo has joined the channel
+[21:55] hassox has joined the channel
+[21:56] mikeal: kriskowal: i'm working on Packages 1.1
+[21:56] kriskowal: ah, awesome
+[21:56] mikeal: i'm just going to put a stub in for the package version range definitions 
+[21:57] mikeal: it's pretty contentious :)
+[21:57] kriskowal: yeh
+[21:57] kriskowal: i think you did a good job managing the scope of your modules recommendations
+[21:57] mikeal: thanks
+[21:58] mikeal: i just wanted to get it to a place where I could write a compliant implementation but make sure that all existing 1.1 implementations were already in compliance
+[21:58] kriskowal: yeah. we don't even have 1.1 compliance tests yet, alas
+[21:59] kriskowal: not that i imagine someone other than me is going to get around to it
+[21:59] mikeal: at this rate, might as well wait for 1.2 :)
+[21:59] mikeal: people already have feature requests
+[22:01] okito has joined the channel
+[22:04] gwoo_ has joined the channel
+[22:09] al3x___ has joined the channel
+[22:16] Gruni has joined the channel
+[22:17] kjeldahl_: Currently mixing server-side haml rendering (through express) with client side "John Resig" style templates for local processing, pulling and processing data on the client using "websql" local storage with Syncopate from github. Anybody know if Sproutcore supports websql client side yet, or soon, as that may be a more suitable model for what I'm creating?
+[22:22] mattly has joined the channel
+[22:23] JimBastard: kjeldahl_:  i think creationix contributed to sprout, he would probaly know
+[22:23] gf3 has joined the channel
+[22:24] kjeldahl_: JimBastard: thanks. I'll ask him when he gets on.
+[22:25] tisba has joined the channel
+[22:32] kkaefer has left the channel
+[22:33] pdelgallego has joined the channel
+[22:37] JimBastard: hey voodootikigod_  did you ever release your hack.js talk?
+[22:44] unomi has joined the channel
+[22:44] JimBastard: does anyone know any services that combine history attacks + psuedo-class checking so you can embed a widget in your site and see what sites your users have most recently visited along with a custom list you add that will check psuedo-class visited etc
+[22:44] JimBastard: i think that might be a semi neat service
+[22:52] technoweenie has joined the channel
+[22:53] isaacs has joined the channel
+[22:55] sztanphet has joined the channel
+[22:55] javajunky has joined the channel
+[23:04] stepheneb has joined the channel
+[23:04] Tim_Smart: Grr isaacs, why'd ya have to leave >.>
+[23:04] Tim_Smart: when you did...
+[23:05] lifo has joined the channel
+[23:15] JimBastard: lol
+[23:15] JimBastard: JUST WHEN YOU NEEDED HIM THE MOST
+[23:15] JimBastard: nooo
+[23:27] gf3 has joined the channel
+[23:29] steadicat has joined the channel
+[23:31] stepheneb has joined the channel
+[23:31] okito has joined the channel
+[23:32] atmos has joined the channel
+[23:33] isaacs has joined the channel
+[23:34] CodeOfficer has joined the channel
+[23:35] rnewson has joined the channel
+[23:35] rnewson has joined the channel
+[23:36] jed has joined the channel
+[23:40] kriskowal: mikeal, might i encourage you to join us in #commonjs?
+[23:42] mikeal: done
+[23:50] kixxauth has joined the channel
+[23:57] cloudhead has joined the channel

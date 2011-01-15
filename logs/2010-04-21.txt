@@ -1,0 +1,1172 @@
+[00:06] MattJ: Does anyone know of a profiler I could use with Node?
+[00:07] RayMorgan: MattJ: you can run your program with --prof
+[00:07] RayMorgan: then it will dump a file called v8.log that node/deps/tools/*tick-processor can read and analyze
+[00:07] MattJ: Ha, thanks... wonder how that escaped me
+[00:07] MattJ: Excellent
+[00:07] _ry: MattJ: http://code.google.com/p/v8/wiki/V8Profiler
+[00:08] rtomayko_ has joined the channel
+[00:16] creationix has joined the channel
+[00:25] saikat has joined the channel
+[00:29] saikat: is Socket.io the best implementation currently of WebSockets for NodeJS?
+[00:34] saikat: also, is socket.io using web-socket-js under the hood?
+[00:34] fictorial: did you pop the hood? :)
+[00:35] saikat: heh a little
+[00:35] saikat: i was looking for a web-socket-js file
+[00:35] saikat: but didn't see one immediately
+[00:36] saikat: there is just so much out there in terms of real-time frameworks, hard to investigate all of them without spending a day on each
+[00:37] saikat: ah i see it under vendor
+[00:40] technoweenie: socketio requires a patched node
+[00:41] _ry: which shouldn't be necessary these days
+[00:41] saikat: ah yeah i see the patch dir
+[00:41] saikat: will try it without patching
+[00:42] _ry: well it probably needs patching
+[00:42] _ry: but just cause they're not up to date :)
+[00:42] saikat: hm - before i dive in fully
+[00:42] saikat: i do see about three or so other websocket implementations
+[00:42] saikat: on the module page (and not socket.io actually)
+[00:43] saikat: i know node.websocket.js is supposedly just an older version of socket.io
+[00:43] saikat: but are the others heavily used (node.ws.js/nodejs-http-websocket)?
+[00:44] _ry: i'm not sure
+[00:44] saikat: i can add socket.io unless there is some specific reason for not having it on there
+[00:46] technoweenie: i'm using node.ws.js right now.  if socket.io doesnt need to patch node anymore i may start playing with that
+[00:47] Aria has joined the channel
+[00:48] technoweenie: _ry: this is the patch that the socket.io server requires: http://github.com/RosePad/Socket.IO-node/blob/master/patch/0.1.33.patch
+[00:48] technoweenie: its so socket.io can hijack a web socket request and your server only has to listen on one port
+[00:48] _ry: technoweenie: i added a hijack thing recently
+[00:49] _ry: but it's different
+[00:49] maushu: Where can I find the websocket protocol?
+[00:49] technoweenie: ahh well if socket.io wont need the patch, thats great :)
+[00:49] technoweenie: maushu: http://dev.w3.org/html5/websockets/
+[00:50] technoweenie: http://en.wikipedia.org/wiki/Web_Sockets
+[00:50] _ry: web sockets are so simple
+[00:50] _ry: i feel like supporting them out of the box
+[00:51] technoweenie: that would rock
+[00:52] saikat: agreed
+[00:53] maushu: I'm guessing they use port 80. How would I hijack the connection from the http server? It should be possible with 0.1.91, right?
+[00:54] _ry: maushu: if (req.upgrade) { }
+[00:55] _ry: it probably needs some more hacking
+[00:55] maushu: Huh, from there on the connection isn't a normal tcp socket connection?
+[00:55] maushu: Oh wait, silly me.
+[00:55] _ry: http://github.com/ry/node/commit/760bba55186eba039ca00e532f7813d2aea450a2
+[00:55] maushu: The connection is not stateful.
+[00:56] maushu: Nice.
+[00:56] _ry: i think it'd be nice to do something like
+[00:57] _ry: server.addListener('websocket', function (socket) { } )
+[00:57] _ry: where server = http.createServer()
+[00:57] silentrob has joined the channel
+[00:57] _ry: or maybe something more low-level
+[00:58] technoweenie has joined the channel
+[00:59] _ry: server.addListener('upgrade', function (headers, firstChunk, connection) {})
+[00:59] _ry: the later is probably better
+[01:00] _ry: server.addListener('upgrade', function (request, firstChunk, connection) {})
+[01:00] _ry: if you understand what i mean...
+[01:00] maushu: Yeah.
+[01:00] _ry: without a listener for that, upgrade requests will be terminated
+[01:01] _ry: so normally you do:
+[01:02] _ry: server.addListener('request', function (req, res) { })
+[01:02] _ry: that event wouldn't fire if someone sent an upgrade request
+[01:02] _ry: you'd get the 'upgrade' event instead
+[01:03] _ry: if there were no 'upgrade' listeners, node would do socket.destroy()
+[01:03] _ry: that'd make it really easy to build a web socket layer
+[01:03] maushu: I agree.
+[01:04] _ry: and i think once you have that interface - the web socket layer is like 10 lines of code
+[01:04] _ry: just parse the frames
+[01:04] _ry: turn them into utf8
+[01:05] maushu: Hmmm.
+[01:05] _ry: ACTION is trying to convince someone listening to work on this ;)
+[01:06] maushu: Yeah, I guessed.
+[01:06] _ry: if the websocket layer truly was only 10 lines of code, i wouldn't have a problem with including it
+[01:07] maushu: We can't turn them into utf8.
+[01:07] maushu: What about binary?
+[01:07] _ry: i thought websocket packets were utf8
+[01:08] maushu: "Both text and binary frames can be sent full-duplex, [...]"
+[01:08] silentrob: ACTION is not listening :)
+[01:10] maushu: Is the upgrade listener such a good idea? What about the URI?
+[01:10] quirkey has joined the channel
+[01:10] _ry: maushu: okay 
+[01:10] _ry: maushu: they get the requet object
+[01:11] _ry: server.addListener('upgrade', function (req, firstChunk, connection) {})
+[01:11] maushu: Ah, yeah, I noticed now.
+[01:11] _ry: maushu: so maybe a web-socket is something like
+[01:11] maushu: connection would be what? The raw tcp socket used by the http server?
+[01:11] _ry: websocket.addListener('text', function (utf8Data) {})
+[01:11] _ry: websocket.addListener('data', function (data) {})
+[01:12] _ry: yes
+[01:12] maushu: Splitting both text and data into different events? I don't know if I like that. Or did the browsers implemented it?
+[01:13] _ry: well - whatever - the first step is to get the upgrade layer working okay :)
+[01:13] lifo has joined the channel
+[01:13] maushu: I'm guessing data would be a buffer?
+[01:13] _ry: yeah
+[01:14] maushu: buffer.toString would solve the binary -> utf8 problem.
+[01:14] _ry: right
+[01:15] maushu: ACTION is looking at the http server code.
+[01:16] maushu: FOR NO REASON AT ALL.
+[01:16] _ry: maushu: it's for a reason :)
+[01:16] _ry: maushu: you're going to implement the 'upgrade' event :)
+[01:16] maushu: Your mind controlling powers don't work with me!
+[01:16] _ry: maushu: and write tests. it will be very satisfying :)
+[01:17] maushu: ;_;
+[01:17] _ry: and thne everone will use websockets and love you
+[01:18] maushu: .______________.
+[01:18] maushu: I hate you. You just used my weak point.
+[01:18] softdrink has joined the channel
+[01:18] _ry: hacking web servers is fun too
+[01:21] rauchg: _ry: is the Upgrade header exclusive for websocket ?
+[01:21] Aria: No
+[01:22] rauchg: but i mean in http.Server implementation
+[01:22] rauchg: what happens besides the event being emitted ?
+[01:24] rauchg: i guess i should look at the new http.js :P
+[01:24] inimino: maushu: the Web Socket API doesn't support binary data yet, only UTF-8, so you don't have to support it
+[01:37] maushu: I need to sleep first. >_>
+[01:37] maushu: laters
+[01:38] isaacs: _ry: rebased and forced-updated for you, sir: http://github.com/isaacs/node/commits/module-refactor-story
+[01:39] isaacs: i moved the path/events refactoring around like you'd requested, while i was at it.
+[01:40] rtomayko_ has joined the channel
+[01:43] ditesh|cassini has joined the channel
+[02:01] tav has joined the channel
+[02:02] markwubben has joined the channel
+[02:05] polotek has joined the channel
+[02:10] RayMorgan has joined the channel
+[02:20] sh1mmer has joined the channel
+[02:20] mattly has joined the channel
+[02:21] hobson has joined the channel
+[02:21] hobson has left the channel
+[02:21] noonat has joined the channel
+[02:22] hobson has joined the channel
+[02:23] sh1m has joined the channel
+[02:23] micheil has joined the channel
+[02:28] arnaudsj has left the channel
+[02:30] hobson_ has joined the channel
+[02:33] admc has joined the channel
+[02:46] bpot has joined the channel
+[02:47] micheil_mbp has joined the channel
+[02:48] cadorn has joined the channel
+[02:53] softdrink1 has joined the channel
+[02:56] admc has joined the channel
+[03:00] micheil has joined the channel
+[03:02] hobson has joined the channel
+[03:07] silentrob has joined the channel
+[03:21] malkomalko has joined the channel
+[03:30] PyroPete1 has joined the channel
+[03:31] saikat has joined the channel
+[03:34] cloudhead has joined the channel
+[03:35] Tim_Smart has joined the channel
+[03:39] justinlilly has joined the channel
+[03:44] brainproxy has joined the channel
+[03:47] isaacs has joined the channel
+[03:50] softdrink has joined the channel
+[03:52] mnutt has joined the channel
+[03:52] admc has joined the channel
+[03:57] codehero has left the channel
+[03:58] sh1mmer has joined the channel
+[04:19] jed_ has left the channel
+[04:24] ncb000gt has joined the channel
+[04:32] ncb000gt: maybe i'm not reading something correctly, but are there emitters for listeners on the ServerResponse object?
+[04:39] steadicat has joined the channel
+[05:01] fizx has joined the channel
+[05:02] fizx has joined the channel
+[05:03] ncb000gt: _ry: is there a particular reason there aren't emitters for things like response.writeHead, response.write, and response.end?
+[05:07] micheil: ncb000gt: there sort of are, but they're rather hidden
+[05:08] ncb000gt: micheil: oh? whereat?
+[05:08] micheil: have a look in lib/http.js
+[05:08] micheil: there's a few event emitters within the first 100 liens
+[05:08] micheil: *lines
+[05:08] ncb000gt: I did, but it didn't appear to emit anything.
+[05:08] micheil: I'm not sure if they're public access though
+[05:08] micheil: brb
+[05:08] ncb000gt: hmm
+[05:09] mattly has joined the channel
+[05:12] ncb000gt: yea, the parser bits/on<call> methods are based on the request
+[05:13] ncb000gt: also, i don't think they are public as you mentioned.
+[05:14] micheil: we have http.Server => [request]
+[05:15] ncb000gt: tho response does have "flushed" which is emit properly it seems
+[05:16] ncb000gt: rather "flush"
+[05:16] micheil: then you can also do: http.Server => ["connection", "listening"]
+[05:18] hassox has joined the channel
+[05:18] micheil: you also have http.Server => "close", "error"
+[05:18] micheil: which those last two are inherited from net.Server
+[05:18] ncb000gt: yea, i was looking for the response
+[05:19] ncb000gt: but, connection might work
+[05:19] herbySk has joined the channel
+[05:20] micheil: then on the response, drain, flush
+[05:20] micheil: secure
+[05:21] micheil: there's also maybe data and end on the response
+[05:22] ncb000gt: i wasn't able to use end till i added this.emit('end', ...) to the OutgoingMessage.end function
+[05:22] micheil: okay then :)
+[05:22] ncb000gt: heh
+[05:22] micheil: although, really, you should try to know when your message your sending ends
+[05:23] micheil: maybe use buffers?
+[05:23] ncb000gt: i just wasn't sure if i missed something that would be better.
+[05:23] ncb000gt: yea, the point actually had nothing to do with when the request/response ended. it was more for logging purposes
+[05:23] ncb000gt: access type logging
+[05:23] ncb000gt: which is why i think connection would be better
+[05:24] micheil: _ry: have there been any commits to the docs?
+[05:24] micheil: they're currently broken
+[05:24] ncb000gt: lol, that would explain some stuff too
+[05:24] micheil: yes
+[05:25] polotek has left the channel
+[05:29] micheil: wtf. someone killed jquery.. I mean, I know I dislike it at times, but seriously.. too far.
+[05:31] rtomayko has joined the channel
+[05:31] micheil: _ry: what's up with this commit? http://github.com/ry/node/commit/1a9c9b0c55544d024796baf27e519880f365e9e0
+[05:35] dgathright has joined the channel
+[05:36] noonat: the docs on master seem to be working for me
+[05:38] micheil: on the website they're borked
+[05:38] micheil: and on master they're borked as well
+[05:39] micheil: someone's deleted the code to jquery from the jquery.js file.
+[05:39] micheil: all that's been left in there is the sizzle selector engine
+[05:40] micheil: rather, this commit: http://github.com/ry/node/commits/master/doc/jquery.js
+[05:44] cmlenz has joined the channel
+[05:44] noonat: that's much more than just sizzle
+[05:45] micheil: ?
+[05:46] micheil: yeah, in that commit, which is odd.
+[05:46] ncb000gt has left the channel
+[05:46] micheil: I'm not sure how this happened, as the documentation was fine last week
+[05:47] iwasbiggs has joined the channel
+[06:06] rtomayko has joined the channel
+[06:07] brapse has joined the channel
+[06:17] derbumi has joined the channel
+[06:24] bpot has joined the channel
+[06:26] WALoeIII has joined the channel
+[06:28] kenneth_reitz has joined the channel
+[06:32] silentrob has joined the channel
+[06:42] derbumi has joined the channel
+[06:46] xla has joined the channel
+[07:09] felixge has joined the channel
+[07:10] felixge: morning
+[07:10] herbySk: morning
+[07:14] micheil: felixge: any ideas what happened to the docs?
+[07:14] micheil: (see the ML)
+[07:15] herbySk: _ry: ayt?
+[07:16] felixge: micheil: they are sitll there, no?
+[07:16] micheil: not really
+[07:16] micheil: jquery's been borked in them
+[07:16] felixge: oh
+[07:16] felixge: that's weird
+[07:17] felixge: micheil: the release or HEAD?
+[07:17] micheil: both
+[07:17] micheil: and it's on your commit
+[07:17] felixge: I fucked it?
+[07:17] micheil: http://github.com/ry/node/commit/1a9c9b0c55544d024796baf27e519880f365e9e0
+[07:18] micheil: as far as I can tell, that's the last commit made to that jquery.js file
+[07:19] felixge: micheil: that's me adding the file
+[07:19] felixge: it didn't exist before
+[07:19] micheil: :/
+[07:19] felixge: so either it could have never worked?
+[07:19] felixge: or this makes no sense
+[07:19] micheil: that's what I'm thinking
+[07:19] micheil: I asked rtomayko about it in #github as to whether a commit could have gone missing
+[07:19] felixge: micheil: the online version of the docs works fine for me so?
+[07:20] micheil: but the only conclusion is  that it's been broken in a recent make doc / deploy
+[07:20] micheil: felixge: the toc?
+[07:20] felixge: micheil: yeah, it's there
+[07:20] micheil: wtf?
+[07:20] isaacs: micheil: works for me too
+[07:20] isaacs: you're talking about http://nodejs.org/api.html, right?
+[07:21] micheil: yeah
+[07:21] felixge: micheil: I guess you need to find out how is eating your packages
+[07:21] felixge: :D
+[07:21] felixge: :)
+[07:21] micheil: this is way weird.
+[07:21] micheil: http://drp.ly/RaK5z
+[07:22] isaacs: yeah, micheil, works on http://nodejs.org/api.html and when i do make doc and open doc/api.html
+[07:23] isaacs: micheil: can you get to http://nodejs.org/jquery.js ?
+[07:23] isaacs: micheil: try another browser?
+[07:23] micheil: yeah, I load up jquery fine
+[07:24] isaacs: then why is it saying that $ is not a variable?
+[07:24] felixge: micheil: try 'make clean' ?
+[07:25] micheil: that's on the online version
+[07:25] isaacs: ...
+[07:25] felixge: oh
+[07:25] felixge: micheil: safari or chrome?
+[07:25] isaacs: isn't http://nodejs.org/jquery.js the online version?
+[07:25] micheil: safari
+[07:25] micheil: just checking on a fresh copy
+[07:26] kenneth_reitz: So what's the difference between SeedJS and Kiwi?
+[07:28] micheil: isaacs / felixge okay.. odd, it works fine for me to via make doc
+[07:28] micheil: but the website is broken
+[07:28] isaacs: clear your cache?
+[07:28] isaacs: dunno.  works for me.
+[07:28] micheil: O.o
+[07:28] micheil: I don't want to know wtf my cache was doing
+[07:29] felixge: _ry: if you're still arround, I just did another compile on a freshly cloned repo - no luck
+[07:29] felixge: _ry: could it be related to me hacking out openssl from my wscript?
+[07:30] micheil: wtf.. like 50 little kids just ran up my street..
+[07:33] isaacs: ther'es a strange moon over micheil's house tonight..
+[07:34] micheil: there is..
+[07:35] felixge: cool, berlin airport is open again
+[07:39] javajunky has joined the channel
+[07:40] derbumi has joined the channel
+[07:42] ditesh|cassini has joined the channel
+[07:46] cmlenz has joined the channel
+[07:59] skeleton_jelly: i am a skeleton jelly.
+[08:00] javajunky: well done
+[08:01] N` has joined the channel
+[08:03] felixge has joined the channel
+[08:03] felixge has joined the channel
+[08:04] derbumi has joined the channel
+[08:05] teemow has joined the channel
+[08:23] TomY has joined the channel
+[08:25] xla has joined the channel
+[08:27] mape: Error: Bad arguments. at Client.setSecure (net:402:23)
+[08:27] mape: httpRequest.setSecure('X509_PEM');
+[08:27] mape: Shouldn't that be working?
+[08:27] derbumi has joined the channel
+[08:28] dgathright has joined the channel
+[08:40] ewdafa has joined the channel
+[08:46] tbassetto has joined the channel
+[08:48] hassox has joined the channel
+[08:51] hellp has joined the channel
+[08:58] javajunky has joined the channel
+[09:04] psynaptic has joined the channel
+[09:26] dgathright has joined the channel
+[09:30] derbumi has joined the channel
+[09:30] ithinkihaveacat has joined the channel
+[09:38] pdelgallego has joined the channel
+[09:46] nsm has joined the channel
+[09:56] herbySk has joined the channel
+[10:30] ewdafa has joined the channel
+[10:31] malkomalko has joined the channel
+[10:42] mythz has joined the channel
+[11:00] ssteinerX has joined the channel
+[11:05] kjeldahl_ has joined the channel
+[11:11] ditesh|cassini has joined the channel
+[11:33] derbumi has joined the channel
+[11:41] nsm has joined the channel
+[11:54] derbumi has joined the channel
+[12:13] maritz has joined the channel
+[12:31] rolfb has joined the channel
+[12:38] kriszyp_afk has joined the channel
+[12:41] mape: ACTION cries in space
+[12:41] mape: The "Bad arguments" error must be the worst ever, really can't find any information on why the arguments are "bad".
+[12:44] tbassetto has joined the channel
+[12:44] derbumi has joined the channel
+[13:14] jherdman has joined the channel
+[13:28] psynaptic has joined the channel
+[13:28] psynaptic has joined the channel
+[13:34] voodootikigod_ has joined the channel
+[13:39] quirkey has joined the channel
+[13:43] jed_ has joined the channel
+[13:47] creationix has joined the channel
+[13:51] steadicat has joined the channel
+[13:54] gf3 has joined the channel
+[13:58] voodootikigod_ has joined the channel
+[14:02] embwbam has joined the channel
+[14:02] embwbam: Why does this leak memory? How can I do it without leaking? http://gist.github.com/373840
+[14:03] demolithion has joined the channel
+[14:05] TheEnd2012 has joined the channel
+[14:06] derbumi has joined the channel
+[14:18] Yuffster has joined the channel
+[14:21] jed_ has joined the channel
+[14:22] softdrink has joined the channel
+[14:26] botanicus has joined the channel
+[14:28] botanicus: _ry: hi, it seems there is a bug in unicode output in 0.1.90. Please take a look at http://github.com/botanicus/minitest.js, there is a screenshot, how the output looks like on 0.1.33. However on 0.1.90, it prints the first two lines and that's it. It runs even after, it doesn't segfault or something, but it doesn't produce any output. It's clearly related to the unicode characters in there, because it works fine when I
+[14:28] botanicus:  remove them.
+[14:28] botanicus: _ry: I'll be happy to help with debugging, if you let me know how
+[14:30] botanicus: _ry: Also, you can try it yourself, just clone the repo and uncomment these unicode lines in minitest.js on lines 84, 90, 95
+[14:30] alex-desktop has joined the channel
+[14:34] derbumi has joined the channel
+[14:42] embwbam has joined the channel
+[14:44] dnolen has joined the channel
+[14:46] inimino: botanicus: can you make a reduced test case?
+[14:46] inimino: botanicus: I wasn't able to reproduce with just sys.puts, so there seems to be something else going on
+[14:46] embwbam has joined the channel
+[14:47] botanicus: inimino: I'll try. Strange thing is that it works in repl
+[14:49] botanicus: inimino: OK that's strange, when I do just sys.puts('\u001b[1;32m  \u2714 OK: \u001b[0m foo') several times then it just works
+[14:50] botanicus: So there might be another incompatible change
+[14:50] botanicus: I'm really not very sure how can I identify the problem
+[14:51] adamholt has joined the channel
+[14:52] derbumi has joined the channel
+[14:53] embwbam has left the channel
+[14:55] gf3 has joined the channel
+[14:56] inimino: botanicus: hm, just remove stuff until it works, then put back the last thing that didn't work... or maybe someone else will have an idea by just looking at it
+[15:08] admc has joined the channel
+[15:14] Aria has joined the channel
+[15:16] binary42 has joined the channel
+[15:17] binary42 has joined the channel
+[15:19] jed___ has joined the channel
+[15:20] nefD has joined the channel
+[15:25] silentrob has joined the channel
+[15:30] creationix: so, if --debug doesn't have any effect on the "node" binary, then why isn't it enabled all the time?
+[15:31] creationix: surely the node_g binary doesn't take much HD space
+[15:31] creationix: _ry: ^
+[15:32] sudoer has joined the channel
+[15:34] jed___: idea: would it make sense for the Buffer constructor to take a string? seems like that would save a lot of work.
+[15:37] creationix: jed___: good idea, you'd have to specify then encoding as well
+[15:37] creationix: but I think _ry wants to keep Buffer pretty low level
+[15:37] creationix: I added a string to buffer example to the api.markdown file
+[15:38] jed___: creationix: ah, cool.
+[15:38] jed___: lemme check that out.
+[15:38] creationix: http://github.com/ry/node/blob/master/doc/api.markdown
+[15:38] jed___: ha, thanks.
+[15:39] ithinkihaveacat has joined the channel
+[15:39] creationix: heh, thanks to Github's markdown renderer, that works as an up-to-date api viewer
+[15:39] mape: creationix: do you have any experience with node and https?
+[15:39] creationix: no, sorry
+[15:39] creationix: I just use nginx for https when I need it
+[15:40] mape: hmm k, I need it client rather then server but yeah
+[15:40] creationix: last I heard, openssl integration was done and working
+[15:40] jed___: hmmm. buffer also has a byteLength function? and an undocumented utf8Write method?
+[15:40] creationix: jed___: I also added docs for those ;)
+[15:40] jed___: creationix: aw, nice.
+[15:40] creationix: hmm, but it appears that part of my patch didn't make it
+[15:41] mape: creationix:  yeah, all im getting is an exception throwing "bad arguments" which doesn't say much
+[15:41] creationix: mape: I'm not sure the ssl docs are up to date, that error is really annoying
+[15:42] mape: for sure
+[15:42] jed___: creationix: i'm a sucker for the terse, so adding a string constructor doesn't seem like too big a deal, since i'd imagine that's the #1 use case, but would like to hear what _ry thinks.
+[15:43] jed___: those before/after graphs of buffer response times _ry presented at jsconf are too awesome to ignore.
+[15:43] bpot has joined the channel
+[15:43] creationix: ACTION wonders why my docs for utf8Slice, utf8Write, asciiSlice, etc... weren't added
+[15:43] technoweenie: how do you know what size of a buffer to use
+[15:44] technoweenie: or is it just temporary while you shift stuff to the response socket
+[15:44] creationix: jed___: yeah, I had discovered it while working on howtonode's new engine
+[15:44] creationix: technoweenie: it depends on what you're trying to move around
+[15:44] jed___: technoweenie: i think of it as a cached response.
+[15:45] jed___: technoweenie: keeps node from having to shuttle strings everywhere. it can just read directly from memory.
+[15:45] creationix: all my use cases for buffers so far, I know the size of the data upfront
+[15:45] jherdman has joined the channel
+[15:45] creationix: so I just size it to fit
+[15:46] jed___: technoweenie: my first use will be for templates. basically, use buffers to write the static parts, and strings to write the dynamic parts.
+[15:46] creationix: but with a stream of some sort you could use a fixed buffer size larger than the biggest chunk
+[15:47] creationix: most the node api's give you buffers already so that's not usually a problem
+[15:47] technoweenie: h
+[15:47] technoweenie: ah
+[15:47] creationix: jed___: do you think you'll get much of a performance boost if you concat them to strings in the end?
+[15:48] jed___: creationix: i don't really know, i guess we'll have to find out together.
+[15:49] creationix: I imagine it would actually be slower because of the implicit .toString call in the concat
+[15:49] jed___: creationix: my knowledge of buffers is limited to what i learned from _ry in a noisy bar.
+[15:49] jed___: creationix: that sounds right to me.
+[15:49] creationix: I use them to cache entire http response bodies
+[15:49] creationix: they work really great for that
+[15:50] creationix: just response.writeHead(...) and then response.end(buffer) and you're done
+[15:50] jed___: creationix: .end takes an argument now? is it the same thing as .write?
+[15:51] creationix: yeah, if you give it data it will send the content and the EOF in the same chunk
+[15:51] creationix: saves a little on overhead
+[15:51] creationix: that part is documented
+[15:51] steadicat has joined the channel
+[15:51] mape: creationix: Any idea who to talk to about the http client https?
+[15:51] jed___: creationix: ah, good to know.
+[15:52] creationix: mape: not sure, _ry should know for sure though
+[15:53] mape: creationix: ok :)
+[15:55] jaw6 has joined the channel
+[15:58] creationix: has anyone used blackdog66's hxNode?
+[15:59] sh1mmer has joined the channel
+[16:05] creationix: a static language wrapping node's api is an interesting way to document the language http://github.com/blackdog66/hxNode/blob/master/js/Node.hx
+[16:06] dandean has joined the channel
+[16:06] dandean has left the channel
+[16:07] dandean has joined the channel
+[16:08] RayMorgan has joined the channel
+[16:15] silentrob has joined the channel
+[16:18] mjr_ has joined the channel
+[16:19] fizx has joined the channel
+[16:21] sh1mmer has joined the channel
+[16:24] bpot has joined the channel
+[16:25] nsm has joined the channel
+[16:25] felixge has joined the channel
+[16:25] felixge has joined the channel
+[16:34] dgathright has joined the channel
+[16:35] joshbuddy has joined the channel
+[16:37] jed___: hey felixge, nice forks.
+[16:40] hellp has joined the channel
+[16:40] cmlenz has joined the channel
+[16:42] JAAulde has joined the channel
+[16:43] sveisvei has joined the channel
+[16:49] inimino: creationix: ooh, a usable type notation for JavaScript, nice
+[16:49] inimino: creationix: I was looking for one of those
+[16:49] creationix: I'm still trying to grok the binding he did
+[16:50] creationix: inimino: have you ever used haxe?
+[16:50] creationix: It looks like a pretty nasty impedance mismatch between haxe and node, but the idea of a strict type checker that compiles to js in nice
+[16:52] inimino: creationix: I've never used haxe, but yes, very nice idea...
+[16:53] inimino: I've been thinking about doing some kinds of weak type inference for JavaScript
+[16:53] inimino: AS3 and ES4 also had some sort of type notation but I'm not sure how powerful it was
+[16:54] creationix: inimino: I think I asked you before, but you haven't done ocaml before have you?
+[16:54] creationix: haskell if your background I seem to remember
+[16:54] towski has joined the channel
+[16:54] creationix: haxe's type system is based very much in ocaml, in fact the core compiler is written in ocaml
+[16:55] inimino: yeah, mostly Haskell
+[16:55] CrabDude has joined the channel
+[16:55] inimino: yeah, it looks like ocaml...
+[16:55] inimino: you do get things like this though: function nextTick(fn:Void->Void):Void;
+[16:56] inimino: which is why types aren't always quite as useful in impure languages
+[16:56] inimino: but it's still pretty useful
+[16:56] inimino: would be really nice to have something like this in an IDE
+[16:56] creationix: at least it's got pretty good type inference, beats java or c#'s type system
+[16:57] fictorial: hey! when was byteLength added to Buffer? I didn't notice it until now.
+[16:57] inimino: well, yeah
+[16:57] fictorial: I'm still using process._byteLength which I don't like
+[16:57] inimino: creationix: faint praise ;-)
+[16:57] creationix: fictorial: it's been there, I just added it to the docs
+[16:57] fictorial: great, I'll update. yes, I'm reading your docs. thanks!
+[16:58] creationix: for some reason _ry didn't take my patch to document the rest of Buffer.prototype, I guess he want's the rest undocumented for now
+[16:59] creationix: stuff like utf8Slice and utf8Write
+[16:59] creationix: (of course I'm using utf8Write in the example)
+[16:59] JimBastard has joined the channel
+[16:59] creationix: should update that if they are meant to be undocumented
+[17:02] jed has joined the channel
+[17:05] qFox has joined the channel
+[17:05] JimBastard: i totally got locked inside apartment jail this morning. i had to climb across my roof to the neighbors and climb down the fire escape
+[17:06] derbumi has joined the channel
+[17:09] isaacs has joined the channel
+[17:10] inimino: JimNinja
+[17:10] WALoeIII has joined the channel
+[17:11] Aria has joined the channel
+[17:12] JimBastard: i really hate how my apartment has a deadbolt that is a lock of both sides
+[17:12] JimBastard: if i ever stop showing up in IRC its because im in real jail, or got stuck inside a fire at apartment jail and am dead
+[17:13] pjb3 has joined the channel
+[17:13] isaacs: JimBastard: I had a lock like that in one apt.  I handled it by leaving a key in the inside lock.
+[17:13] JimBastard: that would work if i had not lost the extra two sets already
+[17:14] qFox: yer not supposed to.
+[17:15] isaacs: JimBastard: keys are cheap.  visit your local hardware store.
+[17:16] dgathright has joined the channel
+[17:16] rictic has joined the channel
+[17:17] keeto has joined the channel
+[17:17] sh1mmer has joined the channel
+[17:17] fictorial: "To prevent accidental global variable leakage, Script.runInNewContext is quite useful, but to safely run untrusted code, many more steps must be taken." I have several concerns myself but I'd love to hear what other people have concerns with. 
+[17:18] JimBastard: isaacs: im on it. today is the day lol
+[17:18] qFox: anyone have experience with using dbslayer in combination with node?
+[17:18] JimBastard: its jut been hectic, lost my keys at jsconf then started a new job on monday so i've had no time
+[17:19] isaacs: fictorial: you also must make sure that the code doesn't run forever, use up all your memory, and be careful about what you expose to it.
+[17:19] qFox: like that script from @rauchg  
+[17:19] isaacs: fictorial: separate process, and very careful exposing of features would do it.
+[17:19] fictorial: running forever, indeed. run as child process and kill it if it takes too long ala gf3's sandbox I suppose
+[17:19] isaacs: fictorial: yep.
+[17:19] fictorial: "watchdogging" in general -
+[17:20] qFox: took me about 2 hours to set it up (linux noob, ran after a few bogus leads before gettin on the right track)
+[17:20] isaacs: fictorial: also, might be a good idea keep track of memory usage
+[17:20] fictorial: Yes, indeed.
+[17:20] qFox: but not sure about performance (http overhead vs direct connection...)
+[17:20] fictorial: about the "what you expose to it" -- using a new context and the sandbox should only expose exactly that.  Is there another source of leakage?
+[17:20] qFox: but maybe that's not fair
+[17:21] creationix: JimBastard: are you at the sammy job now?
+[17:25] isaacs: fictorial: i mean, be careful what you put in the sandbox
+[17:25] fictorial: ok just checking - that's what I figured.
+[17:25] fictorial: thanks isaacs
+[17:26] isaacs: fictorial: for instance, if you share the process object (or anything that links to it) then they can do anything node can do.
+[17:26] _ry: morning
+[17:27] isaacs: _ry: mornin
+[17:27] JimBastard: yeah creationix 
+[17:27] creationix: JimBastard: awesome
+[17:27] JimBastard: ZOMG ITS _ry 
+[17:27] JimBastard: I KNOW YOU FROM THE INTERNETWEBS
+[17:27] fictorial: isaacs: indeed :)
+[17:27] _ry: isaacs: i'll check out your querystring thing today
+[17:27] JimBastard: yeah creationix im helping finish this last project and the next one we are going fully front-end evented
+[17:28] _ry: i glanced at it the other day - looked good
+[17:28] isaacs: _ry: great.  it's my first "real" thing using Buffers, and it's a port of something I did a long time ago when they first showed up in net2.
+[17:28] sh1mmer has joined the channel
+[17:28] isaacs: _ry: so if there's any way to make the Buffer stuff more efficient or whatever, i'd love to hear it
+[17:28] binary42: JimBastard: If you ask nicely, he might pgp-sign one of the node commits. So much better than an autograph.
+[17:33] JimBastard: lol
+[17:33] isaacs: _ry: also, that patch fixes issue #60
+[17:33] JimBastard: so binary42 i think i might be putting up the Gordon guy for a week or so
+[17:33] JimBastard: since hes stuck due to volcano
+[17:36] herbySk: _ry: sorry, I have only now found your mail, sure, gonna do it
+[17:37] binary42: JimBastard: Cool. We should hang out in your apartment jail sometime.
+[17:37] JimBastard: lol javascript party
+[17:37] kjeldahl has joined the channel
+[17:37] JimBastard: i gotta get tmpvar in this week to help setup charlie with the node and waf
+[17:38] JimBastard: charlie is about to dive hardcore into writing some C code for this thing
+[17:38] binary42: Yeah.
+[17:38] JimBastard: we gotta override the http module a bit
+[17:38] binary42: Ah. I've been thinking of playing with Go a little in terms of getting it working inside Node.
+[17:38] binary42: Would be a nice ext. lang.
+[17:39] binary42: (though I hate GOOG C++ naming standards... braindead shift-key users)
+[17:40] brainproxy has joined the channel
+[17:40] herbySk: ehich is the right #ifdef for linux? __linux?
+[17:41] fictorial: binary42: how would Go work inside of Node?
+[17:41] saikat has joined the channel
+[17:41] binary42: fictorial: Not sure... kind of why I want to try it.
+[17:41] binary42: Mostly to learn more about it.
+[17:41] fictorial: I see
+[17:42] binary42: I want to see more on the properties of its GC as well as the coro. implementation.
+[17:43] binary42: Also, I have some good thoughts I'm trying to put into words right now on how coroutines should work properly in evented systems (to avoid reentrancy problems that process.wait had).
+[17:43] binary42: Another chance to play with that as well.
+[17:45] creationix: binary42: sounds like fun
+[17:45] nefD has joined the channel
+[17:46] herbySk: _ry: done, sent through github
+[17:50] fictorial: Is it well known already the relative performance of using a UNIX socket for IPC vs. STDIO (pipe)?  I'm looking at the WebWorkers implementation on github for node (node-worker) vs. rolling my own with child_process.spawn.
+[17:51] ewdafa has joined the channel
+[17:52] CIA-77: node: 03Herbert Vojčík 07master * r4badb22 10/ src/node_net2.cc : Fix TCP_KEEPIDLE build failure in FreeBSD. - http://bit.ly/a3IP10
+[17:53] creationix: fictorial: I would think stdio is faster, but benchmark it to be sure
+[17:53] fictorial: that's my guess too - ok
+[17:53] _ry: fictorial: likely stdio is implemented with pipes :)
+[17:53] fictorial: well yes... 
+[17:54] _ry: i'd guess they have the same throughput
+[17:54] fictorial: so, pipes vs domain sockets then is the real question -- I imagine pipes to win slightly but I will try both I guess
+[17:54] _ry: i think you shouldn't worry about it too much
+[17:55] _ry: it's definitely not the bottleneck
+[17:55] fictorial: I'm not worried :)  Intellectually curious really
+[17:55] _ry: ok :)
+[17:55] creationix: _ry: was there a reason you didn't add my new docs for the rest of Buffer.prototype?
+[17:56] creationix: utf8Slice, utf8Write, etc...
+[18:00] _ry: creationix: those are supposed to be hidden in write()
+[18:02] kevwil has joined the channel
+[18:03] creationix: _ry:  alright, then we should update the example to use write then
+[18:04] creationix: though the slice  ones offer different functionality than the main slice
+[18:04] creationix: they return encoded strings, not a new buffer that shares memory
+[18:05] devinus has joined the channel
+[18:09] jtaby_ has joined the channel
+[18:09] gf3: anyone here use vim?
+[18:10] inimino: gf3: yes
+[18:10] gf3: curious which javascript.vim you use, if any?
+[18:10] inimino: hm, I don't think I use any
+[18:10] dnolen has joined the channel
+[18:11] gf3: there are a number floating around out there, but they all seem pretty sketchy
+[18:11] gf3: really I'd just like better indenting
+[18:11] inimino: just this: autocmd FileType {javascript,html} syntax sync fromstart | setlocal indentexpr= | setlocal nocindent
+[18:11] whoahbot has joined the channel
+[18:12] inimino: I don't like any auto-indenting for JavaScript, I'm too particular about indentation
+[18:13] gf3: same here, which is why I hoped there was a nice alternative to the default
+[18:14] gf3: thanks inimino 
+[18:14] whoahbot has joined the channel
+[18:14] whoahbot has left the channel
+[18:14] maushu has joined the channel
+[18:23] CodeOfficer has joined the channel
+[18:23] charlesjolley has joined the channel
+[18:23] CodeOfficer has joined the channel
+[18:24] CodeOfficer has joined the channel
+[18:27] brapse has joined the channel
+[18:31] maushu: I just can't seem to find a good a way to create classes.
+[18:31] creationix: maushu: what kind of classes?
+[18:32] mjr_: Probably not the kind you study for.
+[18:32] maushu: I have this form class that generates a form based on input, I want to inherit it to multiple forms so that I don't have to keep sending the same input.
+[18:33] brapse has joined the channel
+[18:34] maushu: I tried but "this" went crazy.
+[18:34] maushu: I'm currently reading http://www.crockford.com/javascript/inheritance.html
+[18:37] creationix: so you want multiple inheritance?
+[18:38] maushu: No.
+[18:39] maushu: Single inheritance is good enough.
+[18:39] creationix: oh, I see, multiple sub-classes
+[18:39] creationix: Object.create is your friend
+[18:39] mjr_: So what's the problem then?
+[18:40] creationix: "this" is probably not working the way you expect it do
+[18:40] creationix: it's quite different from how it works in classical languages
+[18:41] nsm has joined the channel
+[18:41] creationix: I can help, do you have a gist or something
+[18:41] maushu: Nah.
+[18:42] maushu: It's from work.
+[18:43] mjr_: creationix has a big write-up on his stie about "this" in javascript.  It's worth reading.
+[18:43] creationix: http://howtonode.org/what-is-this
+[18:44] creationix: basically, "this" is whatever was before the dot
+[18:44] creationix: that's an oversimplification, but it works for 99% of the cases
+[18:44] creationix: myobj.someFunc()  "this" will be myobj in the function
+[18:45] mjr_: I've just stopped using this in my code.  I capture a reference to the current instance when the object is created, and then use that.
+[18:45] creationix: but "var handler = obj.someFunc; handler()" "this" will be the global variable
+[18:45] herbySk: mjr_: You're trying to kill me?
+[18:45] creationix: yeah, I prefer closures and functional style too, but for what maushu  is wanting to do, inheritance works nicely
+[18:48] dgathright has joined the channel
+[18:48] jtaby_ has joined the channel
+[18:48] riottaba has joined the channel
+[18:55] noonat has joined the channel
+[18:58] maushu: creationix, didn't work like that. Somehow my this changed to something else. Not sure if it was global.
+[19:00] creationix: maushu: are you using event binders?
+[19:01] creationix: that will always change the this on you 
+[19:03] kixxauth has joined the channel
+[19:06] joshbuddy has joined the channel
+[19:06] joshbuddy has joined the channel
+[19:08] CIA-77: node: 03isaacs 07master * r7ff53f4 10/ (lib/events.js src/node.cc src/node.js): Refactor events module to lib/events.js - http://bit.ly/ajgNnv
+[19:08] CIA-77: node: 03isaacs 07master * re0061a5 10/ (src/node.cc src/node.js lib/path.js): refactor path module to lib/path.js - http://bit.ly/9epUBy
+[19:08] CIA-77: node: 03isaacs 07master * rcfd459a 10/ (src/node.cc src/node.js lib/module.js): Move the module loading framework into lib/module.js. Minimal changes otherwise. - http://bit.ly/96GT5f
+[19:10] rolfb has joined the channel
+[19:14] maushu: creationix, yes, jquery ones.
+[19:14] jtaby_ has joined the channel
+[19:14] creationix: jquery has a bind helper I seem to remember
+[19:16] creationix: instead of doing $('#mydiv').click(obj.somefunc), you can wrap it $(...).click(function () { obj.somefunc() })
+[19:16] creationix: but then you loose all arguments and return value
+[19:16] creationix: you could do "return obj.somefunc.apply(obj, arguments)"
+[19:17] mikeal has joined the channel
+[19:20] creationix: maushu, is any of this making sense? it's hard to explain over irc
+[19:21] tlrobinson has joined the channel
+[19:21] felixge has joined the channel
+[19:26] creationix: isaacs: so do we have the new module code yet, I saw _ry just accepted a patch from you?
+[19:26] isaacs: creationix: looks like he got the first half.
+[19:26] creationix: ok, so just refactor so far
+[19:26] isaacs: creationix: let's see what CIA-77 says next :)
+[19:26] creationix: :)
+[19:30] nefD has joined the channel
+[19:33] mrjjwright has joined the channel
+[19:36] teemow has joined the channel
+[19:38] isaacs: _ry: if i remove require.async, it makes sense to remove the require.async tests, no?
+[19:40] maushu: creationix, I hope so.
+[19:40] tisba has joined the channel
+[19:41] maushu: I'm having problems with websockets too. Somehow they don't want t o
+[19:41] maushu: to work.
+[19:42] markwubben has joined the channel
+[19:43] _ry: isaacs: what about the registerExtension?
+[19:44] isaacs: _ry: imo, it belongs in userspace.  i have a working registerExtension if you'd like to keep it.
+[19:44] isaacs: _ry: it'd be a pretty small commit on top of what's already there
+[19:45] _ry: isaacs: this is pretty big http://github.com/isaacs/node/commit/0bc21cd0fd00b3e0409fe7e51b516a2506e8a7e2
+[19:45] isaacs: _ry: yeah.  not much to be done about that.
+[19:45] _ry: can't this be done in smaller ones?
+[19:45] _ry: hm
+[19:46] isaacs: _ry: not in a way that actually passes all tests.  i mean, in reality, it was "delete that file and write a new one"
+[19:48] _ry: http://github.com/isaacs/node/blob/0bc21cd0fd00b3e0409fe7e51b516a2506e8a7e2/lib/module.js#L57
+[19:48] _ry: this is introducing behavior
+[19:49] _ry: you're missing semicolons 
+[19:50] isaacs: _ry: they're not missing.  they're unnecessary :)
+[19:51] isaacs: _ry: also, there's a lot of stuff in that commit that introduces/removes/changes behavior.
+[19:51] _ry: i'm also not down with this extreme comma style http://github.com/isaacs/node/blob/0bc21cd0fd00b3e0409fe7e51b516a2506e8a7e2/lib/module.js#L166
+[19:52] _ry: the function name and first paren should have no whitespace between them
+[19:52] isaacs: ok
+[19:54] fictorial: when is "hadError" true in the emitted "close" events?  I just killed redis with a client connected and hadError was false, surprisingly.
+[19:55] fizx has joined the channel
+[19:57] _ry: fictorial: i think listening on 'error' is better
+[19:57] fictorial: ok, let me re-read that section of the docs
+[19:57] kriszyp has joined the channel
+[19:58] _ry: i'm undecided how to deal with that part
+[20:03] fictorial: hmmm it's not firing an 'error' on a client connection when I kill redis 
+[20:03] fictorial: I do get an error if I try to connect when redis is down
+[20:03] fictorial: but, connected, then kill redis, just "close" is emitted
+[20:05] isaacs: _ry: would this address your concern about xtr33m commaz? http://gist.github.com/374321
+[20:07] sudoer has joined the channel
+[20:09] fictorial: _ry: this is strange. I get ECONNRESET when I haven't received a reply yet from Redis.  When I do, then kill Redis, I get just 'close' and no 'error' ... shouldn't I always get 'error' with ECONNRESET when the peer (redis) closes the connection?
+[20:11] Wandrewvious has joined the channel
+[20:12] fictorial: http://gist.github.com/374334 ... the first example shows that after I get a response (line 6) and then kill Redis (another terminal) I get 'close' with hadError=false (line 9). The second example shows that if I kill Redis before the first reply is received, I get ECONNRESET (line 18).
+[20:17] TheEnd2012_ has joined the channel
+[20:22] WALoeIII has joined the channel
+[20:26] mape: _ry: Do you have any idea how to solve the "bad arguments" exception when using setSecture on a http client? Trying to connect to a https
+[20:27] mape: *setSecure
+[20:28] _ry: fictorial: yeah you should
+[20:28] _ry: mape: mm no?
+[20:28] mape: I can't find any information regarding it online and well, I have no idea why they are bad arguments
+[20:29] mape: So no way of fixing it
+[20:29] bpot has joined the channel
+[20:30] _ry: mape: if you compile the debug build
+[20:30] _ry: ./configure --debug && make
+[20:30] _ry: ./node_g yourscript.js
+[20:30] _ry: see if that shows anything more
+[20:31] WALoeIII has joined the channel
+[20:32] qFox: k. so i wrote another tutorial. this time to get dbslayer to work under ubuntu. its not specifically node related, but it seems one of the only few ways to get mysql in node... http://qfox.nl/notes/101
+[20:32] hellp has joined the channel
+[20:32] qFox: where "in node" of course is relative. but... well you get the point :)
+[20:33] qFox: if setting up dbslayer is easier people who only target mysql might be tempted to try node sooner.
+[20:33] mape: qFox: node-mysql?
+[20:34] qFox: not as a module as such. 
+[20:34] qFox: dbslayer (not mine) acts as a sort of http proxy for mysql
+[20:34] onar has joined the channel
+[20:34] charlesjolley has joined the channel
+[20:35] qFox: you can talk to it using json to send queries and get the responses in json back
+[20:35] mape: yeah looked at it
+[20:35] mape: node-mysql was the easiest to setup though and worked nicely
+[20:35] qFox: oh, url?
+[20:35] onar has joined the channel
+[20:35] qFox: this doesnt take much either
+[20:36] qFox: oh yeah i saw node-mysql the other day
+[20:36] mape: qFox: http://github.com/masuidrive/node-mysql ?
+[20:36] qFox: there was a reason i didnt use that though
+[20:36] qFox: yeh
+[20:37] qFox: maybe it was the single connection bit. or perhaps it looked too unstable
+[20:37] felixge has joined the channel
+[20:37] felixge has joined the channel
+[20:38] charlesjolley_ has joined the channel
+[20:38] mape: _ry: Get the same error using debug build, 21 Apr 22:37:21 - Error: Bad arguments.
+[20:38] onar has joined the channel
+[20:39] mikeal has joined the channel
+[20:41] mape: running on v0.1.91-16-gc2a0672 (debug)
+[20:43] herbySk: can I run the whole test suite with node_g instead of node?
+[20:43] isaacs: herbySk: i think if you do ./configure --debug and then make test-all, it'll run with both the node_g and node
+[20:44] herbySk: isaacs: thanx, I'll try
+[20:44] whoahbot has joined the channel
+[20:44] bmizerany has joined the channel
+[20:48] devinus_ has joined the channel
+[20:53] maritz1 has joined the channel
+[20:56] jtaby_ has joined the channel
+[20:56] jtaby_ has joined the channel
+[20:57] devinus has joined the channel
+[20:59] jaw6 has joined the channel
+[21:02] CrabDude has joined the channel
+[21:05] alexiskander has joined the channel
+[21:07] chakrit has joined the channel
+[21:07] joshbuddy_ has joined the channel
+[21:09] teemow has joined the channel
+[21:09] okito has joined the channel
+[21:11] maushu: I had a crazy idea for a sandbox pool.
+[21:11] maushu: A sandbox pool would be a group processes that communicate to the pool master through unix sockets.
+[21:12] maushu: The pool master comunicates with the rest of the world (main program or other pools) through a tcp socket.
+[21:13] maushu: I hoping that since IO and network sockets are slower (compared with local unix/tcp sockets) that the lag will be negligible.
+[21:13] maushu: What do you guys think?
+[21:15] devinus has joined the channel
+[21:15] jed has joined the channel
+[21:18] fictorial: _ry: ok, let me know if I can help figure out why ECONNRESET is not firing always
+[21:19] maushu: ACTION feels ignored.
+[21:20] mape: ACTION shares a cookie with maushu 
+[21:20] fictorial: maushu: sounded a little like my nodered project but I'm not using child procs or unix sockets so not really :)
+[21:21] okito has joined the channel
+[21:21] maushu: Cookie!
+[21:22] maushu: ACTION munches on cookie.
+[21:22] maushu: fictorial, but what you think regarding performance?
+[21:22] fictorial: I feel like we're playing co-op Zork!
+[21:22] kriszyp has joined the channel
+[21:22] maushu: Huh, ...mud?
+[21:22] fictorial: I cannot imagine it being a problem in all but the zaniest cases
+[21:22] charlesjolley has joined the channel
+[21:22] maushu: Zaniest cases?
+[21:23] javajunky has joined the channel
+[21:23] felixge has joined the channel
+[21:23] felixge has joined the channel
+[21:23] fictorial: ACTION is standing in an open field west of a white house, with a boarded front door.  There is a small mailbox here.
+[21:24] fictorial: yeah, it won't be a problem I bet
+[21:24] MattJ: eat mailbox
+[21:25] fictorial: You can't take the mailbox.
+[21:25] fictorial: ACTION is a Zork proxy
+[21:25] fictorial: http://thcnet.net/zork/index.php
+[21:25] fictorial: heh
+[21:25] maushu: use mailbox to summon cthlhu
+[21:25] MattJ: I didn't think the original Zork said that :)
+[21:25] fictorial: I don't understand that.
+[21:26] maushu: use mailbox to summon cthulhu
+[21:26] fictorial: I don't understand that.
+[21:26] maushu: exit
+[21:26] fictorial has left the channel
+[21:26] maushu: ...
+[21:26] fictorial has joined the channel
+[21:26] maushu: restore
+[21:26] maushu: Anyways.
+[21:27] fictorial: Right - heh
+[21:27] MattJ: fictorial: actually Zork says: "I don't think that the small mailbox would agree with you."
+[21:27] MattJ: brb, doorbell
+[21:28] fictorial: zork is like web standards. everyone has their own version.
+[21:30] joshbuddy has joined the channel
+[21:32] isaacs: challenge of the day: create an IRC bot in nodejs that plays zork.
+[21:33] isaacs: (and isn't fictorial)
+[21:33] maushu: ...
+[21:33] xla has joined the channel
+[21:34] Kung_Fu_Hamster: puts ('hello sailor');
+[21:36] maushu: puts() has moved. Use require('sys') to bring it back.
+[21:36] JimBastard has joined the channel
+[21:36] mape: Anyone tried getting https for a client working in node?
+[21:37] mikeal: i have
+[21:37] mikeal: make sure you compile with ssl
+[21:37] mikeal: on my Mac it failed because I didn't have pkg-config
+[21:37] mape: Oh, it doesn't do that default?
+[21:37] mikeal: brew install pkg-config
+[21:37] mikeal: mape: the configure script tries to find openssl
+[21:37] mikeal: if it doesn't it won't be used
+[21:38] Kung_Fu_Hamster: maushu, puts = require('sys').puts;
+[21:38] mape: well that makes sence now that you mention it..
+[21:38] mape: Hmm nope, still get "Bad arguments"
+[21:38] maushu: mape, sudo apt-get install libssl-dev
+[21:39] mikeal: which OS are you on?
+[21:39] mape: libssl-dev is already the newest version
+[21:39] mape: debian
+[21:39] maushu: Kung_Fu_Hamster, better.
+[21:39] mikeal: you should check the config.log
+[21:39] mape: Checking for openssl > yes
+[21:40] mape: Hmm didn't find gnutls though
+[21:41] mape: have gnutls-bin though
+[21:42] kixxauth has joined the channel
+[21:42] maushu: You don't need that one.
+[21:42] mape: hmm k?
+[21:42] maushu: That was for the older versions.
+[21:43] maushu: Me thinks.
+[21:44] mape: So it is more likely the node bin that is "wrong" rather then the code?
+[21:44] maushu: No idea.
+[21:44] kixxauth has joined the channel
+[21:44] darkf has joined the channel
+[21:45] CrabDude has joined the channel
+[21:54] _ry: T 127.0.0.1:8000 -> 127.0.0.1:60449 [AP]
+[21:54] _ry:   48 54 54 50 2f 31 2e 31    20 33 30 34 20 4e 6f 74    HTTP/1.1 304 Not
+[21:54] _ry:   20 4d 6f 64 69 66 69 65    64 0d 0a 43 6f 6e 6e 65     Modified..Conne
+[21:54] _ry:   63 74 69 6f 6e 3a 20 6b    65 65 70 2d 61 6c 69 76    ction: keep-aliv
+[21:54] _ry:   65 0d 0a 54 72 61 6e 73    66 65 72 2d 45 6e 63 6f    e..Transfer-Enco
+[21:54] _ry:   64 69 6e 67 3a 20 63 68    75 6e 6b 65 64 0d 0a 0d    ding: chunked...
+[21:54] _ry:   0a 30 0d 0a 0d 0a                                     .0....
+[21:54] _ry: ^-- does anyone see something wrong with this
+[21:55] isaacs: _ry: if it's a 304, it shouldn't have any response body.
+[21:55] isaacs: _ry: so why is it chunked
+[21:55] whoahbot has joined the channel
+[21:55] isaacs: ?
+[21:57] mikeal: the response SHOULD NOT include other entity-headers
+[21:58] mikeal: it's not *MUST NOT*
+[21:58] mikeal: from http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html
+[21:58] mikeal: If a cache uses a received 304 response to update a cache entry, the cache MUST update the entry to reflect any new field values given in the response.
+[21:59] isaacs: mikeal: those are regarding entity-headers, not response body
+[21:59] mikeal: that seems to suggest that you can use a 304 response to update a cache entry, which is super weird to me because the whole point of a 304 is to say that the resource hasn't changed!
+[22:00] _ry: mikeal: thanks
+[22:00] jtaby_ has joined the channel
+[22:00] mikeal: isaacs: i don't think so, "the response MUST NOT include other entity-headers"
+[22:00] isaacs: "The 304 response MUST NOT contain a message-body, and thus is always terminated by the first empty line after the header fields."
+[22:00] user9 has joined the channel
+[22:00] mikeal: ah ha!
+[22:00] isaacs: http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html#sec10.3.5
+[22:01] isaacs: must not contain a message-body
+[22:01] mikeal: yeah, so someone is breaking the spec :)
+[22:01] isaacs: mikeal: "entity-header" means ETag or content-location
+[22:02] _ry: its so difficult to come up with a consistent theory of http
+[22:02] isaacs: mikeal: so, you could say "give me the XYZ that's newer than this date" i could say "the thing you wanted is ETag:abcde, and hasn't changed since then", and you might be like, "Oh, that's not hte one i have", and then send a non-conditional (or different conditional) response.
+[22:02] _ry: even at just the basic - parsing of message level
+[22:03] mikeal: i've been researching the rules for what constitutes the end of an entity-body
+[22:03] mikeal: it's fuckin insane
+[22:04] jed has joined the channel
+[22:04] isaacs: yeah, http is a bear.
+[22:05] _ry: would be so wonderful if they had just said everything is transfer-encoding:chunked
+[22:05] _ry: identity encoding fucks it all up
+[22:06] creationix: isaacs: were you the one that used to work at yahoo?
+[22:06] mikeal: for HTTP 1.0 you can basically omit the content-length and the content-type infers a content specific EOF
+[22:06] mikeal: i was like "what the fuck!"
+[22:07] mikeal: i'm just not going to handle that
+[22:07] isaacs: creationix: i dunno bout "the one", since half the valley worked there at one point or another, but yeah, i did a 4-year stint at yahoo
+[22:07] mikeal: CouchDB is all 1.1 so I lucked out :)
+[22:07] mjr_: Yeah, I wish everything was chunked as well.  It's so much simpler to do it just one way.
+[22:07] mikeal: isaacs: how many groups did you work in over that 4 years?
+[22:08] isaacs: mikeal: 6, officially
+[22:08] isaacs: mikeal: if you count the random little "help out with tihs thing real quick", i dont even know how many.
+[22:10] dnolen has joined the channel
+[22:18] CIA-77: node: 03Ryan Dahl 07master * r94f9dc6 10/ doc/index.html : Add link to older tarball versions - http://bit.ly/9d4rFs
+[22:18] CIA-77: node: 03Ryan Dahl 07master * r3934cb5 10/ (lib/http.js test/simple/test-http-304.js): 
+[22:18] CIA-77: node: Force no body on http 204 and 304
+[22:18] CIA-77: node: Thanks to tjholowayhuk@gmail.com for the test case. - http://bit.ly/dfPQ2u
+[22:19] jed: quick question: if i want to run an command on freenode, do i just type it in here? i'm a total newbie.
+[22:20] mape: should work
+[22:20] maushu: 8 files changed, 660 insertions(+), 605 deletions(-)
+[22:20] maushu: O_o
+[22:22] maushu: Now we need curl?
+[22:23] JimBastard: lol whats up jed 
+[22:23] JimBastard: what you trying to run
+[22:23] joshbuddy has joined the channel
+[22:23] joshbuddy has joined the channel
+[22:23] jed: hey JimBastard.
+[22:23] maritz has joined the channel
+[22:23] jed: password stuff.
+[22:23] isaacs: jed: usually you wanna do that in the irc terminal, or in a /msg with NickServ
+[22:23] JimBastard: jed - btw awesome slides
+[22:23] JimBastard: NickServ 
+[22:23] JimBastard: you msg him
+[22:23] isaacs: jed: don't do it here.  open a PM with NickServ first
+[22:23] JimBastard: aye
+[22:23] jed: ah, okay!
+[22:23] JimBastard: this reminds me a classic IRC joke
+[22:24] JimBastard: if you type in your password it knows to star it out, watch
+[22:24] JimBastard: *********
+[22:24] jed: thanks guys.
+[22:24] isaacs: you could do something like /msg NickServ register i@izs.me ********
+[22:24] JimBastard: isn't that awesome?
+[22:24] isaacs: but then if you put a space, it'll share it.
+[22:24] mape: 9e5g24hmr7n0HxM
+[22:24] isaacs: ACTION smacks JimBastard 
+[22:24] isaacs: ************
+[22:24] mape: No it doesnt JimBastard 
+[22:24] creationix: :D
+[22:24] isaacs: wow, it does work!
+[22:24] isaacs: mape: no, it just shows you your password, but we all saw stars
+[22:24] maushu: Let me try!
+[22:24] maushu: /nickserv identify ILikeJim'sMom2010
+[22:25] maushu: ...it didn't work. ;_;
+[22:25] JimBastard: works everytime
+[22:25] mjr_: IRC is so great.
+[22:25] mape: isaacs: Ah ok! 
+[22:25] isaacs: mape: see, this is what we saw: mape: ************
+[22:25] JimBastard: ahaha <3 isaacs 
+[22:25] isaacs: not 9e5g24hmr7n0HxM
+[22:25] mape: ACTION goes away and generates more 1password passes to paste in irc
+[22:25] jed: oh my, what have i started.
+[22:25] maushu: mape, duh.
+[22:25] JimBastard: (your suppose to paste it as plaintext isaacs and say that we see ******* and only he can see the pw)
+[22:25] isaacs: oh, i see
+[22:25] JimBastard: jed - btw amazing slides
+[22:26] isaacs: right, i flubbed the joke
+[22:26] JimBastard: very well put together
+[22:26] jed: JimBastard: thanks, man. congrats on winning the scurvy.
+[22:26] mjr_: The great thing about IRC is that it also knows how to protect your credit card numbers, social security, everything.
+[22:26] JimBastard: thanks man
+[22:26] mape: Really want the video for the fab talk
+[22:26] jed: JimBastard: unfortunately, i missed your actual preso. did it go okay?
+[22:27] jed: JimBastard: it's already up, you didn't know?
+[22:27] JimBastard: it went well enough, i was really no prepared in both my project and th epresentation
+[22:27] jed: JimBastard: http://vimeo.com/11026782
+[22:27] jed: JimBastard: i feel that. i was embarrassed to present a project with no tests.
+[22:28] JimBastard: don't be modest, i practically got a unary tract infection seeing your awesomeness 
+[22:28] JimBastard: (how are these word plays working out for you)
+[22:28] mape: hehe
+[22:28] jed: JimBastard: you nary fail to amuse.
+[22:28] javajunky: I like the idea of a unary track infection ;) 
+[22:29] javajunky: feck note-to-self when mocking someone else's spelling don't fuck up your own spelling.
+[22:29] jed: jed: i hope that jargon catches on. i like it much more than "middleware"
+[22:29] creationix: can anyone get to howtonode.org?
+[22:29] mape: jup
+[22:29] creationix: I'm getting reports it's down, but works for me
+[22:30] jed: works for me.
+[22:30] javajunky: creationix: yes.
+[22:30] creationix: ok, cool
+[22:30] JimBastard: creationix: 403 Forbidden  
+[22:30] creationix: JimBastard: really?
+[22:30] mape: creationix: img{max-width: 100%} might be handy
+[22:30] JimBastard: creationix: its your www record
+[22:30] JimBastard: try the site with www.
+[22:31] mape: ah yeah, with www no go
+[22:33] creationix: strange, I thought I added an alias for www, oh well
+[22:33] mape: who uses www anyway
+[22:35] admc has joined the channel
+[22:35] JimBastard: apparently i do
+[22:36] creationix: JimBastard: fixed it
+[22:37] creationix: nginx redirect
+[22:37] JimBastard: uhhhh
+[22:37] JimBastard: hrmmm
+[22:37] maushu: Real men don't use nginx.
+[22:38] freshtonic has joined the channel
+[22:38] JimBastard: is your WWW A record pointing to @ ?
+[22:38] maushu: They use node.js. ONLY.
+[22:41] mattly has joined the channel
+[22:43] charlesjolley_ has joined the channel
+[22:46] cruxst has joined the channel
+[22:46] MattJ: maushu: Real sysadmins don't use Node.js
+[22:46] MattJ: They use netcat
+[22:47] isaacs: real men don't use nginx as a proxy.  they use varnish or trafficserver.  nginx doesn't support streaming to backend servers.
+[22:47] isaacs: ACTION is not a real man... /o\
+[22:47] jed has left the channel
+[22:49] maushu: isaacs, true.
+[22:50] maushu: That is why I don't want to use nginx with node.js, because of the streaming.
+[22:50] maushu: Other reason is dynamic vhosts, if I use dynamic vhosts nginx's use is almost not needed.
+[22:51] maushu: Unless for load balancing.
+[22:52] jedschmidt has joined the channel
+[22:52] maushu: Okay, first step would make a page with a textbox that will send javascript to the sandbox pool and then return a result.
+[22:53] maushu: ACTION goes to the drawing board.
+[22:56] jaw6 has joined the channel
+[23:00] fictorial: There is a small mailbox there.
+[23:00] fictorial: ACTION shuts up
+[23:02] whoahbot has joined the channel
+[23:02] Aria has joined the channel
+[23:02] JimBastard: maushu: im about to toss nginx for node
+[23:02] JimBastard: i was keeping nginx for proxy_pass
+[23:02] derbumi has joined the channel
+[23:02] JimBastard: but i've rebuilt it in node pretty much
+[23:02] maushu: YES, JOIN THE DARK SIDE.
+[23:02] maushu: We have cookies.
+[23:02] JimBastard: i just gotta finish the proxy code
+[23:03] JimBastard: there are like 5 node proxy servers and none work right, or have docs, or look kosher
+[23:03] JimBastard: i think mikeal had the best looking one, buts its out of date
+[23:04] mikeal: i need to fix that
+[23:04] mikeal: because it's a good example
+[23:04] jaw6 has joined the channel
+[23:05] JimBastard: i would have tried myself, but the error was kinda cryptic
+[23:05] JimBastard: im sure its an easy fix
+[23:05] JimBastard: if you could patch that i would be very grateful
+[23:05] JimBastard: or at least point me in the right direction on how to fix
+[23:05] noonat has joined the channel
+[23:07] mikeal: hold on
+[23:10] mikeal: JimBastard: nearly updated
+[23:13] JimBastard: thanks man
+[23:13] JimBastard: i'll be checking it out when i get home
+[23:13] JimBastard: maybe i could clean it up / comment / document or something
+[23:13] JimBastard: doesnt seem like a lot of work
+[23:14] kriskowal has joined the channel
+[23:14] JimBastard: i really wanted a way to setup proxy_pass for regular TCP sockets, but I think thats straight up impossible
+[23:14] JimBastard: as IP doesn't really work that way
+[23:14] JimBastard: i think it would require DNS hack
+[23:14] JimBastard: im not exactly a pro in those areas
+[23:14] JimBastard: but i think you'd need a node dns server
+[23:15] mikeal: JimBastard: i'm actually in the process of making that work for balance
+[23:15] JimBastard: how do you mean?
+[23:15] mikeal: i'm moving the http client to a TCP client
+[23:15] mikeal: so once you tell it where to proxy to, it'll just use a TCP client and talk directly to the ServerResponse stream
+[23:16] jaw6 has joined the channel
+[23:16] JimBastard: thats cool
+[23:17] JimBastard: you still need the DNS server though i think to do what i want
+[23:17] JimBastard: its kinda complicated, i gotta go ill ttyl
+[23:17] JimBastard: work work
+[23:18] JimBastard: sorry im helping jquery noobs here
+[23:19] JimBastard: will you be online in a few hours mikeal ? 
+[23:19] mikeal: probably
+[23:19] mikeal: might be off for a bit to make dinner
+[23:19] JimBastard: either way i would like to discuss further
+[23:19] JimBastard: i'll catch you online
+[23:20] mikeal: i've got the proxy working again, but it's kind of slow
+[23:20] JimBastard: really?
+[23:20] JimBastard: i actually want to use at as part of a load balancer that will serve a shit ton of apps
+[23:20] JimBastard: so speed is important, do you know the root of the issue?
+[23:23] mikeal: JimBastard: fixed proxy
+[23:23] maushu: A dns server in node.js? Hmmm.
+[23:23] mikeal: it's also like half the size it was
+[23:23] mikeal: the client reuse isn't working in node master
+[23:23] Aria: Heh. I should write that.
+[23:23] mikeal: and it just made every more complicated anyway
+[23:23] maushu: I noticed that most dns servers use at least 30mb, I wonder why.
+[23:24] mikeal: also, i removed the encoding guess and just use binary
+[23:24] JimBastard: Aria: you think you got the chops to handle that?
+[23:24] JimBastard: bad DNS implementations = epic fail
+[23:24] Aria: Wouldn't be too hard. It's a simple protocol, and Node has no qualms handling binary data.
+[23:24] JimBastard: have you ever implemented it before?
+[23:25] Aria: No, but give me a protocol dump and a hex editor and I can understand the protocol ;-)
+[23:25] JimBastard: i mean like BIND has been battle hardened for 20 years
+[23:25] JimBastard: maybe more
+[23:25] JimBastard: id be very interested in anyone willing to try and get a DNS server going in node
+[23:25] JimBastard: i can definitely help
+[23:26] Aria: BIND has been added onto and grown into a crazy behemoth over 20 years
+[23:26] Aria: Also replaced twice.
+[23:26] JimBastard: i was talking to _ry a bit at jsconf and i might start offering "bounties" for certain node modules i need
+[23:26] JimBastard: i just need to figure out my budget
+[23:26] JimBastard: everything would remain FOSS, of course
+[23:26] Aria: Maybe after I finish the kinks in this HTML parser, I'll tackle that...
+[23:26] Aria: ... and I'm bounty-motivated.
+[23:27] JimBastard: please dont misunderstand me, i do not have a budget allocated for those things yet
+[23:27] Aria: That ++
+[23:27] Aria: I'm all about the liberal licenses on stuff.
+[23:27] JimBastard: i would like to though, very soon
+[23:27] Aria: oh, for sure.
+[23:27] maushu: Why is BIND so huge, anyways?
+[23:27] JimBastard: no clue
+[23:27] maushu: Isn't it just a server that replies to information?
+[23:28] Aria: DNSSEC, lots of biggish buffers, lots of inefficient code.
+[23:28] JimBastard: probaly written in C and super convoluted
+[23:28] JimBastard: im just guessing here
+[23:28] Aria: It is, and it is.
+[23:28] Aria: In both cases.
+[23:28] maushu: A simple server would be useful for most cases. We don't need root servers.
+[23:28] Aria: The implementation to beat right now is powerdns in my opinion.
+[23:29] Aria: Spiffy, simple, fast, and full-featured implementation in C++
+[23:30] Aria: (Yes, simple and C++ in the same sentence. I was surprised.)
+[23:30] JimBastard: i just want my application stack to be pure JS from start to finish
+[23:30] JimBastard: like, everything
+[23:30] Aria: Me too.
+[23:30] Aria: JS or Ruby in my case. And Ruby's GC just doesn't cut it.
+[23:32] maushu: Woah, woah, woah.
+[23:32] maushu: Whats next? Linux.js?
+[23:33] ditesh|cassini has joined the channel
+[23:34] Aria: Hehe. Notice that the project my html parser lived in before being split was 'nodenetwork'
+[23:34] JimBastard: ahahaha no maushu 
+[23:34] JimBastard: my stack does stop when it hits node
+[23:34] JimBastard: everything else must be JS
+[23:35] JimBastard: but node needs to be running first
+[23:35] maushu: I'm not kidding. I'm wearing my serious face. Serious face -> >:|
+[23:35] hassox has joined the channel
+[23:36] maushu: I need to make some money so I can leave my job and code stuff I like.
+[23:36] JimBastard: you dont need money for that
+[23:36] JimBastard: all you need is a netbook and good friends
+[23:37] JimBastard: i was homeless for a while it was awesome
+[23:37] maushu: ...
+[23:37] JimBastard: i lived in super nice places
+[23:37] dekroning has joined the channel
+[23:37] JimBastard: i guess if you have a place to stay you arent homeless
+[23:37] MattJ: You're houseless
+[23:37] JimBastard: true life
+[23:37] MattJ: or the other way around
+[23:38] jaw6 has joined the channel
+[23:38] MattJ: But indeed, everyone should leave their jobs
+[23:38] Aria: Heh, no, that counts as homeless. Just luckier than many.
+[23:38] JimBastard: caus there ain't no shame in being poor and sleeping on the floor until a quater to four when you roommate kicks you out of the door
+[23:38] JimBastard: i quit my job two weeks ago, got a much better one
+[23:41] mjr_: I've actually written a DNS server before.  The DNS protocol is oddly complicated.
+[23:41] mjr_: I don't recommend writing one if there's another one that works.
+[23:41] Aria: Hehe.
+[23:41] RayMorgan: _ry: what do you use to create your graphs?
+[23:41] JimBastard: mjr_:  we are talking about writing a node.js one
+[23:41] maushu: _ry has graphs? Since when?
+[23:41] mjr_: Yeah, I know.
+[23:41] JimBastard: so in that context, there isnt one that works yet?
+[23:42] mjr_: don't get me wrong, it'd be fun to do in node, just to say that you'd done it.  And everything is JS because we all love JS, etc.
+[23:42] maushu: The protocol is complicated?
+[23:42] mjr_: But it is tricky, bit-twiddling stuff that IMO is best left for some native code.
+[23:43] mjr_: They've got this clever but complicated compression scheme
+[23:43] N` has joined the channel
+[23:43] JimBastard: RayMorgan is a 40 year old man
+[23:44] mjr_: Anyway, you know how HTTP seems super simple when you look at it, but ends up being complicated in practice?  Well, DNS looks complicated to begin with.
+[23:45] noonat: mjr_: hahaha
+[23:45] majd has joined the channel
+[23:47] mjr_: But since I want UDP support for my own reasons, and there are no UDP bindings in node at the moment, I guess I should be encouraging people to write a pure JavaScript implementation of DNS.
+[23:48] mjr_: good luck, and godspeed.
+[23:48] Aria: Hee
+[23:52] RayMorgan: JimBastard: a 40 year old balding guy
+[23:53] RayMorgan: have you recovered yet from the conf?
+[23:54] JimBastard: ohh yeah i was fine i barely got wompted
+[23:54] JimBastard: you should see me rage
+[23:54] JimBastard: anyway i gotta be out
+[23:55] RayMorgan: good stuff

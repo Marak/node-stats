@@ -1,0 +1,950 @@
+[00:01] keeto has joined the channel
+[00:02] softdrink has joined the channel
+[00:19] erikcorry: Anyone tried writing an app for the Palm Pre webos.
+[00:19] erikcorry: I haven't.
+[00:19] erikcorry: On the face of it it could be similar to node.
+[00:20] erikcorry: Everything is in JS, you can presumably open sockets to wherever you like.  No same-origin or http-only restrictions like in the browser.
+[00:21] ashb: ryah: how do you implement promise.wait()? the way i'd naievly do it is: while(!complete) loop_once(); but that needs ev to be reentereant
+[00:23] ryah: ashb: can i just show you the implementation?
+[00:23] ashb: yeah
+[00:24] ryah: erikcorry: apparently it's a bit more corse - they have these "services" which can be used, but i'm not sure if raw tcp sockets can be used
+[00:25] ryah: coarse, even
+[00:26] ryah: erikcorry: i haven't used it either though
+[00:26] ryah: ashb: http://github.com/ry/node/blob/master/src/node_events.cc#L173-205
+[00:28] ryah: ashb: that is, it reenters the event loop - the stack grows on top of the wait()
+[00:28] ashb: ryah: so about how i thought it would be done then
+[00:29] ashb: when does Promise::Detach get called?
+[00:29] ryah: when, say, the thread pool responds with the result of a system call
+[00:29] ashb: oh Emmit*
+[00:30] ryah: that is, when it's finished
+[00:30] ryah: ashb: so when it's done you ev_unloop(ONCE)
+[00:30] ryah: and the wait() returns
+[00:30] ashb: so yeah - calling ev_loop from inside a callback works fine then?
+[00:31] ryah: sure, if you're willing to accept that this isn't real coroutines
+[00:32] ryah: if someone else calls wait(), then the stack grows deeper - even if the first promise finishes, it won't return
+[00:32] ashb: yeah. i was just wondering how to do promise.wait basically :)
+[00:32] ashb: tho why do you need a stack?
+[00:33] ryah: the execution stack
+[00:33] ashb: why isn't that just implicit in the JS stack?
+[00:33] erikcorry: You might be able to do wait with threads.
+[00:34] erikcorry: Switch to a different thread.  Return to that thread when the wait terminates.
+[00:34] ashb: erikcorry: sure if you want an anti-node :)
+[00:35] erikcorry: ashb: Well just having wait is anti-node.
+[00:35] ashb: it doens't block
+[00:35] ryah: i kind of like this crappy implementation. if i have something better then people are going to start using it in busy servers - which is probably not good
+[00:35] erikcorry: If you have wait you want to do it right.
+[00:35] ashb: other events still get processed
+[00:36] erikcorry: I can see that.
+[00:36] ashb: ryah: i'm just not sure why the coro_top is needed - wouldn't that just happen for free due to the nesting you'd get in JS?
+[00:36] elliottcable: shit
+[00:36] elliottcable: well, I have a Promise, and I .wait() it
+[00:36] elliottcable: but I also emitSuccess it
+[00:36] elliottcable: so wtf
+[00:36] elliottcable: why won’t my process *end*!
+[00:36] elliottcable: http://gist.github.com/gists/244669
+[00:37] ryah: ashb: you have to be sure they return in the right order http://github.com/ry/node/blob/master/test/mjsunit/test-promise-wait.js
+[00:37] erikcorry: Because it's all on the same stack they have to finish waiting in order.
+[00:37] ashb: hmmm i must still be missing something
+[00:37] erikcorry: OTherwise you are stuck waiting for the last wait when the others could continue.
+[00:38] elliottcable: erikcorry: there’s only one
+[00:38] ashb: the imple idea i have would i think work fine with that i think
+[00:38] erikcorry: elliottcable: In that case I don't know.
+[00:38] elliottcable: erikcorry: lol
+[00:38] ryah: ashb: sorry wrong link. here is the right one http://github.com/ry/node/blob/master/test/mjsunit/test-wait-ordering.js
+[00:39] erikcorry: ashb: I don't understand what your simple idea is.
+[00:39] ryah: i should probably just replace wait() with true blocking sys calls
+[00:40] elliottcable: lol
+[00:40] ashb: https://gist.github.com/2b94447b84de9be69c79
+[00:40] erikcorry: ryah: that would be even worse.
+[00:40] erikcorry: Which would be better
+[00:40] ryah: erikcorry: :)
+[00:40] erikcorry: because then people wouldn't use it :-)
+[00:40] elliottcable: lol
+[00:40] elliottcable: ryah: thought you were on vacation
+[00:40] ryah: i am
+[00:41] elliottcable: hrm
+[00:41] elliottcable: so when are you going to solidify?
+[00:41] elliottcable: the problem is, I don’t have steady internet acess, and soon I won’t have any again… and I don’t really have time to go hacking on Node.js
+[00:41] elliottcable: but there are some things I *really* want to change before you solidify the API
+[00:41] ryah: not any time soon
+[00:41] ryah: lots of stuff to be done first
+[00:41] elliottcable: if you’re solidifying it in December, that’s … very bad for me
+[00:41] elliottcable: ah! good.
+[00:41] elliottcable: good good!
+[00:41] elliottcable: then I’m probably going to sit down and investigate your Eventemitter and Promise implem,entation, and try to get rid of Promise, around Christmas
+[00:42] ryah: my vacations are a lot like my non-vacation :)
+[00:42] elliottcable: hah
+[00:43] elliottcable: anybody wanna take a poke?
+[00:43] elliottcable: http://gist.github.com/244669
+[00:43] ryah: elliottcable: why remove promise?
+[00:43] elliottcable: I have no idea why it would just not end… line 63 prints, which means it certainly gets there, but…
+[00:44] elliottcable: ryah: There are lots of cases where I want to do things *like* what Promise does, but with more than 2 events. Really, a lot of what is implemented specifically for "success" and "error" on Promise, should be implemented in a more flexible way directly on EventEmitter.
+[00:45] elliottcable: ryah: I mean, Promise can stay, sure… but instead of a separate implementation, it would just be some syntactic sugar for things that EventEmitter would at that point support anyway
+[00:45] ryah: elliottcable: like an http request from an http client?
+[00:45] soveran has joined the channel
+[00:45] elliottcable: ryah: the big missing features are being able to say on an EventEmitter, that “Only 1 of <these events> will ever be emitted. They are mutually exclusive, and when any of these one is emitted, no others will be.”
+[00:45] elliottcable: ryah: and then one could have the equivalent of wait() on *that group of events*
+[00:46] ryah: ah
+[00:46] elliottcable: ryah: the second big missing thing, is events that are ‘tied’ to other events. For instance, I should be able to say that a "fileNotFound" event, when emitted, also triggers any "error" callbacks.
+[00:47] elliottcable: ryah: at that point, Promise could simply be implemented as an EventEmitter that has a very simplistic wait() that waits on the ["success","error"] events.
+[00:49] kriskowal has joined the channel
+[00:51] elliottcable: )-:
+[00:51] elliottcable: whaaaa
+[00:52] crux has joined the channel
+[00:52] crux: hello
+[00:52] elliottcable: hallo
+[00:53] crux: im trying to visualize benchmarks for node.js, any examples of a visualization simultaneous connections-response time?
+[00:53] elliottcable: visualize, yourself, or generate graphics for?
+[00:53] crux: visualize, based on ryah's data
+[00:54] crux: his graphs are wack
+[00:54] elliottcable: lol
+[00:54] elliottcable: http://cld.ly/3el8j
+[00:54] elliottcable: that good?
+[00:54] crux: i need that for a new node.js site im working on
+[00:54] elliottcable: node.js site, eh?
+[00:54] crux: yes thats right
+[00:54] mitchellh has joined the channel
+[00:55] crux: lol @web inspector screenshot
+[00:55] JoePeck: nothing wrong with that =)
+[00:55] crux: lol
+[00:57] ryah: is "wack" good?
+[00:58] ashb: not be any meaning i know of it
+[00:58] elliottcable: ryah: nope
+[00:58] elliottcable: crux: you asked for a simultaneous threading visualization, I gave you one.
+[00:59] elliottcable: crux: in fact, I gave you a very relevant one: those represent async network requests from JS
+[00:59] ryah: http://s3.amazonaws.com/four.livejournal/20090911/hist300.png <-- super cool response time visualization
+[00:59] elliottcable: it just happens to be in WebKit, not Node.js.
+[00:59] elliottcable: lol ryah 
+[00:59] crux: ryah
+[00:59] crux: i need one for the homepage
+[00:59] crux: that won't do
+[00:59] elliottcable: ryah: actually I have absolutely no idea what any of that means
+[00:59] elliottcable: ryah: care to explain?
+[00:59] elliottcable: ryah: count of *what*?
+[01:00] ryah: requests
+[01:00] Connorhd: wonder why node is so evenly spread
+[01:00] elliottcable: ryah: what I took away from that, is that you never tested node with >500 simultaneous requests?
+[01:00] ryah: Connorhd: node copies data in and out of v8 all the time. i think that's what's causing this undesired behavior
+[01:00] ryah: Connorhd: going to try to fix that in the next couple weeks.
+[01:01] Connorhd: awesome
+[01:01] elliottcable: #win
+[01:01] Connorhd: node gets some incredibly fast responses
+[01:01] elliottcable: yes.
+[01:01] ryah: yes, i think once that's fixed it will be very fast
+[01:02] erikcorry|away: Making things faster would shift things to the left for node, right.
+[01:02] erikcorry|away: But why would it make the graph more spikey?
+[01:02] elliottcable: oh!
+[01:02] elliottcable: I JUST groked that
+[01:02] crux: ryah, why response time is X axis?
+[01:02] elliottcable: ryah: that graphc is pretty horrible d-:
+[01:02] Connorhd: a thin high graph means reliable response times right?
+[01:02] crux: is that a trick to confuse us?
+[01:03] crux: lol
+[01:03] erikcorry|away: I wonder whether the flatness is a fairness issue.
+[01:03] ryah: erikcorry|away: well, no idea if it will become a spike - but hopefully the mean will move left 
+[01:03] elliottcable: AFAICT…
+[01:03] ashb: that is the tribal case bench mark of returnign simple 10byte-or-so respoinse?
+[01:04] ashb: *trivial
+[01:04] erikcorry|away: Is it because some requests just don't get to the top of the queue for a long time.
+[01:04] elliottcable: oh and ryah. next time you bench, can you add unicorn?
+[01:04] elliottcable: ACTION is curious, and hears it is great and awesome
+[01:04] elliottcable: apparently GitHub is now running on it too
+[01:06] ashb: http://unicorn.bogomips.org/ that one? it has a bit of google fail
+[01:06] elliottcable: yep
+[01:07] ryah: erikcorry|away: it's being scheduled by epoll - without much added knowledge - one would hope that it would do the right thing
+[01:07] ryah: http://s3.amazonaws.com/four.livejournal/20090126/mephisto2_histogram.png 
+[01:08] ryah: note that nginx also has a similar profile
+[01:08] ryah: so maybe not's not bad
+[01:08] erikcorry|away: Unicorn looks like the opposite of node.
+[01:09] erikcorry|away: They explicitly say it's no good for slow clients outside your LAN.
+[01:09] elliottcable: what’re you using to make those, ryah?
+[01:09] ryah: elliottcable: R
+[01:09] elliottcable: R?
+[01:09] elliottcable: talk about low googlability
+[01:09] crux: yo ryah
+[01:09] crux: here's a preview: 
+[01:10] crux: (1 sec)
+[01:10] ryah: erikcorry|away: but unicorn has to deal with reeealy slow rails responses
+[01:11] ryah: elliottcable: http://www.r-project.org/
+[01:11] crux: http://i48.tinypic.com/2eyb0nr.jpg
+[01:12] ryah: wow
+[01:12] crux: lol
+[01:12] crux: thoughts?
+[01:12] ryah: looks pretty slick
+[01:13] crux: thanks man
+[01:13] ryah: i don't like those graphs though - i don't really like the idea of having benchmarks on the front page
+[01:13] crux: yeah, those will be gone soon
+[01:13] elliottcable: SO SLOW
+[01:13] elliottcable: ARGH
+[01:13] crux: its gonna be a single visualisation to explain we're focused on cheap simultaneous connections
+[01:14] elliottcable: lol
+[01:14] skampler: nice design
+[01:14] elliottcable: hey crux, github your source
+[01:14] elliottcable: crux: I may want to fork and contribute, I see some issues
+[01:14] crux: ryah, those dont have to be actual numbers, just a visualization like these:http://www.flickr.com/photos/25541021@N00/page2/
+[01:14] elliottcable: anyway, fuck it, it works withoit wait()
+[01:15] crux: elliottcable: github a psd?
+[01:15] elliottcable: ryah: if you get some time ,take a peek at http://gist.github.com/244669, and see if you can tell me why it would wait() forever
+[01:15] elliottcable: crux: … oh, it’s photoshop? eww.
+[01:15] crux: elliottcable: thats how its done: 1) ps 2)html/css 3)code
+[01:15] crux: elliottcable: is that news to you?
+[01:15] elliottcable: yeah, whatever
+[01:15] crux: elliottcable: lol
+[01:15] elliottcable: I design entirely in HTML.
+[01:15] crux: elliottcable: nerd
+[01:16] elliottcable: I haven’t touched Photoshop in my life. I think it’s absolutely disgusting.
+[01:16] elliottcable: crux: and proud of it
+[01:16] ryah: crux: looks good. start a mailing list thread - let's open it for discussion
+[01:16] ryah: i have to go
+[01:16] elliottcable: o7
+[01:16] crux: ryah: peace
+[01:16] ryah: elliottcable: sorry. i'll look at it later if its still a problem
+[01:16] elliottcable: no prob man
+[01:16] elliottcable: it *works*, it’s just really weird that it works
+[01:16] elliottcable: and I’d *rather* it work with wait()
+[01:16] elliottcable: because I understand it that way /-:
+[01:17] crux: elliottcable: i do sites for a living at an agency actually
+[01:17] elliottcable: crux: mmhmm
+[01:17] sudocarl: elliottcable, so you never prototype a design you just code it up?  and do you ever use images in your designs or is it just code?
+[01:17] crux: elliottcable: http://andrewkolesnikov.com
+[01:18] elliottcable: sudocarl: Your last question is flawed d-:
+[01:18] elliottcable: sudocarl: they are not mutually exclusive.
+[01:18] sudocarl: fair enough
+[01:18] elliottcable: sudocarl: My work is entirely Unicode text; if that’s what you’re asking
+[01:18] sudocarl: whats your preferred graphic editor?
+[01:18] sudocarl: gimp?
+[01:18] sudocarl: ah so just text?
+[01:18] sudocarl: no images?
+[01:19] elliottcable: sudocarl: but I certainly use images. Hand-written SVG and complex CSS. I don’t need raster images ^_^
+[01:19] elliottcable: anyway, I’m off.
+[01:19] sudocarl: really?
+[01:19] elliottcable: back to coding if I can’t get that problem fixed. On a deadline!
+[01:19] sudocarl: do you have some of you stuff online?
+[01:19] sudocarl: and cheers
+[01:19] sudocarl: your**
+[01:20] sudocarl: crux, nice stuff on your portfolio :)
+[01:20] crux: sudocarl: thanks, man
+[01:23] sudocarl: crux the only thing that got me is your connect button doesn't work as expected...  I expected to click it and have it circled like work and change the header or switch to another page...  since there is no button change I was a bit thrown off...  also since the speech bubble that comes up is really white its quite hard to see that its a speech bubble...  but apart from that its a very clean and nicely done portfolio.  :)
+[01:23] sudocarl: just my 2 cents :D
+[01:24] crux: sudocarl: thanks for the feedback
+[01:24] sudocarl: crux, Thanks for not getting defensive like most developers?
+[01:24] sudocarl: :D
+[01:24] sudocarl: (and designers)
+[01:25] crux: sudocarl: ;)
+[01:28] elliottcable: hm
+[01:28] elliottcable: cat()
+[01:28] elliottcable: maybe.
+[01:28] elliottcable: feel dirty for using it.
+[01:28] elliottcable: but am too lazy to buffer lines of reading and ship them off.
+[01:28] elliottcable: hm.
+[01:28] sudocarl: elliottcable, I wouldn't mind seeing some of your graphics work if you have a sec
+[01:28] elliottcable: yeah
+[01:28] elliottcable: ask me in a bit
+[01:29] sudocarl: kk
+[01:29] elliottcable: JESS MUST HAPPEN NAOO
+[01:29] elliottcable: I’m sure 90% of the people in this channel are going to hate me for this
+[01:29] elliottcable: hahaha as will myself
+[01:29] elliottcable: but It Must Be Done™
+[01:29] crux: is there a ORM or at least a mysql driver for nodejs?
+[01:29] sudocarl: no
+[01:29] sudocarl: just postgres
+[01:30] elliottcable: redis.
+[01:30] sudocarl: and that one
+[01:30] elliottcable: *perfect* fit for Node.js
+[01:30] crux: elliottcable: nice
+[01:30] elliottcable: love that shit to death
+[01:30] sudocarl: http://wiki.github.com/ry/node <- look under databases
+[01:31] crux: ACTION is off to grab some tea
+[01:31] sudocarl: shit!  that reminded me...  MY TEA
+[01:31] sudocarl: brb
+[01:32] sudocarl: back...  well now that it has become stomach acid...  :(
+[01:32] sudocarl: out it went
+[01:51] mitchellh1 has joined the channel
+[01:51] inimino: heh
+[01:54] inimino: <3 wireshark
+[02:15] elliottcable: oh shit halorgium you’re in SF?
+[02:15] elliottcable: halorgium: dude we could totally have hung if you’d been at #RubyConf )-:
+[02:17] Micheil has joined the channel
+[02:44] kriskowal has joined the channel
+[02:50] mtotheikle has joined the channel
+[02:59] halorgium: elliottcable: oh, you were there?
+[03:02] elliottcable: yah!
+[03:02] elliottcable: Crawl too
+[03:02] elliottcable: gpod shit
+[03:02] elliottcable: good*
+[03:13] frodenius: elliottcable: hey, i implemented promise.depend(), waiting for multiple promises to succeed/fail, http://github.com/fwg/node/blob/master/doc/api.txt#L330-334
+[03:13] frodenius: but i think my impl is flawed
+[03:13] elliottcable: remind me later
+[03:14] elliottcable: plox
+[03:14] elliottcable: if it’s ot too much trouble
+[03:14] frodenius: kk
+[03:14] elliottcable: dealing with shit
+[03:14] elliottcable: lol
+[03:20] JoePeck_ has joined the channel
+[03:22] inimino: sessions module: http://boshi.inimino.org/3box/asof/1259464270894/session/
+[03:22] elliottcable: no GitHub?
+[03:22] inimino: now supports persistent sessions with a lifetime and times them out
+[03:22] inimino: no GitHub
+[03:23] inimino: not yet anyway
+[03:23] inimino: but feel free to wget, the source is in one file
+[03:24] elliottcable: yah I saw lol
+[03:25] inimino: how messy is the git wire format, anybody know?
+[03:25] elliottcable: ACTION shrugs
+[03:25] elliottcable: I looked into it at one point, but can’t remember shit.
+[03:25] elliottcable: man git-upload-pack?
+[03:25] inimino: oh well
+[03:25] elliottcable: man git-fetch-pack maybe
+[03:25] inimino: hm, could do something like that
+[03:26] inimino: I'm going to want git compatibility but not sure how I'm going to get it
+[03:26] halorgium: the proto is not that bad
+[03:27] elliottcable: git compatibility for what?
+[03:27] inimino: good, that's probably how, then
+[03:27] inimino: for the revision store I use
+[03:28] inimino: it's very simple, you just PUT and POST stuff and it saves every revision of everything
+[03:29] halorgium: backed where?
+[03:29] halorgium: couch?
+[03:29] inimino: filesystem
+[03:29] inimino: and you can look at the tree as it existed at any point in the past
+[03:30] elliottcable: inimino: name it, and publish it
+[03:30] elliottcable: inimino: sounds pretty slick, and by slick, I mean light and awesome
+[03:30] sudoer has joined the channel
+[03:30] inimino: it's nowhere near feature complete
+[03:31] inimino: but yeah, I could publish it
+[03:31] inimino: needs a name, I suppose, I have just been calling it 'revision store'
+[03:31] halorgium: hah
+[03:32] elliottcable: good name, actually
+[03:32] elliottcable: I like that
+[03:32] elliottcable: revision store.
+[03:32] elliottcable: because that’s *exactly* what it is.
+[03:32] elliottcable: Release your source, I’ll contribute.
+[03:32] elliottcable: JS receptor?
+[03:32] elliottcable: Node.js d-:
+[03:32] inimino: also it depends on my nhttpd which I don't know if anyone else will like :)
+[03:36] halorgium: anyone know if libxmljs handles: var items = doc.find("DescribeAddressesResponse/addressesSet/item");
+[03:37] inimino: what's .find()?
+[03:37] inimino: like .evaluate()?
+[03:37] halorgium: xpath
+[03:37] halorgium: hmm, i think i've just been failing ;)
+[03:38] inimino: ok
+[03:38] inimino: .evaluate is the DOM XPath method in browsers
+[03:38] inimino: (the ones that support it anyway)
+[04:26] n8o has joined the channel
+[04:29] n8o_ has joined the channel
+[04:53] richtaur has joined the channel
+[04:56] sudoer has joined the channel
+[05:04] sudocarl: inimino, how goes your session stuff?
+[05:04] inimino: sudocarl: it's working
+[05:04] sudocarl: do you have something that I could use in my project?
+[05:05] sudocarl: I need a simple session module
+[05:05] sudocarl: I would love to take a look at what you have
+[05:05] inimino: sure, code is here: http://boshi.inimino.org/3box/asof/1259464270894/session/
+[05:06] sudocarl: thanks :)
+[05:06] inimino: demo.js is the code that is running here: http://boshi.inimino.org:8080/
+[05:06] sudocarl: sweet :)
+[05:06] inimino: no documentation yet outside of the code comments, but feel free to ask me anything
+[05:08] sudocarl: its well commented
+[05:18] kriskowal has joined the channel
+[05:18] ryah_away: http://boshi.inimino.org:8080/
+[05:18] ryah_away: oops i was trying to copy that but i pasted it instead
+[05:18] sudocarl: lol
+[05:18] inimino: hehe
+[05:19] sudocarl: inimino, so for simple authentication would putting in a user_id field into the session.data dict when the user is logged in work?
+[05:19] sudocarl: I mean it will work but are there any pitfalls of such a thing?
+[05:19] inimino: sudocarl: yeah
+[05:20] inimino: well, there all the usual session issues, MITM attacks, etc... hopefully you are not doing an online banking app
+[05:20] inimino: but yeah, that should work
+[05:21] sudocarl: lol
+[05:21] sudocarl: no
+[05:21] sudocarl: thanks :)
+[05:21] inimino: :)
+[05:22] sudocarl: what are the various options?
+[05:23] Micheil: inimino: hmm, nice stuff
+[05:23] inimino: thanks
+[05:24] Micheil: inimino: this might come in handy when I work on the MVC framework I'm thinking of writing
+[05:26] inimino: cool, let me know if you use it
+[05:26] inimino: ACTION wants bug reports
+[05:26] Micheil: inimino: I don't suppose it's on github is it?
+[05:27] sudocarl: inimino, what are the options it supports?
+[05:27] inimino: Micheil: no, but it's just in the one file
+[05:27] Micheil: inimino: the only first thing I notice is that the code could be tidier
+[05:27] inimino: sudocarl: I need to write those up... I'll put a list in a file somewhere
+[05:28] Micheil: inimino: the pure reason I said that was to see if there was any version control / attached bug tracker
+[05:28] sudocarl: inimino, thanks :)
+[05:29] inimino: Micheil: there's version control, but it's only partly finished and doesn't have a nice UI :)
+[05:29] Micheil: inimino: uh, right ;P
+[05:30] sudocarl: inimino, are you referring to your revision-store?
+[05:30] sudocarl: :D
+[05:30] inimino: see the discussion with elliottcable above ;)
+[05:30] inimino: yes
+[05:30] sudocarl: yea I was watching that :)
+[05:31] Micheil: hmm.. I always thought that semi-colons as an ending to a statement was either good practice or required in javascript?
+[05:31] sudocarl: not required, and good practice is debatable
+[05:31] sudocarl: :)
+[05:32] Micheil: sudocarl: I know jslint has a fit over it
+[05:32] Micheil: sudocarl: I'd also argue that it makes the code more readable
+[05:32] inimino: opinions vary
+[05:32] inimino: JSLint and I disagree on a lot of things ;)
+[05:32] Micheil: inimino: hmm.. fair enough
+[05:33] sudocarl: Micheil, I think I agree about the readable but just because I am more used to it
+[05:33] inimino: there are a few cases where the ASI rules make the language more complicated, but you need to be aware of those whether you use semicolons or not
+[05:33] Micheil: inimino: I think the code could be a lot cleaner.. 
+[05:34] inimino: Micheil: you mean formatting or something else?
+[05:35] Micheil: inimino: both, formatting wise, it could be clearer, and structure wise as well..
+[05:35] Micheil: I'm just going to try something out, bbiab
+[05:35] inimino: k
+[05:43] Micheil: inimino: I think the way the you've coded it makes it slightly hard to follow.. but I'll work it out
+[05:44] inimino: Micheil: ok
+[05:57] inimino: sudocarl: the options are now documented: http://boshi.inimino.org/3box/sessions/API
+[05:58] sudocarl: thanks for that :D
+[05:58] inimino: :)
+[06:04] kriskowal has joined the channel
+[06:25] sudoer has joined the channel
+[06:54] cmlenz has joined the channel
+[07:04] hassox has joined the channel
+[07:27] sudoer has joined the channel
+[07:38] sudocarl: inimino, why inimino?
+[07:38] sudocarl: does it mean something?
+[07:50] jed has joined the channel
+[08:17] Micheil: inimino: hmm.. 
+[08:22] jed: hey, can anyone tell me if make needs to be run again if javascript modules like http.js are changed? 
+[08:22] Nailor: Using semicolons in javascript is strongly adviced
+[08:23] Nailor: (regarding your previous chatter)
+[08:23] sudocarl: jed: just make install
+[08:23] sudocarl: I think
+[08:24] jed: sudocarl: cool, i'll give that a try. thanks.
+[08:25] Nailor: Ecmascript specification does not explicitly require the semicolons but the way the parser should work in that case is rather funky. It tries to parse as many lines as it can before encountering a semicolon. If first n lines parse ok, but the n+1'th line does not, it inserts a virtual semicolon between lines n and n+1.
+[08:26] Nailor: So not using semicolons might create situations where ones code is not executed the way one meant it to be executed
+[08:26] sudocarl: Nailor, interesting...  I didn't know that
+[08:26] sudocarl: good to know :)
+[08:28] Nailor: I always use two "golden rules" when writing JS: 1. Always use var in front of variables and 2. always end lines with a semicolon :)
+[08:28] sudocarl: :) sounds about right
+[08:28] sudocarl: thats how I learned
+[08:28] Nailor: Of course, the semicolon can be safely omitted before }, else and while in do-while etc.
+[08:29] Micheil: Nailor: I've already run into that with the sessions handler
+[08:29] sudocarl: its where semicolons go to die
+[08:29] sudocarl: lol :) that came out harsh
+[08:29] Micheil: it's not yet of a status which I like, but this is my slight rewrite, 
+[08:29] Micheil: https://gist.github.com/1ca39540896c798b170f
+[08:30] sudocarl: holy smaks I can read it
+[08:30] Micheil: from about line 89 is what I'm striving for
+[08:31] sudocarl: looks good
+[08:32] Micheil: I've also changed the generation of the SID, to be a single for loop creating a string of 24 characters long
+[08:32] Micheil: (I think php and ruby both use 32, but I'm not sure.)
+[08:33] sudocarl: whats the reason for not using inimino's?
+[08:33] Micheil: I think I can do it better ;P
+[08:34] sudocarl: lol sounds like your a true programmer
+[08:34] Micheil: no, I just felt like rewriting it, because I'm like that.
+[08:34] sudocarl: it would be interesting to see if they both have the same # of bits of entropy
+[08:35] Micheil: they don't
+[08:35] sudocarl: I see...
+[08:36] Micheil: I'm not one for figuring out those sorts of equations, so if someone else wishes to, they can improve that.
+[08:36] sudocarl: I wish I knew enough about that stuff to be able to
+[08:36] sudocarl: but I don't
+[08:36] kriskowal has joined the channel
+[08:36] sudocarl: in other news, did you change the session api at all?
+[08:36] sudocarl: or does it function the same?
+[08:37] Micheil: sudocarl: not yet, but going to shortly
+[08:37] sudocarl: what are your changes?
+[08:38] sudocarl: er plans?
+[08:39] Micheil: sessions.create(...)
+[08:39] Micheil: for one
+[08:40] sudocarl: that would be nice
+[08:41] Micheil: can you do: exports = {};
+[08:41] Micheil: ?
+[08:41] sudocarl: uhh....
+[08:41] sudocarl: hm
+[08:41] sudocarl: I dunno maybe?
+[08:41] sudocarl: try it
+[08:41] sudocarl: :D
+[08:46] Micheil: just did, but due to the way that node works, it breaks
+[08:46] sudocarl: figures
+[08:51] kriskowal: Micheil it's not just node; the spec doesn't permit that to work.
+[08:51] Micheil: kriskowal: ah
+[08:51] kriskowal: the exports object has to be memoized before the module is instantiated so that it can be given to cyclic dependencies.  just like python
+[08:52] halorgium: http://github.com/halorgium/elasticnode <-- a port of elasticfox to node
+[08:52] halorgium: only a small piece currently
+[08:53] sudocarl: sweet
+[08:53] sudocarl: I wish I was using ec2 so I could check it out :)
+[08:53] erikcorry has joined the channel
+[08:56] erikcorry has joined the channel
+[08:57] halorgium: sudocarl: found a few probs in libxmljs which i can't fix :(
+[08:58] sudocarl: halorgium, that sucks
+[08:58] sudocarl: halorgium, what are they?
+[08:58] halorgium: Node.children seems to be busted
+[08:58] halorgium: segvs
+[08:58] halorgium: null pointer
+[08:59] halorgium: my C++ is even worse than sprsquishs ;)
+[08:59] sudocarl: that sucks
+[08:59] sudocarl: I can take a look in a bit
+[08:59] erikcorry has joined the channel
+[08:59] sudocarl: but my c++ isn't all that great either ~_~
+[09:00] Micheil: kriskowal: it'd be useful if one could do: exportsMultiple({...})
+[09:00] Micheil: as to keep all the exports in one place
+[09:01] kriskowal: yes.  there are a variety of basic libraries that'll let you do that.  underscore has a merge function, i think.  narwhal's util module has an "update" method
+[09:01] kriskowal: util.update(exports, {})
+[09:01] sudocarl: Micheil, do you mean you want to be able to create an object whos properties are exported into the module namespace?
+[09:02] Micheil: sudocarl: yep
+[09:02] sudocarl: or you could just write a copy routine
+[09:02] sudocarl: make a new object var myexports = {}
+[09:02] sudocarl: fill it
+[09:02] kriskowal: yeah, update is a graft-on copy
+[09:02] sudocarl: and then copy its properties onto the export object
+[09:02] sudocarl: or use a util to do that
+[09:03] erikcorry has joined the channel
+[09:05] Micheil: shit. functions work a lot better when you do: meth() instead of meth[]
+[09:06] sudocarl: :D
+[09:06] Micheil: I copied across a mixin function from another project, which had the meth[] error..
+[09:10] sudocarl: always a fun error
+[09:10] sudocarl: brb
+[09:26] mtotheikle has joined the channel
+[09:30] erikcorry has joined the channel
+[09:39] Micheil: inimino: any ideas on doing flash data?
+[09:46] sudocarl: back
+[09:47] sudocarl: Micheil, what do you mean?
+[09:47] sudocarl: just talking to flash?
+[09:47] sudocarl: you can use json
+[09:47] Micheil: sudocarl: no, flash data as in a piece of information that expires with the next request
+[09:47] sudocarl: ohh
+[09:47] sudocarl: V_V
+[09:47] sudocarl: lol
+[09:47] sudocarl: I would implement that in the application rather than the session?
+[09:48] Micheil: hmm.. why?
+[09:48] sudocarl: well I mean it would use the session for storage
+[09:48] sudocarl: but the logic would be in the app
+[09:48] Micheil: hmm.. I guess
+[09:48] sudocarl: or is it something that comes standard with sessions?
+[09:48] Micheil: I'm not sure
+[09:48] sudocarl: me either lol
+[09:49] sudocarl: perhaps a little session_save handler on thes sessions would work
+[09:49] sudocarl: so session.add_save_handler(my_handler)
+[09:49] sudocarl: and my handler would recieve the session and then return a modified session
+[09:49] sudocarl: you could implement a flash data handler there
+[09:50] sudocarl: and a corresponding session_load handler I suppose
+[09:50] sudocarl: that way the flash data could be added with an expiry flag and then loaded/cleared in the next request
+[09:54] Micheil: hmm.. I'm not sure what you mean.. although, I am new to a lot of the terminology used about here
+[09:54] sudocarl: I am writing up a gist of sorta what I am thinking
+[09:54] sudocarl: 1 sec
+[09:59] sudocarl: Micheil, http://gist.github.com/244870
+[09:59] sudocarl: something similar to that would work...
+[09:59] sudocarl: basically the addHandler method would register the handler obeject provided
+[10:00] sudocarl: and the save handler would be called on every session when it is saved
+[10:00] sudocarl: same for the load handler
+[10:00] sudocarl: then in order to set a flash you would set session.data['flash_data'] = your data
+[10:00] sudocarl: and then it would be available until the next save
+[10:00] sudocarl: ie the end of the next request
+[10:01] Micheil: and if no session is ever created.. then.. uh, problems
+[10:01] sudocarl: except you would get it by doing session.data.flash_data.data
+[10:01] sudocarl: what do you mean?
+[10:01] Micheil: actually.. I'm wondering if I'm looking at this from the wrong perspective
+[10:02] Micheil: if we're loading up the session library, then surely we'll want to create a session.. so auto init the session
+[10:02] Micheil: so maybe making it a singletom
+[10:02] Micheil: *ton
+[10:02] sudocarl: the session object?
+[10:03] sudocarl: or the session manager?
+[10:03] Micheil: I'm not sure.
+[10:03] sudocarl: well you can't make the session a singleton
+[10:03] sudocarl: because its only loaded when node loads
+[10:03] sudocarl: so there would be one shared session between all users
+[10:03] sudocarl: the session manager is already a singleton
+[10:04] Micheil: yeah, true
+[10:35] erikcorry has joined the channel
+[10:37] erikcorry has joined the channel
+[11:17] malkomalko has joined the channel
+[11:18] Micheil: man.. this is annoying, the session ending is about 4 ms off.
+[11:18] sudocarl: ?
+[11:20] Micheil: 1259493553262	Created Session: 	AkEcI4cwEg04wIAcw4wwYk44	Ends At: 1259493558261
+[11:20] Micheil: 1259493553262	Changed Session:	AkEcI4cwEg04wIAcw4wwYk44	Ends At: 1259493558261
+[11:20] Micheil: 1259493558265	Ended Session:		AkEcI4cwEg04wIAcw4wwYk44
+[11:20] sudocarl: odd
+[11:20] Micheil: the first value is the current time
+[11:20] Micheil: I think the 4ms is just javascript's latency
+[11:21] sudocarl: probably
+[11:22] Micheil: also.. 4ms isn't that much
+[11:22] sudocarl: no its not too bad
+[11:22] sudocarl: :)
+[11:34] Micheil: sudocarl: I'm just trying to figure out how to implement callbacks now..
+[11:34] sudocarl: using promises?
+[11:35] Micheil: no, process.EventEmitter
+[11:35] Micheil: probably
+[11:43] Micheil: okay, I've now got a destroy event for Session object's
+[11:43] Micheil: I wish I could watch for changes to the session.data object
+[11:44] sudocarl: yea that would be nice :)
+[11:47] Micheil: https://developer.mozilla.org/en/Core_JavaScript_1.5_Reference/Global_Objects/Object/watch
+[11:47] Micheil: it's non-standard, but it exists
+[11:52] Micheil: sudocarl: in that case, do you think I should make session data changes have to pass through a method?
+[11:52] Micheil: eg: Session.data(...);
+[11:52] sudocarl: I suppose that would work...
+[11:52] sudocarl: well..
+[11:52] sudocarl: hmm
+[11:53] Micheil: and also use Session.data(); => returns the data
+[11:53] sudocarl: Session.data(key, value);
+[11:53] Micheil: hmm..
+[11:53] sudocarl: or
+[11:53] sudocarl: Session.set(key, value);
+[11:53] sudocarl: Session.get(key);
+[11:54] Micheil: I'd rather use data, because it makes for a more setter/getter API
+[11:54] sudocarl: I like that format the best
+[11:54] Micheil: I think
+[11:54] sudocarl: wait so would you pass in the entire data object?
+[11:54] Micheil: actually..
+[11:54] Micheil: yeah, Session.set(key, value) works
+[11:54] sudocarl: ok
+[11:54] Micheil: because a session's data is currently a key/value store
+[11:54] sudocarl: and these are on instances of Session not the super object right?
+[11:55] Micheil: Session is the instance
+[11:55] sudocarl: kk
+[11:56] Micheil: when you create a session, you get back a Session object
+[12:12] emyller has joined the channel
+[12:24] Micheil: I absolutely love it when you do something slightly wrong, and things bugger up
+[12:37] Micheil: sudocarl: https://gist.github.com/1ca39540896c798b170f
+[12:37] Micheil: I think I need to rethink how the sessions actually work though
+[12:37] sudocarl: hmm nifty
+[12:37] Micheil: and actually have it so that there's a SessionManager and a Session
+[12:37] Micheil: and you bind the events to the SessionManager
+[12:37] Micheil: or something like that
+[12:41] sudocarl: well that looks pretty solid
+[12:42] sudocarl: how much of that is done?
+[12:42] Micheil: of what is done?
+[12:43] sudocarl: what you linked
+[12:43] sudocarl: ie does it work?
+[12:43] Micheil: yeah
+[12:43] Micheil: it works, one sec, just tidying it up a little
+[12:46] Micheil: updated it
+[12:46] sudocarl: well I got to go to bed cause its 4:45am over here and I am tired.  :)  Can you put your sessions fw on github and then send me a msg?
+[12:46] sudocarl: or just link me now?
+[12:47] Micheil: sudocarl: sure, on sec, I'll just create a repo for it
+[12:47] sudocarl: kk thanks
+[12:49] pdelgallego has joined the channel
+[12:52] Micheil: http://github.com/Miksago/Node.js-Sessions
+[12:52] sudocarl: thanks
+[12:52] sudocarl: ill implement it into my project tomorrow morning and fork it as well
+[12:52] sudocarl: cheers
+[12:55] Micheil: sudocarl: I'm still to make that manager stuff, so consider it as stable, but due to change
+[12:55] sudocarl: fair enough :)
+[12:56] Micheil: like, don't go implementing heaps of stuff based off it for a while
+[12:57] sudocarl: anyways
+[12:57] sudocarl: night
+[13:09] Micheil: hmm.. I might use sha1 hashes for the session id's..
+[14:29] emyller has joined the channel
+[14:54] jed_ has joined the channel
+[15:16] crux has joined the channel
+[15:18] frodenius: !log
+[15:23] olivvv has joined the channel
+[15:29] Biscuits has joined the channel
+[16:10] jan____: 48/65 Redis commands now supported by Awesome: http://jan.io/xwVg — Getting there. Who wants to write SORT for me?
+[17:09] dks has joined the channel
+[17:13] erikcorry has joined the channel
+[17:17] sudoer has joined the channel
+[17:39] the_undefined has joined the channel
+[17:54] Biscuits: Hmmm, what editor are you guys using for your node development ?
+[17:54] Biscuits: I've tried both UltraEdit and Eclipse
+[17:54] Biscuits: UltraEdit works great, but I'm not quite happy with the completion/suggestion stuff
+[17:54] Biscuits: and Eclipse seems to have a shitload of features, but constantly throws error messages
+[17:54] Nailor: Aahhh, editor wars inbound!
+[17:55] Nailor: Emacs, of course.
+[17:55] Biscuits: :/
+[17:55] Nailor: ;)
+[17:55] Biscuits: Heh
+[17:55] Biscuits: Also, all google searches for javascript editors come up with HTML editors :p
+[18:01] softdrink has joined the channel
+[18:01] Connorhd_ has joined the channel
+[18:02] cloudhead has joined the channel
+[18:02] inimino: Nailor: and those situations can also arise even if you use semicolons
+[18:02] jan____: Textmate / emacs
+[18:03] Nailor: inimino: true
+[18:12] inimino: ACTION reads Micheil_away's changes
+[18:16] sprsquish has joined the channel
+[18:17] inimino: Micheil_away: ping
+[18:39] the_undefined_ has joined the channel
+[18:46] soveran has joined the channel
+[19:03] Biscuits: Just to ensure I'm not doing double work here
+[19:03] Biscuits: Has anyone ever attempted to implement the entire DOM Level 3 Core in JS ?
+[19:03] Biscuits: http://www.w3.org/TR/DOM-Level-3-Core/core.html
+[19:04] sprsquish: Biscuits: there's been some chatter about it on the mailing list
+[19:06] Biscuits: I'm at 20 or so % :/
+[19:07] Biscuits: already got a really simple XML
+[19:07] Biscuits: err
+[19:07] Biscuits: XML Parser to rig up to it once it's done
+[19:07] sprsquish: I don't think anyone's actually started implementing it. 
+[19:07] sprsquish: oh nice.. 
+[19:07] sprsquish: I've been building out binding to libxml2
+[19:07] ashb: there's a DOM module somewhere for node
+[19:07] ashb: but it doesn't have a complain DOM api
+[19:08] ashb: it has things likfe prefix() as a method instead of as a getter
+[19:08] Biscuits: Hmmm
+[19:08] Biscuits: Meh, prolly worth it just to finish this :)
+[19:08] sprsquish: Biscuits: http://github.com/sprsquish/libxmljs if you think that'll help you at all
+[19:08] ashb: v8 supports __defineGetter__ doesn't it?
+[19:09] Biscuits: btw, squish, why build libxml bindings when XML parsing is something that JS should be able to do by itself ?
+[19:09] Biscuits: Yup
+[19:09] sprsquish: how is it able to do xml parsing?
+[19:10] Biscuits: It's got loads of string matching stuff built in ?
+[19:10] Biscuits: I think it took me about half an hour to build a quick XML parser
+[19:10] Biscuits: Maybe later a few more to make it more compliant
+[19:10] sprsquish: string matching isn't proper parsing though. libxml2 has methods for parsing and searching XML and HTML
+[19:10] ashb: Biscuits: any namespace support? :)
+[19:11] Biscuits: Not yet, but once I finish this DOM implementation shouldn't be too hard
+[19:12] Biscuits: btw, on http://www.w3.org/TR/DOM-Level-3-Core/core.html
+[19:12] Biscuits: the NameList for example
+[19:12] Biscuits: Should it just be a class extending Array
+[19:12] Biscuits: or should it internally have an array and not expose any of the array methods ?
+[19:16] ashb: do you have any unit tests?
+[19:16] Biscuits: Not really :/
+[19:16] ashb: i looked at the W3C ones, but they are more than a little crack fuelled
+[19:17] Biscuits: ?
+[19:17] ashb: http://www.w3.org/DOM/Test/
+[19:17] inimino: Biscuits: if you've never written a compliant XML parser, it's /much/ harder than you'd expect
+[19:18] inimino: I recommend sticking with a binding to a C library that's already done all that work
+[19:18] ashb: thats what i went with
+[19:18] Biscuits: well, either way, even with a third-party XML library it should come in handy to have a full DOM Level 3 implementation :/
+[19:18] ashb: actually i went with a C++ library that wrapps libxml/expat/xerces
+[19:19] inimino: yeah, DOM 3 will be very nice to have :)
+[19:19] Biscuits: To be honest, I'd rather have as little module dependency as possible. If I ever want to run my programs on another box, I'd like to keep the need to recompile stuff to a minimum
+[19:19] ashb: hmmm, actually it might be possible to produce an XSLT file that produces more sane tests rather than the crack jsunit that the w3c DOM Test code does by default
+[19:20] ashb: http://dev.w3.org/cvsweb/2001/DOM-Test-Suite/tests/level2/core/prefix11.xml?rev=1.5&content-type=text/x-cvsweb-markup
+[19:20] ashb: si the .java and .js files are produced from that
+[19:20] inimino: hm, XSLT emitting JavaScript sounds fun
+[19:21] ashb: yeah. anyone fancy working with me to get something like the CommonJS test format out of that?
+[19:21] inimino: heh
+[19:22] sudoer has joined the channel
+[19:22] ashb: inimino: how's the parser coming btw?
+[19:22] inimino: DOM serialized as XML, I thought that was more of a joke than something someone would actually do
+[19:22] inimino: s/DOM/DOM calls/
+[19:23] inimino: ashb: haven't done anything more yet, wrote some sessions stuff and got some other stuff to do today
+[19:23] ashb: cool.
+[19:23] ashb: i might re-write pdoc using it sooner rather than later
+[19:23] ashb: since i need to make some tweaks anyway as pdoc doesn't really understand the concept of modules
+[19:23] inimino: sweet
+[19:23] inimino: next thing I'll do is put up my ES5 grammar with generated code and do some benchmarks parsing JavaScript libraries with it
+[19:24] ashb: & bbaib. trying to install snow leopard
+[19:30] sudoer has joined the channel
+[19:33] mtotheikle has joined the channel
+[19:59] halorgium: yo, i've been looking at some of the web frameworks
+[19:59] halorgium: coltrane looks a little old school and unmaintained
+[20:00] halorgium: vroom looks synchronous
+[20:00] halorgium: express looks like that too
+[20:01] halorgium: simplex too :/
+[20:01] halorgium: node-router looks the closest
+[20:02] halorgium: am i wrong in my observations about ^^?
+[20:07] inimino: ACTION hasn't looked at any of them
+[20:11] tlockney has joined the channel
+[20:13] jtoy has joined the channel
+[20:15] softdrink has joined the channel
+[20:20] sudocarl has joined the channel
+[20:24] sudoer has joined the channel
+[20:34] sudocarl: halorgium, ping
+[20:37] halorgium: sudocarl: pong
+[20:37] sudocarl: hey just sent you a msg regarding node frameworks
+[20:43] sudoer has joined the channel
+[20:52] inimino: sudocarl: about that session stuff, what do you think about get() and set()?
+[20:52] sudocarl: I was the one who suggested it
+[20:52] sudocarl: basically it allows the session framework to add events when data is changed
+[20:53] sudocarl: what do you think about it?
+[20:54] inimino: sudocarl: I don't know, I considered it but couldn't think of a use case
+[20:54] inimino: sudocarl: what would you use the events for?
+[20:54] inimino: I'll add it if there's a compelling justification
+[20:54] sudocarl: fair enough
+[20:55] sudocarl: lets see...
+[20:55] sudocarl: I think that it was a semi result from a discussion regarding flash data
+[20:55] sudocarl: we were trying to decide if the session framework should implement flash data or a generic system which could handle other data modifiers
+[20:56] sudocarl: we went with the generic system
+[20:56] sudocarl: so you could attach a data change event listener and hopefully a data save event listener to implement some flash data
+[20:56] inimino: flash data?
+[20:56] sudocarl: data that expires on the next request
+[20:57] jed has joined the channel
+[20:57] inimino: hm
+[20:58] inimino: so you have some data that is created on one request, and then used on the next request, and then deleted?
+[20:58] sudocarl: yea
+[20:59] inimino: ACTION has never heard of "flash data" before
+[20:59] inimino: ok
+[21:00] inimino: so you could just say session.data.myTransientObject = { ... }; on the first request
+[21:01] inimino: and then on the second request, if (session.data.myTransientObject) { /* do something with it */ ; delete session.data.myTransientObject }
+[21:01] inimino: sudocarl: is that sufficient?
+[21:03] inimino: sudocarl: or maybe a better question, can you show an example of how a change notification event would be used?
+[21:04] sudocarl: 1 sec I am trying to wrap my head about all this
+[21:04] inimino: k
+[21:05] inimino: sample code snippets would be great :)
+[21:06] sudocarl: so a example flash_data change notification event?
+[21:06] inimino: yeah
+[21:06] sudocarl: kk 1 sec
+[21:07] inimino: well, I think just having .data be a plain object is more direct and obvious
+[21:07] inimino: I'm trying to find an example of something that would require the .get() and .set() API
+[21:07] sudocarl: thats fair
+[21:07] sudocarl: well the flash data
+[21:07] sudocarl: here is an overview
+[21:07] erikcorry: Just a note on the example above.
+[21:07] sudocarl: http://www.symfony-project.org/book/1_0/06-Inside-the-Controller-Layer#chapter_06_sub_flash_attributes
+[21:07] erikcorry: Never use delete if you can just assign undefined to it.
+[21:07] inimino: erikcorry: why not?
+[21:07] erikcorry: delete will move your object to slow-case
+[21:08] erikcorry: No hidden class for that object.
+[21:08] erikcorry: Because the property is gone.
+[21:08] erikcorry: So it's a new 'class' that doesn't have that property.
+[21:08] inimino: erikcorry: is this a v8 thing?
+[21:08] erikcorry: Yeah.
+[21:08] inimino: it doesn't create new hidden classes when properties are deleted?
+[21:09] erikcorry: Nope.
+[21:09] inimino: hm, ok
+[21:09] erikcorry: If you delete properties then we assume you are treating the object as a hash map and not a regular object.
+[21:09] erikcorry: When you add properties the object transitions to a new class.
+[21:09] inimino: ok
+[21:09] erikcorry: But transition graph is directed.
+[21:09] erikcorry: No loops.
+[21:10] inimino: ah
+[21:10] erikcorry: So deleting doesn't get you back to the class you had before you added the property.
+[21:10] inimino: right
+[21:10] sudocarl: inimino, ok nvm...  I had something written up last night but I really can't think of any other use case for session handlers other than flash data...  I would be happy to add flash-data functionality to the session module, but it doesn't need a more generic event system
+[21:10] inimino: ACTION tends to use delete more than average
+[21:11] erikcorry: Well if you don't want it to show up in for..in you have to delete.
+[21:11] erikcorry: Otherwise assigning it to undefined is very similar.
+[21:11] inimino: sudocarl: ok, I'm looking over that article anyway
+[21:11] inimino: right
+[21:12] inimino: in the case above assigning undefined would have been fine
+[21:13] inimino: (and the .data object is basically being used as a hash map so I guess the heuristic works)
+[21:14] inimino: erikcorry: thanks for the tip
+[21:16] inimino: sudocarl: hm, I guess I can see some uses for that
+[21:16] softdrink has joined the channel
+[21:16] sudocarl: yea the post-redirect is the biggest use case for flash data
+[21:16] Nailor: erikcorry: so, technically using delete would eventually lead to a situation, where the process would run out of map space?
+[21:17] inimino: .oO(map space?)
+[21:17] inimino: is that another v8 internals term?
+[21:18] erikcorry: There's a bug right now where you can run out of map space.
+[21:18] inimino: sudocarl: there could be a session.set() method which could allow options like {transient:true} or something
+[21:18] erikcorry: I don't think that's anything fundamental.
+[21:19] erikcorry: The 'hidden classes' are called maps in the source code.
+[21:19] sudocarl: inimino, that would be an acceptable option
+[21:19] erikcorry: They have their own space in the heap.
+[21:19] erikcorry: Due to arcane details in the way the compacting GC works there's a max size for that space.
+[21:19] sudocarl: inimino, so users could either manipulate the data hash-table directly or use session.set()
+[21:19] inimino: sudocarl: I guess it's a question of whether the API really benefits from adding that complexity just to save someone from having to delete a property on the next request
+[21:19] sudocarl: lol
+[21:20] inimino: sudocarl: yes, and there could even be changed events, but they'd only fire when the .set() method was used
+[21:20] inimino: ACTION isn't sure all this is really a win
+[21:21] sudocarl: inimino, I think that might not be nessairy
+[21:21] inimino: k
+[21:21] sudocarl: inimino, I can't think of a use case for change events other than flash data
+[21:21] sudocarl: inimino, but the transient option would be perfect for that
+[21:21] Nailor: I think a proper way would be emitting an event when a session data is accessed/changed, but then we would need a way to watch the object for changes
+[21:21] inimino: ok
+[21:21] Nailor: And that's not easy, I guess :p
+[21:22] Nailor: IMO the idea of implementing the flash data support seems a bit too specific
+[21:22] inimino: Nailor: well the way to do that would be to require use of get() and set() methods
+[21:23] Nailor: inimino: ...and that sucks :P
+[21:23] inimino: I agree
+[21:23] sudocarl: but the optional use of get and set would be perfect to add an options hash to modify the data
+[21:23] inimino: but I'm willing to do it if people prefer that API
+[21:23] inimino: and have some compelling need for the notification events
+[21:23] inimino: but AFAICS, the only way the session data is going to change is if you change it... and then you should just do whatever you need to do at that time
+[21:24] inimino: I don't like mystical hidden side effecting APIs
+[21:24] Nailor: sudocarl: but then there would be two ways doing practically the same thing. It's confusing and could lead to problems, if a flash data would be accessed without the getter/setter
+[21:24] sudocarl: thats true
+[21:25] sudocarl: ok well if we want to stick with just the data hash I am happy with that
+[21:25] sudocarl: I think a much more pressing issue is writethrough (to a database or flat file)
+[21:25] Nailor: imo there should be only one way to do things and it should be the 'natural' one, ie. the direct access to object in case of javascript.
+[21:25] inimino: ok, good enough for now
+[21:26] sudocarl: if we keep all the sessionID's in memory that could turn into a resource hog
+[21:26] Nailor: If the V8/Node supported propagating events on a access/change, the flash data could be easily done by using event hooks
+[21:26] inimino: sudocarl: yes, serialization is next
+[21:26] inimino: yes
+[21:26] sudocarl: cool
+[21:26] inimino: catchall getters and setters
+[21:27] Nailor: But with current setup, providing a built-in flash data support is imo a bit too hacky and specific
+[21:27] inimino: but v8 doesn't have them and they're not in the spec, so... ;)
+[21:27] Nailor: yeah
+[21:27] Nailor: And it's not that difficult to do a nice wrapper function to handle flash session data in some hacky way in the client app
+[21:27] inimino: agreed
+[21:28] inimino: I think that's the better solution anyway
+[21:29] jan____: anybody up for helping me getting all Redis commands into Awesome?
+[21:30] Nailor: The name awesome reminds me of the window manager with the same name =p
+[21:30] erikcorry: Reminds me of awesomium
+[21:31] jan____: http://github.com/janl/awesome/
+[21:31] Micheil_away: inimino: pong
+[21:32] inimino: Micheil: ah, was just looking over your changes
+[21:33] inimino: ah, right
+[21:33] Micheil: inimino: cool, do you have a github account? I could add you as a contributor
+[21:33] inimino: Micheil: I was curious about the random string function, I saw that you changed it
+[21:34] inimino: I have a github account, yeah
+[21:34] Micheil: inimino: I didn't see the need for the extra loop
+[21:34] inimino: though I don't use it
+[21:34] Micheil: feel free to fork and improve that random string function
+[21:34] Micheil: I'm going to be moving it towards a more SessionManager/Sessions model
+[21:34] inimino: Micheil: it's for efficiency, and it likely has better cryptographic properties, not that that matters terribly much here
+[21:35] jtoy has joined the channel
+[21:36] Micheil: so, SessionManager = new SessionManager(opts);
+[21:36] Micheil: session = SessionManager.findOrCreateSession(req);
+[21:36] Micheil: I'm also making the SessionManager able to store the sessions somewhere, eg, as json in a file or on a dbms
+[21:36] inimino: Micheil: so, just creating another object instead of using the module itself to serve that purpose?
+[21:37] Micheil: yeah
+[21:37] Micheil: SessionManager.create would return a new Session object
+[21:37] inimino: what's the benefit of the extra object?
+[21:38] Micheil: it also makes for better callbacks and the like:
+[21:38] Micheil: SessionManager.addListener("destroy", function(){puts('Session Destroyed');});
+[21:38] inimino: hm, that could be nice
+[21:38] Micheil: and then the SessionManager stores the sessions in something like SessionManager._sessions
+[21:39] inimino: I'd rather not have the session store object be directly available at all
+[21:39] inimino: I think I added something like that because JimBastard wanted it for his debugger, though
+[21:40] inimino: ah, also, I think you introduced a logic error on line 69
+[21:40] Micheil: well, the reason for the _ is the implied private
+[21:40] inimino: that loop is intended to find the next session that is supposed to expire
+[21:40] Micheil: as there's no such thing as private variables
+[21:41] inimino: Micheil: yeah, but as it is right now, it actually *is* private, since it only exists in the module
+[21:41] Micheil: hmm?
+[21:41] sudocarl: Micheil, http://www.crockford.com/javascript/private.html
+[21:41] Micheil: well, it doesn't really matter.
+[21:41] Micheil: I haven't written this functionality, that's just how I figure it would work
+[21:41] inimino: (except that it's there on the exports object for JimBastard)
+[21:41] inimino: about the bug, that loop is intended to find the next session that is supposed to expire
+[21:42] Micheil: if JimBastard really wants to access an implied private variable, that'd be their problem, afaics
+[21:42] Micheil: which bug?
+[21:42] inimino: if you pull the subtraction into the loop and omit the extra variable, it doesn't do that anymore
+[21:42] inimino: well, agreed
+[21:43] inimino: the one I was talking about on line 69
+[21:43] Micheil: inimino: umm,  not sure what you mean, could you add a bug onto  the github project? http://github.com/Miksago/Node.js-Sessions/issues
+[21:43] Micheil: I've gotta go. bye folks
+[21:43] inimino: I think node debuggers are going to need some better way to reach in and access private variables
+[21:45] sudocarl: inimino, I have a question about eventemitters
+[21:45] sudocarl: is emit async?
+[21:45] inimino: shoot
+[21:45] inimino: yes
+[21:45] inimino: it queues an event, which fires after the current code finishes running
+[21:46] sudocarl: ah
+[21:46] sudocarl: thanks
+[21:46] inimino: like setInterval(0)
+[21:49] inimino: sudocarl: erm, hang on a moment
+[21:50] sudocarl: ?
+[21:51] inimino: I think I spoke too soon
+[21:55] inimino: sudocarl: yeah, sorry, emit() just calls the event handlers immediately
+[21:55] sudocarl: oh really?
+[21:55] sudocarl: interesting :) thanks
+[21:55] inimino: sudocarl: if you need it to be asynchronous (e.g. because the listeners haven't been added yet by the caller) then you can use setTimeout
+[21:55] inimino: (which is what I meant above where I wrote setInterval...)
+[21:56] sudocarl: ah
+[21:56] inimino: ACTION is off for some lunch
+[21:57] cloudhead has joined the channel
+[22:15] kriskowal has joined the channel
+[22:21] softdrink has joined the channel
+[23:14] jed has joined the channel
+[23:16] hassox has joined the channel
+[23:28] sudocarl: inimino, is there a public git repo for your session framework?
+[23:28] inimino: sudocarl: not yet, I'll probably import it into git so that people can do git pull
+[23:29] sudocarl: that would be useful, can you let me know when you do it
+[23:29] sudocarl: ?
+[23:29] sudocarl: I wouldn't mind being able to fork it on github either
+[23:29] inimino: sure
+[23:29] inimino: probably you can do that with just a git uri?
+[23:30] sudocarl: uhh I suppose so
+[23:30] inimino: k
+[23:30] inimino: probably tomorrow
+[23:37] sudocarl: kk thanks
+[23:54] LordMetroid has joined the channel
+[23:54] LordMetroid: Ohh hello there, I am a newly interested web application developer
+[23:55] Connorhd_: hi
+[23:55] sudocarl: hello :)
+[23:56] isaacs has joined the channel
+[23:56] LordMetroid: How viable is node.js it seems the benchmarks on the website are measuring in the magnitude of seconds?
+[23:58] LordMetroid: I should download it and start hacking away
+[23:58] sudocarl: I would advise that
+[23:58] sudocarl: I have found that it is quite fast for my small project
+[23:58] sudocarl: I would go into more detail but I am just now running out the door
+[23:59] sudocarl: look around at some of the modules which extend/run on node on github and you might get a better idea of its speed
+[23:59] sudocarl: cheers

@@ -1,0 +1,1418 @@
+[00:10] aurynn: hm.
+[00:10] aurynn: Okay.
+[00:18] aurynn: This is *hard*
+[00:19] mattly has joined the channel
+[00:25] aurynn: should it be
+[00:25] aurynn: stmt.execute(args).addCallback()
+[00:25] aurynn: or .execute(args, callback) ?
+[00:29] sudocarl has joined the channel
+[00:34] jtaby has joined the channel
+[00:35] mcarter has joined the channel
+[00:36] sveimac has joined the channel
+[00:47] hassox has joined the channel
+[00:48] jtaby_ has joined the channel
+[00:54] inimino: aurynn: I would probably prefer the latter, but the former may be more similar to other node APIs
+[00:54] aurynn: Yeah.
+[00:54] inimino: of course, some node APIs take callbacks, so...
+[00:55] sudocarl: aurynn, I am sorta going with internal functions = function f(args..., callback) and external functions = function f(args...).addCallback(blah);
+[01:02] aurynn: sudocarl, I've been using promises internally for some things
+[01:02] aurynn: My current build is much, much different..
+[01:02] sudocarl: lol
+[01:02] sudocarl: cool
+[01:07] Pilate has joined the channel
+[01:23] aurynn: Got a PrepareComplete. Yes!
+[01:29] JimBastard has joined the channel
+[01:34] trevor: Why am I getting an error with http://paste.lisp.org/display/92006
+[01:34] trevor: tempCtor.prototype = superCtor.prototype;
+[01:34] trevor: It says superCtor is undefined
+[01:34] trevor: But tcp.Server does exist
+[01:36] trevor: hmm, tcp.Server /is/ undefined
+[01:37] trevor: I see, I have to access tcp.Server through process.tcp.Server
+[01:38] shfx has joined the channel
+[01:38] trevor: Guess I need to read that code, the docs aren't quite on top of everything
+[01:38] inimino: process is no longer the global object
+[01:39] trevor: Well the docs say the object is tcp.Server, sort of implying that require('tcp').Server should work
+[01:39] trevor: Thats the implication I got anyways
+[01:40] trevor: Looks like I need to do process.tcp.Server
+[01:40] trevor: lib/tcp.js only exports a couple helper functions
+[01:53] aurynn: Poor, foolish Orcs.
+[01:54] sudocarl: lulz aurynn
+[01:54] aurynn: I'm watching Two Towers
+[01:54] sudocarl: haha now it all makes sense
+[01:54] sudocarl: good movie :)
+[01:54] aurynn: and the Ents just came and did a number on Isengard
+[01:54] sudocarl: ACTION waves flags for the ents "GOOOO ENTS!"
+[01:55] aurynn: I have my prepared query working
+[01:55] sudocarl: yayz
+[01:55] aurynn: Sort of
+[01:55] sudocarl: brb
+[01:56] sudocarl: back
+[01:56] trevor: Anyone know why http://paste.lisp.org/display/92011 doesn't work?
+[01:56] trevor: Am I misunderstanding sys.inherits?
+[01:57] trevor: I get an illegal invocation on s.listen
+[01:57] trevor: btw, the code works if I replace s=new Server() with s=new process.tcp.Server()
+[01:57] eddanger has joined the channel
+[01:58] Connorhd: what is process.tcp.Server?
+[01:58] trevor: Basically I want to inherit from process.tcp.Server, but I'm having problems
+[01:58] trevor: Connorhd: Its what you get back when you call tcp.createServer
+[01:59] Connorhd: why is it in process?
+[01:59] Connorhd: do you not want var tcp = require("tcp"); ?
+[01:59] trevor: You're asking the wrong guy, I've been playing with node.js for like an hour
+[01:59] elliottcable: Is fictorial ever in here? /-:
+[01:59] aurynn: I've not worked much with tcp.js, I'm hacking on a library
+[02:00] trevor: And no, I want to inherit from node.js's tcp Server
+[02:00] trevor: aurynn: I am trying to create a websocket library
+[02:00] trevor: I would like to inherit from the existing tcp server
+[02:00] Connorhd: oh, ok, sorry trevor I assumed the tcp server was defined in the tcp module
+[02:01] Connorhd: have you looked at the other websocket libraries?
+[02:01] trevor: Connorhd: I did so at first as well
+[02:01] trevor: I have
+[02:01] trevor: I have looked at one, I didn't much like the implementation
+[02:03] elliottcable: urk
+[02:08] jtoy has joined the channel
+[02:12] RayMorgan has joined the channel
+[02:32] frodenius: elliottcable: he is, from time to time
+[02:43] elliottcable: frodenius: hrm
+[02:45] mattly has joined the channel
+[02:45] n8o has joined the channel
+[02:59] JoePeck_ has joined the channel
+[03:04] aurynn: Okay, why are you not shutting down
+[03:04] isaacs has joined the channel
+[03:13] Tautologistics has joined the channel
+[03:29] aurynn: Okay, what would prevent my script from exiting cleanly, and just hanging?
+[03:34] inimino: aurynn: an open TCP connection?  A pending timeout?  ...
+[03:36] aurynn: hm.
+[03:38] elliottcable: hahaha aurynn 
+[03:38] elliottcable: I had that happen, but it wasn’t actually hanging
+[03:38] elliottcable: aurynn: stupid error on my part, but you might want to check: Do you use `arguments.callee` inside a callback?
+[03:38] rbranson_: sleep(10000); ?
+[03:38] elliottcable: aurynn: I constantly forget that my callback scopes are just functions, and I don’t get arguments.callee and such inside them.
+[03:38] aurynn: rbranson_, I'm not sleeping
+[03:38] elliottcable: aurynn: or rather I do, but they point at the callback, so the callback is executing endlessly instead of properly recursing upwards on the chain
+[03:38] aurynn: but I am heavily abusing scopes
+[03:39] rbranson_: yeah I was being sarcastic :)
+[03:39] elliottcable: brbrb.
+[03:39] rbranson_: elliottcable: hmm, that seems like something that could be fixed in node
+[03:39] elliottcable: rbranson_: how do you mean?
+[03:39] isaacs: elliottcable: are you looking for arguments.callee.caller?
+[03:40] isaacs: arguments.callee is a reference to the function you're currently in
+[03:40] elliottcable: rbranson_: I did the proper/obvious thing, once I recognized it, and wrapped it into a `var me` that I could then access within callbacks.
+[03:40] elliottcable: isaacs: yes, that’s what I wanted.
+[03:40] rbranson_: makes sense
+[03:41] elliottcable: no biggie, I like it the way it is now. It’s certainly not something Node should change the behaviour of, it was just stupidity on my part d-:
+[03:42] aurynn: wtf
+[03:42] aurynn: I'm returning a Promise
+[03:44] aurynn: And that would be because I can't type
+[03:54] jtaby has joined the channel
+[04:01] sifi: how can I put a Object into GLOBAL space
+[04:02] aurynn: Why do  you want to do that?
+[04:02] JimBastard has joined the channel
+[04:03] sifi: I was hoping that I could keep a variable in global space so I don't have to require a file to access it
+[04:03] aurynn: Globals are generally a bad idea
+[04:03] JimBastard: unless its a global search and replace
+[04:03] JimBastard: hiyooo
+[04:12] trevor has joined the channel
+[04:15] sudoer has joined the channel
+[04:17] aurynn: Hmm
+[04:17] aurynn: Okay, why are you forgetting what I prepared?
+[04:22] elliottcable: hmmm
+[04:22] inimino: globals!
+[04:22] elliottcable: globals!
+[04:22] elliottcable: what!
+[04:22] elliottcable: EVIL
+[04:23] inimino: AWESOME
+[04:23] elliottcable: eww.
+[04:24] elliottcable: Douglas Crockford has got me thinking of federated namespacing system
+[04:24] inimino: GLOBAL.elliottcable="eww."
+[04:24] inimino: eww
+[04:25] inimino: namespacing more than one level deep is a solution in search of a problem
+[04:26] inimino: besides, we have modules, no?
+[04:27] elliottcable: *you* have modules
+[04:27] elliottcable: I ain’t touchin’ that shit with a ten foot stick d-:
+[04:27] inimino: elliottcable: wait, I thought you hated the idea of having to use "foo.bar" to access something?
+[04:27] inimino: well I just realized that you hate modules and yet you *like* Crockfordesque namespaces and I can only conclude that you are clinically insane
+[04:28] elliottcable: lol
+[04:28] elliottcable: Crockfordesque namespaces?
+[04:28] elliottcable: He hasn’t actually suggested any hard *code* solutions, that’s what I’m considering now
+[04:28] inimino: ACTION has elliottcable involuntarily committed
+[04:28] elliottcable: ACTION has been designing a language for a while, and the globals problem has always been, uh, a problem
+[04:28] inimino: yes, sum = YAHOO.Util.Foo.Bar.Baz.add(2, 2)
+[04:29] elliottcable: oh eww meh
+[04:29] elliottcable: that has nothing to do with Crockford, not with what I was talking about
+[04:29] inimino: pretty much every line of JavaScript that comes out of Yahoo has something to do with Crockford
+[04:29] elliottcable: I’m talking about a federated namespacing system. Scopes can access subscopes, but not superscopes; and you can obviously closure things into subscopes; but when you want to ship around packaged code, that’s not as much of an option
+[04:30] elliottcable: hence, federating namespacing
+[04:30] inimino: hm... I don't know what any of that means
+[04:38] inimino: "can access subscopes but not superscopes" sounds like the opposite of what I think of as a scope
+[04:48] inimino: ...got an example?
+[04:49] aurynn: hmm. So it seems that I'm not emitting a correct message.
+[04:59] bentomas has joined the channel
+[05:07] rictic: What's up with Promise.wait()?  It seems like such a strange thing to add to javascript, and it seems to cause errors unpredictably
+[05:10] rictic: (also, holy cow is node.js fast, I still can't get over just how fast it is)
+[05:11] inimino: rictic: it's not recommended that you use .wait()
+[05:12] rictic: yeah, and I'm totally on board with that
+[05:12] rictic: any idea why it exists?
+[05:12] inimino: rictic: I have never seen a reason to use it, but it's there as a convenience for rare uses (loading dependencies is one)
+[05:12] inimino: require() would be difficult without it
+[05:13] inimino: require() is implemented as
+[05:13] inimino: posix.cat(requiredFile).addCallback(function(code){eval(code)}).wait()
+[05:15] rictic: hm, I see your point
+[05:16] inimino: otherwise you'd have to write require(foo,function(){ /* rest of file goes here */ })
+[05:16] aurynn: which'd be strange.
+[05:16] aurynn: inimino, I nearly have prepared queries working
+[05:17] inimino: (or you'd have to do something more interesting in the runtime)
+[05:17] inimino: aurynn: cool
+[05:17] aurynn: This has been a brutal, brutal endeavour.
+[05:18] inimino: hehe
+[05:19] aurynn: Asynch database queries? Sure, that'll be easy!
+[05:19] aurynn: *grind, grind, die*
+[05:19] inimino: heh
+[05:19] inimino: getting into the async mode is an adjustment
+[05:20] aurynn: It is.
+[05:20] inimino: it's a continual process of thinking "oh I'll just call a function to do it" followed later by "Oh."
+[05:23] inimino: (because most of the functions you create to farm out work to end up having to do something asynchronous and then you have to turn everything inside out, or add promises everywhere, or something)
+[05:24] aurynn: Yeah.
+[05:24] aurynn: It's a bit nuts.
+[05:24] aurynn: My objects' internal state is becoming difficult to track :D
+[05:27] aurynn: "So this raises THIS event, and this toggles THIS state, and, and .. "
+[05:29] rictic: is there a standard technique for returning a promise which only fires once a variable number of child promises have fired?  (for example: return a promise after scanning every file in a directory recursively)
+[05:30] inimino: rictic: you generally just create a counter variable or something like that
+[05:30] inimino: rictic: but look around, there is a PromiseGroup implementation or two somewhere
+[05:31] rictic: ah ok, my counter variable implementation isn't crazy then
+[05:31] rictic: a PromiseGroup does sound useful though
+[05:32] inimino: yes, I have written that counter implementation probably five times already ;-)
+[05:32] inimino: (including before I ever used node)
+[05:48] RayMorgan has joined the channel
+[06:00] aurynn: Yes!
+[06:00] aurynn: my prepared statement worked!
+[06:01] inimino: :)
+[06:07] Micheil: woot!
+[06:07] Micheil: (moin all)
+[06:07] sudocarl: aurynn, nice job :)
+[06:08] rictic: aurynn: congrats
+[06:13] mahemoff has joined the channel
+[06:14] eddanger has joined the channel
+[06:15] aurynn: Booyeah.
+[06:15] aurynn: Got it.
+[06:16] jtaby has joined the channel
+[06:16] aurynn: Woo.
+[06:16] aurynn: It works!
+[06:18] aurynn: Well
+[06:18] aurynn: Partially
+[06:18] aurynn: It partially works!
+[06:19] sudocarl: does anyone know of a templating system for javascript with partials?
+[06:20] sudocarl: haml-js doesn't have them, nor mojo
+[06:20] cloudhead: sudocarl: did you look at mustache?
+[06:20] sudocarl: thats mojo
+[06:20] cloudhead: ah ok
+[06:22] cloudhead: sudocarl: but mustache supports partials
+[06:23] sudocarl: your talking about mustache by defunct?
+[06:23] cloudhead: yea
+[06:23] sudocarl: that one is written in ruby
+[06:23] cloudhead: was ported to js
+[06:23] sudocarl: the equivalent one is called mojo
+[06:23] cloudhead: http://github.com/janl/mustache.js/
+[06:23] sudocarl: oo didn't see that 
+[06:23] sudocarl: 1 sec
+[06:23] Micheil: man.. gmail's filters are shite.
+[06:23] JimBastard: mustache is good
+[06:23] sudocarl: I was talking about mojo by visionmedia
+[06:24] cloudhead: ah I see
+[06:24] sudocarl: which is essentially compiled mustache
+[06:24] cloudhead: yea I've never used that one
+[06:24] cloudhead: oh yes, it's written in C
+[06:24] sudocarl: oo this looks good
+[06:25] n8o has joined the channel
+[06:27] eric___ has joined the channel
+[06:27] sudocarl: hmm looks good...  however I think that the partials mechanism isn't really what I am looking for...  I really want a way to just specify another file in my templates and have it included...  I suppose I will just do it manually, thanks for the tips  though :)
+[06:28] cloudhead: yea, I'm not 100% happy with it, but it's a good base to work on
+[06:36] emyller: after another day filled with js and math, time to have a nap
+[06:36] emyller: 'nite, mates :)
+[06:37] sudocarl: emyller, nite :)
+[06:48] Micheil: hmm.. does Node.js have or need a podcast / blog?
+[06:48] Micheil: so as to announce new developments, releases, tutorials, etc?
+[06:51] frodenius: the ml!?
+[06:52] Micheil: I dunno..
+[06:52] micheil_ has joined the channel
+[06:52] Micheil: the ML is mainly discussion, not announcement
+[06:53] cloudhead: can someone explain to me how something like this can work, given Node is asynchronous? http://github.com/visionmedia/express/blob/master/lib/express/core.js#L247
+[06:54] cloudhead: wouldn't it be possible for a concurrent request to override that value before a previous request completes?
+[06:55] Micheil: umm... I think it works because it's an instance based thing.. one sec
+[06:55] Micheil: yeah
+[06:55] Micheil: it's a Class, which would be a function instance
+[06:55] cloudhead: ah
+[06:55] Micheil: that's my guess, anyway
+[06:55] cloudhead: but that's within the same instance no?
+[06:55] inimino: hm?
+[06:55] cloudhead: like, it doesn't seem to instantiate a new Router for every call
+[06:56] Micheil: I'm not sure
+[06:56] cloudhead: hmm
+[06:56] Micheil: try and test it
+[06:56] cloudhead: inimino, any insight?
+[06:57] cloudhead: yea, I'll have to test this out, but it doesn't seem right : /
+[06:58] inimino: I'm not sure I understand the question
+[06:58] inimino: but I don't know what this Class() business is all about, or how this is called
+[06:58] cloudhead: inimino: well, my first impression is that `this.request` will get overriden by a new request
+[06:58] cloudhead: while the previous request isn't finished yet
+[06:58] cloudhead: thus messing everything up
+[06:59] inimino: I doubt it
+[06:59] cloudhead: the server is created within the Class though
+[06:59] cloudhead: so it's all within the same instance it seems
+[06:59] cloudhead: inimino: how come?
+[07:00] cloudhead: the two requests will be sharing the same property no?
+[07:01] inimino: I would assume there is only one Server object, yes
+[07:01] cloudhead: so wouldn't several requests be sharing the same variable then?
+[07:01] inimino: perhaps routing is synchronous
+[07:02] cloudhead: in Node.js you mean?
+[07:02] Micheil: no
+[07:02] inimino: no I mean in this code
+[07:02] Micheil: in that framework
+[07:02] cloudhead: oh
+[07:02] cloudhead: hmm
+[07:02] inimino: it calls trigger() and Express.router.route()
+[07:03] inimino: if both of those are synchronous then this.request will be the same while all that code runs
+[07:04] cloudhead: aha yes
+[07:04] cloudhead: that would make sense
+[07:06] Micheil: you'd want express to be bloody quick then
+[07:06] Micheil: I'd actually fork the server handlers.. 
+[07:06] cloudhead: Micheil: yea I'm not sure why you'd code it in a synch way though..
+[07:07] Micheil: sync would make it unable to handle massive amounts of traffic, surely?
+[07:07] Micheil: hence beating the idea of Node.js being event driven
+[07:07] cloudhead: yea, it doesn't seem to make sense
+[07:08] Micheil: ACTION will start on his framework later.. for now I've gotta find tools and start working on the IMAP lib
+[07:08] cloudhead: : )
+[07:11] inimino: it depends how much you do in the router, really
+[07:11] inimino: my routing is highly asynchronous, but my routing does a lot of work, path walking etc.
+[07:12] cloudhead: inimino: is your code online?
+[07:12] inimino: if you just have some typical matching regexes or something, there's no need to make it async
+[07:12] inimino: cloudhead: yeah, but it's probably completely impenetrable, I need to blog about how it works eventually
+[07:13] cloudhead: inimino: I'd be interested in taking a peak ^_^
+[07:13] inimino: I've never seen routing done quite the way I do it ;)
+[07:13] cloudhead: hmm, but in Express, even if the routing is fast, if the controller action is slow, it'll still have to wait?
+[07:13] inimino: cloudhead: http://boshi.inimino.org/3box/nhttpd/
+[07:14] cloudhead: thanks!
+[07:14] inimino: httpd.js is where the routing happens, though I call it dispatch
+[07:14] inimino: i.e. dispatching a request to its handler
+[07:15] cloudhead: great, this'll be an interesting read, if I can figure out half of it
+[07:15] cloudhead: lol
+[07:16] inimino: heh
+[07:17] inimino: if it's too obscure or the comments seem wrong let me know :)
+[07:17] cloudhead: hehe cool
+[07:19] aurynn: Woo
+[07:19] aurynn: It works more :D
+[07:20] aurynn: Now to make the connection not close when long-running queries are in effect
+[07:20] inimino: cloudhead: the dispatch tree can be extended by loading code through an HTTP request, so much of the complexity in that file comes from that
+[07:20] inimino: I can see now looking at it, it really needs some sort of conceptual overview/introduction
+[07:20] cloudhead: ah interesting
+[07:21] cloudhead: yea, a 'philosphy' section might be useful : )
+[07:21] JimBastard has joined the channel
+[07:21] inimino: yeah
+[07:22] dnolen has joined the channel
+[07:23] Micheil: ACTION 's eyes burn at the sight of inimino's code..
+[07:23] inimino: that means it's working ^.^
+[07:24] inimino: ACTION should eventually write a style guide too
+[07:25] Micheil: inimino: just follow the "good readablity styleguide" :P
+[07:25] Micheil: putting commas and semi-colons at the start of the line really breaks the poetry of the code
+[07:25] inimino: my code is actually optimized for readability
+[07:25] Micheil: how?
+[07:25] inimino: but the readability I primarily care about is my own in six months
+[07:26] Micheil: yeah, you use tabulation to enhance readablity
+[07:26] Micheil: on a server, it doesn't matter how much whitespace we have
+[07:26] inimino: I understand that to those unaccustomed to reading this style it is less readable
+[07:26] inimino: which is why a style guide would help explain the benefits of it :-)
+[07:27] Micheil: there are no benifits.. seriously..
+[07:27] JimBastard: dont worry im giving inimino a few semi-colon keys for xmas
+[07:27] inimino: who knows, maybe it'll catch on
+[07:28] cloudhead: heh the only thing which bothers me is the lack of space around && and ===
+[07:28] JimBastard: single space on each side of an operator seems standard to me
+[07:28] JimBastard: jQuery is like that
+[07:28] inimino: yeah, I've considered adopting " && " as a convention
+[07:29] JimBastard: anyone mess with http://drop.io/ yet?
+[07:29] JimBastard: they are hosting a hackathon next weekend with a cash prize in nyc
+[07:29] JimBastard: im pretty sure im gonna try to win 
+[07:29] inimino: currently I do it in an ad-hoc manner depending on context
+[07:31] inimino: hm
+[07:32] aurynn: sudocarl, pushed my latest changeset. You can see just how far I've changed it.
+[07:32] sudocarl: aurynn, sweet ill check it in a sec
+[07:35] aurynn: ACTION tries to think on how to get terminate as the very last item that executes, no matter what
+[07:36] JimBastard: so anyone use drop.io?
+[07:36] sudocarl: I love drop.io
+[07:36] sudocarl: but I havn't built on it
+[07:36] sudocarl: :)
+[07:37] aurynn: sudocarl, Be warned, the code has become rather weird.
+[07:37] aurynn: :)
+[07:37] sudocarl: lol
+[07:38] JimBastard: im trying to figure this out, the javascript api seems a bit funky
+[07:39] micheil__ has joined the channel
+[07:43] aguynamedben has joined the channel
+[07:56] JimBastard: is recieved_response gaurenteed to be defined when api.getDrop is called? http://gist.github.com/255337
+[07:57] JimBastard: i think not
+[07:57] inimino: JimBastard: it is
+[07:58] JimBastard: copy pasta that into firefox and run it
+[07:58] JimBastard: it cant find the method on the first try
+[07:58] JimBastard: if you re-order it works
+[07:59] JimBastard: i think that makes sense, because the function hasnt been defined for the callback
+[07:59] inimino: I already closed the window
+[07:59] inimino: ACTION reopens
+[08:00] inimino: no, that will work
+[08:00] inimino: I don't need to run it :)
+[08:00] inimino: if there is a problem it must lie elsewhere
+[08:00] JimBastard: im watching the error happen in FF
+[08:00] inimino: I believe you
+[08:00] JimBastard: im just running that code in the console
+[08:00] JimBastard: imagine it was not rendered by the browser on the first pass
+[08:01] JimBastard: it was dynamically created and called later
+[08:01] JimBastard: it wont work in the FF console
+[08:01] inimino: but the function statement coming later is not the problem
+[08:01] JimBastard: when, api.getDrop({drop_name:"somedrop",token:"p@ssw0rd"},receive_response); , gets evaluated it should fail?
+[08:02] JimBastard: since that variable, recieve_response, isn't defined
+[08:02] JimBastard: whats wrong with thinking like that?
+[08:02] inimino: no
+[08:02] inimino: it is defined
+[08:02] inimino: are you running the lines in firebug one at a time?
+[08:02] JimBastard: no
+[08:02] inimino: put them in a file and you'll find that it works
+[08:02] JimBastard: copy paste from gist, run
+[08:03] JimBastard: because the browser is compiling it all
+[08:03] JimBastard: im sure it will
+[08:03] JimBastard: its because its being dynamically run
+[08:03] JimBastard: can you confirm it breaks in console?
+[08:03] inimino: I don't have any of the APIs that it asks for so I'm sure the whole thing will fail
+[08:03] JimBastard: one sec
+[08:03] JimBastard: http://retardbox.com:8000/
+[08:03] JimBastard: sorry 
+[08:03] JimBastard: im dumb
+[08:03] inimino: it will fail on line 1 with "DropioApiClient is undefined"
+[08:03] JimBastard: api is hooked into page
+[08:04] JimBastard: mb
+[08:04] inimino: this page?
+[08:04] inimino: well, I don't have Firebug installed ;-)
+[08:04] JimBastard: ohh
+[08:04] JimBastard: well what im saying
+[08:04] JimBastard: it makes sense right
+[08:05] JimBastard: if you were to run all that code dynamically you'd have to have the variable defined first
+[08:05] JimBastard: before the call back
+[08:05] inimino: no.
+[08:05] inimino: that's what I'm trying to say, it doesn't work that way
+[08:06] JimBastard: why not
+[08:06] JimBastard: statement runs, try to bind callback method
+[08:06] JimBastard: callback method is undefined
+[08:06] inimino: f(); function f(){return 42} // what does this do?
+[08:07] JimBastard: f is not defined
+[08:07] inimino: nope :-)
+[08:07] inimino: it'll return 42
+[08:07] JimBastard: dude
+[08:07] JimBastard: you want a screen shot?
+[08:07] JimBastard: my answers come from firebug
+[08:08] inimino: are you pasting that into Firebug?
+[08:08] inimino: if so, and you get an error from it, then Firebug is broken
+[08:08] JimBastard: yep
+[08:08] inimino: if you don't get an error from that snippet but you get an error from your earlier example then it's something with the API
+[08:08] JimBastard: i just dont understand why javascript would know the future
+[08:08] inimino: it's not the future
+[08:09] JimBastard: how is it not the future? sorry to bug you but this is bothering me
+[08:09] JimBastard: its not been defined yet
+[08:09] JimBastard: its running everything line by line?
+[08:09] JimBastard: not as a block
+[08:09] inimino: JavaScript parses the file
+[08:09] inimino: it makes a note of all functions that are defined
+[08:09] inimino: no
+[08:09] inimino: it parses the file first
+[08:09] JimBastard: what about eval()
+[08:09] inimino: this is how JavaScript works
+[08:10] inimino: what about it?
+[08:10] inimino: if you do eval() then it's run when it's run
+[08:10] JimBastard: i dont think it acts the same i dunno
+[08:10] JimBastard: maybe FF is broken
+[08:10] JimBastard: FB rather
+[08:10] JimBastard: i wonder what node will do
+[08:11] JimBastard: node doesnt mind
+[08:11] inimino: node is not broken
+[08:11] JimBastard: neither does regular js
+[08:11] inimino: no browser is broken
+[08:11] inimino: no standalone interpreter is broken in that way
+[08:11] JimBastard: its firebug
+[08:12] inimino: ACTION 's opinion of Firebug sinks another notch
+[08:13] inimino: ACTION fires up another Firefox instance
+[08:14] elliottcable: Odd. o_O
+[08:14] elliottcable: Just did a `git log --author`, I could have sworn I committed something to node at least a month and a half ago
+[08:15] JimBastard: you could have not put your name on it when you pushed
+[08:16] inimino: yep, I can confirm Firebug has that bug
+[08:16] inimino: anyway, Firebug doesn't represent JavaScript well in that case
+[08:16] inimino: >>> f(); function f(){return 42}
+[08:16] inimino: ReferenceError: f is not defined
+[08:16] inimino: nonsense :-)
+[08:17] inimino: won't be a problem in any browser
+[08:18] JimBastard: i told ya!
+[08:18] JimBastard: strange
+[08:18] JimBastard: any idea what this means, Permission denied to get property Window.DropioApiClient
+[08:18] JimBastard: i have this crazy cross-domain esk file for this drop.io api to work
+[08:18] JimBastard: http://retardbox.com:8000/DropioJSClientXDReceiver.html
+[08:19] JimBastard: its suppose to get called automatically when the api request is made
+[08:20] inimino: "cross domain" and "permission denied" suggests a same-origin policy issue
+[08:21] elliottcable: JimBastard: heh, I doubt it, I’ve been using GitHub/git for a long time. Hrm.
+[08:21] elliottcable: ACTION shrugs
+[08:21] elliottcable: maybe I imagined it.
+[08:22] sudoer has joined the channel
+[08:22] JimBastard: makes sense
+[08:23] JimBastard: i got it
+[08:23] JimBastard: stupid script, wanted an full path to the cross-domain file. not assuming its on the same domain that will be requesting it...
+[08:23] JimBastard: since it can literally never be on a diff domain
+[08:55] JimBastard: whats the easiest way to do javascript css sheets
+[08:55] JimBastard: like if i wanted to define an entire css sheet dynamically with JS, would i just do a request for it?
+[08:56] JimBastard: because i know you need to parse the sheet to add the styles
+[09:06] JimBastard: noob overloaded in #js again
+[09:07] qFox has joined the channel
+[09:09] scudco has joined the channel
+[09:14] elliottcable: JimBastard: you mean ##JavaScript? o_O
+[09:16] JimBastard: yeah sorry
+[09:16] JimBastard: i could think straight after that
+[09:16] JimBastard: i figured out a neat trick though
+[09:17] JimBastard: with jquery and dynamic css
+[09:17] JimBastard: wanna see?
+[09:18] JimBastard: http://gist.github.com/255353
+[09:22] xantus has joined the channel
+[09:25] JimBastard: ohh wow jquery.require is about to come out
+[09:25] JimBastard: sweet ass
+[09:31] teemow has joined the channel
+[09:45] rictic: JimBastard: I recommend Chrome's development tools over Firebug.  They're faster, nicer, and more feature-full.  Plus "f(); function f() {return 42}" evaluates correctly there.
+[09:50] JimBastard: lolz
+[09:50] JimBastard: thanks
+[09:50] JimBastard: im use to firebug, ive tried chromes a bit
+[09:50] JimBastard: ill try again soon its been a while
+[10:11] sveimac has joined the channel
+[10:15] sveisvei has joined the channel
+[10:15] qFox has joined the channel
+[10:19] sudocarl: anyone know where I can get a good implementation of chained promises or a promise group sorta thing?
+[10:35] hassox has left the channel
+[10:36] Micheil: JimBastard: Yeah, looks like I didn't get enough work into Jet nor enough promotion if jquery.require is coming out
+[10:44] JimBastard: require would be nice...but i can work around it
+[11:25] sveimac has joined the channel
+[11:55] logicuce has joined the channel
+[12:20] logicuce: Hi Guys
+[12:20] JimBastard: good morning
+[12:20] logicuce: I couldn't find a way to get content-type from the multipart api
+[12:21] logicuce: Morning JimBastard
+[12:21] JimBastard: ohh man
+[12:21] JimBastard: i was having some content-type multipart issues
+[12:21] JimBastard: its probaly something really simple
+[12:21] logicuce: yeah.. but not implemented in the API it seems
+[12:21] JimBastard: are you dumping the request object?
+[12:21] logicuce: I mean I went through the docs and it wasn't there
+[12:22] logicuce: Well... I didn't try it
+[12:22] JimBastard: its better to actually dump process in memory and see whats there
+[12:22] JimBastard: are you debugging at all?
+[12:22] logicuce: nopes... :(
+[12:22] JimBastard: ive got a web debugger if you want to use it
+[12:22] JimBastard: it helps a bit, i have a multipart snippet in there
+[12:22] JimBastard: that will dump the multipart object
+[12:23] JimBastard: but its gonna be a pain either way
+[12:23] JimBastard: maybe you should be using a framework
+[12:23] JimBastard: like express
+[12:23] JimBastard: or picard
+[12:23] JimBastard: ?
+[12:23] logicuce: All these things are new to me
+[12:23] logicuce: :D
+[12:23] JimBastard: what are you trying to build?
+[12:23] JimBastard: or just messing around?
+[12:23] logicuce: Just messing around on a weekend
+[12:24] JimBastard: got ya
+[12:24] JimBastard: im building a few node.js apps right now
+[12:24] logicuce: Oh.. cool
+[12:24] logicuce: I tried to stop file upload if the file size is greater than a threshold
+[12:24] logicuce: worked like a charm
+[12:24] JimBastard: if you are messing around you should try and pick a small piece of functionality that node is missing and try to implement it as a node c plugin or a commonjs module
+[12:25] JimBastard: are you using setTimeout() on your webserver?
+[12:25] logicuce: yeah
+[12:25] JimBastard: >.<
+[12:25] JimBastard: can you copy and paste your server.js please?
+[12:26] logicuce: well, I used it only initially
+[12:26] logicuce: for file upload I am not using setTimeout
+[12:26] logicuce: I will anyways share the code
+[12:26] JimBastard: if you have your request wrapped in setTimeout or the server like in the demo
+[12:26] JimBastard: its gonna fubar multipart
+[12:26] JimBastard: could be unrelated
+[12:27] logicuce: http://pastebin.com/d596130b2
+[12:28] JimBastard: ahh thats from that blog
+[12:28] logicuce: initial code was picked up from a blog
+[12:28] logicuce: yeah..
+[12:28] JimBastard: ACTION ^_^
+[12:28] JimBastard: is it not working?
+[12:28] JimBastard: did you copy pasta correct?
+[12:28] logicuce: actually I typed it all :D
+[12:28] logicuce: and yeah, its working fine
+[12:28] JimBastard: aight
+[12:29] logicuce: Then I had a look at the API doc
+[12:29] logicuce: and saw that for multipart stream, there is no explicit way to get content-type header
+[12:30] claudio: is there something broken with the Date object in node.js?
+[12:30] JimBastard: no?
+[12:30] logicuce: I couldn't find it in docs.. is there something?
+[12:30] JimBastard: im not sure logicuce it could be there 
+[12:31] JimBastard: can you enumerate the properties on the request object
+[12:31] logicuce: I am talking about each part, not the main request
+[12:31] logicuce: Each part in a multipart stream will have its own content-type
+[12:32] logicuce: say you have 10 files being uploaded, then each part (here file)will have its content-type
+[12:34] Tautologistics has joined the channel
+[12:34] logicuce: Just looking at multipart.js in libraries
+[12:34] logicuce: it should be matter of adding a simple line
+[12:35] JimBastard: ummm
+[12:35] JimBastard: can you create multiple streams instead?
+[12:36] JimBastard: my knowledge of the process the raw http protocol is somewhat limited
+[12:37] logicuce: what do you mean by multiple streams?
+[12:38] logicuce: Even I explored the raw request yesterday
+[12:38] logicuce: :)
+[12:38] JimBastard: you uploading files one at a time?
+[12:38] JimBastard: or all at the same time?
+[12:38] logicuce: nopes.. multiple file and a couple of text fields
+[12:38] logicuce: all for testing...
+[12:38] JimBastard: yeah i dunno sorry
+[12:38] logicuce: in that case, even the upload progress gets screwed up
+[12:38] JimBastard: someone else could help you
+[12:39] logicuce: oh thats fine.. I am not really looking for help
+[12:40] mediacoder: logicuce: did you check the headers of your part-object? maybe there is some info you want
+[12:40] logicuce: Was just checking if it is possible to make changes in the multipart.js in core repository
+[12:40] logicuce: mediacoder: the part object header will have the info, but it is currently not used by node.js
+[12:40] mediacoder: part["headers"]["content-disposition"]["filename"] works perfectly for me
+[12:41] logicuce: if we add a line to multipart.js, it will have part.content-type set to this header
+[12:41] logicuce: part.filename and part.name exist, I thought part.content-type should also be there
+[12:42] mediacoder: logicuce: sure, its open source, add the functionality to your fork and let the gurus decide :-)
+[12:42] logicuce: :).. oh.. I didn't realize we have part.headers object as well
+[12:42] JimBastard: debugging.....
+[12:42] logicuce: it will have all the headers associated with part
+[12:43] JimBastard: how you gonna drive a car with a v8 when you cant see?
+[12:43] JimBastard: http://maraksquires.com/node_debug/
+[12:43] JimBastard: check it out
+[12:43] logicuce: mediacoder: I am just booting up with opensource and all... used only svn till now :(
+[12:44] logicuce: time to get dirty with git as well 
+[12:45] JimBastard: check out the debugger vidya
+[12:45] JimBastard: zoom in if you have to
+[12:45] logicuce: JimBastard: cool
+[12:46] JimBastard: im thinking i will release version .2 this week
+[12:46] JimBastard: session and auth is just about done
+[12:46] JimBastard: and now i can track user sessions 
+[12:46] JimBastard: more snippets
+[12:46] JimBastard: and some styling fixes
+[12:46] logicuce: wow
+[12:47] logicuce: How do I fullscreen the video?
+[12:47] logicuce: the text is unreadable :(
+[12:48] JimBastard: zoom in
+[12:48] JimBastard: jing is a pita
+[12:48] JimBastard: ill fix it in the next cast
+[12:48] JimBastard: just getting use to all of this
+[12:48] JimBastard: sorry
+[12:48] logicuce: no prob
+[12:49] logicuce: I use BB Express, works like a charm
+[12:49] logicuce: free
+[12:50] JimBastard: its almost LoL time
+[12:50] kriskowal has joined the channel
+[12:57] kriskowal: anyone else seeing something like node.js:8613: Uncaught TypeError: Cannot read property 'prototype' of undefined?
+[12:58] JimBastard: not here
+[12:59] kriskowal: oh, i see.  it's pure-js now
+[12:59] kriskowal: i just did a merge; i've been fiddling with node.js to see if i can coerce it into hosting narwhal
+[13:00] kriskowal: structure has changed; thought i got all the new stuff
+[13:00] kriskowal: ACTION checks again
+[13:00] JimBastard: k
+[13:15] mahemoff has joined the channel
+[13:18] michaelk^ has joined the channel
+[13:57] micheil_ has joined the channel
+[14:21] michaelk^ has joined the channel
+[14:22] alex-desktop has joined the channel
+[14:25] micheil_ has joined the channel
+[14:38] soveran has joined the channel
+[14:39] micheil_ has joined the channel
+[14:43] claudio: is there an "announcement" list or something like that?
+[14:45] claudio: (I'll use the list)
+[14:54] mediacoder: claudio: there is the google-groups list http://groups.google.com/group/nodejs
+[14:54] claudio: mediacoder, yeah, I just submitted the [ANN] there :)
+[14:55] claudio: ( http://github.com/caludio/node.xmlrpc-c , if anyone interested )
+[14:55] micheil has joined the channel
+[14:59] JoePeck has joined the channel
+[15:50] sveimac has joined the channel
+[15:53] paan has joined the channel
+[15:53] rtomayko has joined the channel
+[15:58] shfx has joined the channel
+[16:32] jed has joined the channel
+[16:50] Connorhd_ has joined the channel
+[16:50] mahemoff has joined the channel
+[16:56] aguynamedben has joined the channel
+[17:01] jrk_ has joined the channel
+[17:12] teemow has joined the channel
+[17:19] mahemoff has joined the channel
+[17:28] jbowman has joined the channel
+[17:29] pdelgallego has joined the channel
+[17:32] dnolen has joined the channel
+[17:39] jbowman has left the channel
+[17:45] markmuskardin has joined the channel
+[17:45] markmuskardin: hi everyone
+[17:46] markmuskardin: has anybody successfully installed the node_chat program from tinyclouds.org?
+[17:46] sveisvei: Hello Mark :)
+[17:46] sveisvei: not me :P
+[17:46] markmuskardin: I downloaded the source code - but when I try to start it I get an error
+[17:47] markmuskardin: i don't know what I'm missing
+[17:47] erichocean: anyone know how to build in GNU_TLS support into Node?
+[17:47] markmuskardin: "TypeError: Object #<an Object> has no method 'cat'
+[17:51] jrk_ has joined the channel
+[17:51] jrk_ has joined the channel
+[17:53] aurynn: so I got my prepared queries to work, and realized now that I needs have an even more detailed internal model to allow for multipart statements followed by commit messages.
+[17:53] aurynn: this is becoming rather complex.
+[17:57] binary42 has joined the channel
+[18:10] jan____: markmuskardin: cat moved to a module.
+[18:10] markmuskardin: which module? how do I fix it? :D
+[18:11] jan____: import that module :) 
+[18:11] jan____: (dunno which)
+[18:11] markmuskardin: what is cat?
+[18:11] jan____: http://nodejs.org/api.html
+[18:11] jan____: search for cat
+[18:11] aurynn: concatenate
+[18:12] markmuskardin: ah cool-
+[18:12] markmuskardin: thanks!
+[18:12] jan____: markmuskardin: no privmsgs please
+[18:12] markmuskardin: ok sorry
+[18:12] aurynn: It's really hard to hide a serial buffer underneath of an async API
+[18:12] aurynn: just FYI
+[18:17] erichocean: aurynn: the redis node.js client does that
+[18:18] aurynn: I'm surprised at the mental effort it takes to align these two worlds like this
+[18:18] eddanger has joined the channel
+[18:19] markmuskardin: jan____ : imported the posix module and that fixed my problem...trying to install the node_chat server from tinyclouds.org - it's starting now
+[18:21] erichocean: aurynn: are you writing a SQLite client?
+[18:22] aurynn: erichocean, I'm working on postgres-js
+[18:23] aurynn: Pure JS, pg protocol client.
+[18:23] aurynn: which is teaching me massive amounts about this
+[18:26] aurynn: postgres-js wasn't really good enough for my needs
+[18:26] aurynn: no prepared statements, no parameterized queries
+[18:26] claudio: aurynn, I'm wondering if and how I could write the same thing for sqlite...
+[18:27] claudio: aurynn, is there a .cc object that exposes bindings for js, right? 
+[18:27] aurynn: claudio, rbranson_ is working on an FFI interface
+[18:27] erichocean: claudio: there's a guy who wrote v8 bindings for SQLite
+[18:27] aurynn: which may be what you want
+[18:27] claudio: oh, OK
+[18:28] claudio: dinner time :)
+[18:28] rbranson_: there is an SQLite example packed with the ffi stuff
+[18:29] rbranson_: http://github.com/rbranson/node-ffi
+[18:29] claudio\out: rbranson_, thanks :)
+[18:29] rbranson_: it is by no means an API though :)
+[18:29] erichocean: claudio\out: http://code.google.com/p/v8-juice/wiki/HomePage
+[18:29] claudio\out: (cool project, btw)
+[18:30] erichocean: rbranson_: could node-ffi be used to do binary output to a socket?
+[18:31] rbranson_: you'd have to use the socket API from scratch
+[18:31] erichocean: I'm porting an Apple push notification server to node.js
+[18:31] erichocean: hmm
+[18:31] erichocean: k
+[18:31] aurynn: v8-juice looks nice
+[18:31] rbranson_: afaik, ry is working on binary stuff right now
+[18:32] erichocean: a fast bit-struct API is JS would be nice
+[18:32] erichocean: s/is/in/
+[18:32] aurynn: rbranson_, I got prepared statements working.. And discovered that my design is insufficient. :)
+[18:32] rbranson_: uh oh
+[18:33] rbranson_: i was going to say, doing that command serialization is a bit tricky
+[18:33] rbranson_: but that is a sweet API
+[18:34] aurynn: Doing it right, is hard.
+[18:35] rbranson_: well luckily you don't have threading on-top of it :)
+[18:36] aurynn: lol
+[18:36] aurynn: Handling a serial buffer underneath of threads?
+[18:36] aurynn: Dear lord, I'd kill myself, or give up
+[18:37] aurynn: Or do it much the same way, with each thread just queueing actions to the buffer
+[18:37] aurynn: or action chain s
+[18:39] rbranson_: i was thinking underneath, prepare() would return an object with an internal promise, and all execute() could be is adding a callback to that promise to execute the statement when it receives the success event from the prepare
+[18:39] aurynn: that's actually how I've implemented it.
+[18:39] rbranson_: insufficient?
+[18:40] sudoer has joined the channel
+[18:40] aurynn: well, no
+[18:40] aurynn: I'm just not buffering right
+[18:40] aurynn: Right now I have a single message queue that actions on the DB handle buffer into
+[18:40] aurynn: But, that doesn't work
+[18:41] rbranson_: ah
+[18:41] aurynn: since .prepare adds a message, and catches the result as a promise
+[18:41] aurynn: and then .query adds a message, and .execute adds its own messages
+[18:41] aurynn: So I'm actually going to push a object onto the main queue that has several actions queued up internally
+[18:41] rbranson_: can you actually send messages to PG out-of-order?
+[18:42] aurynn: Yes, but I don't even want to try to maintain state on that
+[18:42] rbranson_: nice
+[18:43] aurynn: And do the buffering with an event callback, I think
+[18:43] aurynn: query_object.emit("nextMsg")
+[18:44] aurynn: or something
+[18:46] cloudhead has joined the channel
+[18:48] aurynn: circular event loops
+[18:48] aurynn: ugh.
+[18:49] aurynn: hm
+[18:49] aurynn: my .execute works because it *does* buffer internally
+[18:56] trevor has joined the channel
+[18:59] hassox has joined the channel
+[19:00] bentomas has joined the channel
+[19:21] dnolen has joined the channel
+[19:35] scudco has joined the channel
+[19:36] logicuce has joined the channel
+[19:37] jan____: is anyone working on an http proxy in node.js?
+[19:51] erichocean: node.js seems to be clipping the query string: wget http://127.0.0.1:8001/hello?world=foo&bar=baz
+[19:51] erichocean: returns {
+[19:51] erichocean:  "full": "/hello?world=foo",
+[19:51] erichocean:  "queryString": "world=foo",
+[19:51] erichocean:  "fragment": "",
+[19:51] erichocean:  "path": "/hello",
+[19:51] erichocean:  "params": {
+[19:51] erichocean:   "world": "foo"
+[19:51] erichocean:  }
+[19:51] erichocean: }
+[19:51] erichocean: for the request.uri
+[19:51] erichocean: (end spam)
+[19:52] erichocean: has anyone else seen this, or am I doing something else wrong?
+[19:52] sveisvei: I think its getting a "rewrite" at least :P
+[19:52] erichocean: hmm
+[19:53] erichocean: making the same call from Safari worked
+[19:53] erichocean: must be wget
+[19:53] erichocean: wget "http://127.0.0.1:8001/hello?world=foo&bar=baz"
+[19:53] erichocean: works correctly
+[19:55] sveimac has joined the channel
+[19:57] rolfb has joined the channel
+[19:59] voodootikigod_ has joined the channel
+[20:02] mikekelly: jan____: no I don't think so, if you find someone that is can you let me know? :))
+[20:03] jan____: :)
+[20:06] binary42: jan____: I started working on a jsgi front to couchdb but it's not really a proxy.
+[20:07] Tautologistics has joined the channel
+[20:07] binary42: The big problem I have now is asynchronous op so I paused work while smarter people advance the state of the art in JSGI land.
+[20:07] hassox has joined the channel
+[20:07] jan____: heh
+[20:10] jbowman has joined the channel
+[20:12] jan____: sweet test/mjsunit/test-http-proxy.js
+[20:12] mikekelly: binary42: you're writing rack for couchdb?!
+[20:12] mikekelly: >:)
+[20:13] binary42: mikekelly: Sort of. It's an alternative to the work on url mapping they are doing.
+[20:14] binary42: It's also a chance for me to dive deeper into the mochiweb code (what I am more interested in anyway).
+[20:15] binary42: (OT) I personally think couchdb is getting too many "magic" features so I was thinking of dropping list rendering and such into this as well to consolidate.
+[20:15] binary42: But it's not something I actually need in any real app yet so it's not a big deal to me.
+[20:17] jan____: binary42: lists are important, even for database-only ops. filtering the view JSON is a powerful
+[20:18] binary42: jan____: Yeah, I agree. I wanted alternative ways to work with that is all. I think JSGI-style hooks into mochiweb would be a good alternative to the current.
+[20:20] jan____: totally :)
+[20:23] rakeshpai has joined the channel
+[20:24] rakeshpai: Hello, #node.js... been a long time
+[20:25] binary42: So who wants to bet on breaking 100 in this channel?
+[20:26] binary42: Will it happen before Christmas? I think so.
+[20:26] malkomalko has joined the channel
+[20:27] jan____: binary42: it doubled in 2 weeks :)
+[20:27] binary42: jan____: Yeah. But when's the next big talk? Holiday travel makes it complicated too.
+[20:28] rakeshpai has joined the channel
+[20:28] jbowman: well part of the reason i'm trying node.js is the fact it's community has taken off compared to tornado
+[20:28] binary42: rakeshpai: Welcome back to #node.js ;-)
+[20:28] jan____: binary42: the google talk is still pending, no?
+[20:28] binary42: Ah right.
+[20:28] binary42: That will do it.
+[20:29] kriskowal has joined the channel
+[20:31] malkomalko: good afternoon yall
+[20:32] binary42: malkomalko: Yo.
+[20:32] malkomalko: awesome time last night dude
+[20:32] malkomalko: they brought the heat
+[20:32] binary42: Music still ringing.
+[20:32] malkomalko: he had the whole freakin place moving their asses
+[20:34] binary42: :-) http://twitter.com/binary42/status/6620220654
+[20:34] binary42: best show being subjective to the specific type of show but it is still on my top list.
+[20:34] eddanger has joined the channel
+[20:35] aurynn: Okay
+[20:35] malkomalko: ! :)
+[20:35] aurynn: if you do stmt =  db.prepare(); stmt.execute(args).addCallback({ });
+[20:35] aurynn: should the callback be allowed to run additional queries?
+[20:35] malkomalko: I feel bad for my buddies who didn't come
+[20:36] binary42: Heheh. You learn to heed certain invites from certain people over time.
+[20:37] malkomalko: I finally got my node/ableton experiment working solid to trigger clips, I'm trying to pretty it up a little bit right now, then you mind if I shoot you a message later to help me test if it works?
+[20:38] binary42: Sure. You have a repo yet?
+[20:38] malkomalko: nope, I'll push something up a little later today
+[20:38] isaacs has joined the channel
+[20:45] aurynn: Is it even sensible to allow for additional queries to be emitted in the callback?
+[20:45] rakeshpai has joined the channel
+[20:46] kriskowal: what's the simplest way to enqueue an event?  does there need to be an emitter and an event type, or is there something lower level?
+[20:47] bentomas: aurynn: I can see how it would be useful
+[20:47] aurynn: so can I
+[20:47] aurynn: I'm just finding it vicious to implement
+[20:49] micheil has joined the channel
+[20:51] rakeshpai has joined the channel
+[20:59] aurynn: is there "callback completed" message?
+[21:01] mikeal has joined the channel
+[21:01] mikeal: i'm writing a little proxy
+[21:01] jbowman has joined the channel
+[21:01] mikeal: and i'm having an issue getting images to work properly
+[21:03] mikeal: sendBody is suppose to be a string, but what do you do when you're sending chunks of binary?
+[21:03] mikeal: encoding = 'binary' ?
+[21:04] mikeal: yup
+[21:04] mikeal: :)
+[21:04] mikeal: got it 
+[21:06] mikeal: is there any way to figure out whether or not a ServerResponse body is binary?
+[21:07] mikeal: sorry
+[21:07] mikeal: ClientResponse
+[21:07] mikeal: right now I have to guess based on the content-type
+[21:09] sveimac has joined the channel
+[21:18] the_undefined has joined the channel
+[21:19] hassox has joined the channel
+[21:21] the_undefined: wow, 96 people
+[21:21] the_undefined: has the 100 watermark been reached so far?
+[21:21] jan____: not yet, moin felix.
+[21:22] the_undefined: hi jan____ 
+[21:23] mikeal has left the channel
+[21:23] the_undefined: jan____: I'm very curious to find out what you guys are up to soon : )
+[21:24] mediacoder: awesome to see 2.000.000 on your sparkasse-bankauszug :-P
+[21:27] jan____: the_undefined: what guys? :)
+[21:27] jan____: mediacoder: it's not in my sparkasse account (yet :)
+[21:28] mediacoder: hehe :-)
+[21:28] jan____: we're a US company, US bank and all that
+[21:28] jan____: the_undefined: to be frank, we are, too :)
+[21:28] mediacoder: hehe, yea sure..im just kidding, cause i knew the ones talking were germans :-)
+[21:28] jan____: :)
+[21:30] the_undefined: jan____: don't worry about the money still being in the wrong place. That's what eventual consistency is for ;)
+[21:31] jan____: the_undefined: rofl, yeah :)
+[21:31] jan____: oh well, I'm only entitled to X% anyway, and not really either. so yeah, I kinda don't see a lot changing
+[21:34] sudocarl has joined the channel
+[21:35] teemow has joined the channel
+[21:36] the_undefined: jan____: well, at least you got your paycheck figure out for a while :)
+[21:36] the_undefined: * figured
+[21:37] the_undefined: (not like that is likely an issue in general : )
+[21:38] jan____: no really, that's about the only thing that changed, not having to worry about that is a good thing
+[21:38] jchris has joined the channel
+[21:39] mediacoder: and you get a lot of new friends :-D
+[21:39] jan____: not yet :D
+[21:39] mediacoder: really? no emails like "yo..i got this awesome idea..."
+[21:40] jan____: stil waiting, so far only congrats
+[21:40] mediacoder: ah, thats good then :-)
+[21:55] michaelk^ has joined the channel
+[21:55] erikcorry|away has joined the channel
+[21:55] wil_ has joined the channel
+[21:55] iamstef has joined the channel
+[21:55] orlandov has joined the channel
+[21:55] jchris has joined the channel
+[21:55] teemow has joined the channel
+[21:55] sudocarl has joined the channel
+[21:55] hassox has joined the channel
+[21:55] the_undefined has joined the channel
+[21:55] micheil has joined the channel
+[21:55] isaacs has joined the channel
+[21:55] kriskowal has joined the channel
+[21:55] malkomalko has joined the channel
+[21:55] Tautologistics has joined the channel
+[21:55] voodootikigod_ has joined the channel
+[21:55] rolfb has joined the channel
+[21:55] logicuce has joined the channel
+[21:55] scudco has joined the channel
+[21:55] dnolen has joined the channel
+[21:55] bentomas has joined the channel
+[21:55] trevor has joined the channel
+[21:55] cloudhead has joined the channel
+[21:55] sudoer has joined the channel
+[21:55] binary42 has joined the channel
+[21:55] aguynamedben has joined the channel
+[21:55] Connorhd_ has joined the channel
+[21:55] jed has joined the channel
+[21:55] rtomayko has joined the channel
+[21:55] JoePeck has joined the channel
+[21:55] alex-desktop has joined the channel
+[21:55] qFox has joined the channel
+[21:55] sveisvei has joined the channel
+[21:55] xantus has joined the channel
+[21:55] jtaby has joined the channel
+[21:55] mattly has joined the channel
+[21:55] Pilate has joined the channel
+[21:55] mcarter has joined the channel
+[21:55] rictic has joined the channel
+[21:55] gwoo has joined the channel
+[21:55] sifi has joined the channel
+[21:55] claudio\out has joined the channel
+[21:55] erichocean has joined the channel
+[21:55] Micheil_pc has joined the channel
+[21:55] mies has joined the channel
+[21:55] onar has joined the channel
+[21:55] brandon_beacher has joined the channel
+[21:55] voodootikigod has joined the channel
+[21:55] sztanpet has joined the channel
+[21:55] Yuffster has joined the channel
+[21:55] jazzychad has joined the channel
+[21:55] elliottcable has joined the channel
+[21:55] jspiros has joined the channel
+[21:55] skampler has joined the channel
+[21:55] tlockney has joined the channel
+[21:55] erikg has joined the channel
+[21:55] ashb has joined the channel
+[21:55] careo has joined the channel
+[21:55] sr has joined the channel
+[21:55] Sinjo has joined the channel
+[21:55] jan____ has joined the channel
+[21:55] mediacoder has joined the channel
+[21:55] beppu has joined the channel
+[21:55] halorgium has joined the channel
+[21:55] ryah has joined the channel
+[21:55] frodenius has joined the channel
+[21:55] cadorn has joined the channel
+[21:55] wattz has joined the channel
+[21:55] richardb has joined the channel
+[21:55] noxa- has joined the channel
+[21:55] thenduks has joined the channel
+[21:55] tlrobinson has joined the channel
+[21:55] populuxe has joined the channel
+[21:55] tmpvar_ has joined the channel
+[21:55] emyller has joined the channel
+[21:55] apgwoz has joined the channel
+[21:55] lmorchard|away has joined the channel
+[21:55] kassandry has joined the channel
+[21:55] RJ2 has joined the channel
+[21:55] Wes- has joined the channel
+[21:55] aurynn has joined the channel
+[21:55] martyn_ has joined the channel
+[21:55] nefD has joined the channel
+[21:55] inimino has joined the channel
+[21:55] CIA-56 has joined the channel
+[21:55] mikekelly has joined the channel
+[21:55] Sembiance has joined the channel
+[21:55] rbranson_ has joined the channel
+[21:55] deanlandolt_ has joined the channel
+[21:55] mburns has joined the channel
+[21:55] rudebwoy has joined the channel
+[21:55] Nailor has joined the channel
+[21:55] Atmoz has joined the channel
+[21:55] intellectronica has joined the channel
+[21:55] [k2] has joined the channel
+[21:55] rektide has joined the channel
+[21:55] sudocarl: if you put your queries into an array you can use the method I use
+[21:55] aurynn: ?
+[21:55] aurynn: Clarify, plz
+[21:55] sudocarl: 1 sec lemmi make a gist
+[21:55] aurynn: I suspect I may be approaching this wrong :)
+[21:58] bjartek has joined the channel
+[21:59] sudocarl: http://gist.github.com/255626
+[21:59] sudocarl: aurynn, thats an example of chaining using a counter
+[22:00] sudocarl: it just removes the nesting
+[22:01] aurynn: Suddenly, I feel stupid, because I don't know how this works
+[22:01] sudocarl: when the callback is called it just calls the function recursively
+[22:02] sudocarl: its like function fib(n) { if (n<=0) 1; else return fib(n-1) + fib(n-2); }
+[22:03] aurynn: Okay..
+[22:03] sudocarl: anyways it just removes the nesting
+[22:03] sudocarl: if you don't care then you can just do it your way
+[22:04] aurynn: It's more that I'm just confused
+[22:04] sudocarl: what are you confused about?
+[22:04] aurynn: What you're getting at here
+[22:05] sudocarl: you said that this should be illegal: stmt.execute(args).addCallback(function (r) { stmt.execute(args).etc })
+[22:05] sudocarl: right?
+[22:05] sudocarl: cause its messy
+[22:05] sudocarl: well I showed you a solution on how to make it less messy
+[22:06] aurynn: well, I was thinking in terms of, what if the user wants to execute an entirely new argument set inside the callback
+[22:06] aurynn: instead of r.get_next
+[22:06] sudocarl: that will execute the next argument set in the arguments array at the top
+[22:07] aurynn: Hm. Right.
+[22:08] aurynn: so should nested statements be invalid?
+[22:08] sudocarl: no its not invalid
+[22:08] sudocarl: I just think that its messy
+[22:08] aurynn: Right.
+[22:08] sudocarl: also its hard to keep track of things when you have a crap load of nested statements
+[22:08] aurynn: So, I have to figure out how to do nested statements
+[22:09] aurynn: right now it won't work
+[22:10] aurynn: but I may be doing it wrong internally
+[22:10] jan____: why is http.Client.del() "del()" and not "delete()"?
+[22:12] the_undefined: jan____: I think Client.del is gone from head anyway
+[22:13] the_undefined: throw new Error("client.del(...) is now client.request('DELETE', ...)");
+[22:13] the_undefined: yip
+[22:13] the_undefined: jan____: just saw you tweet on the missing sprintf for JS, I really miss that functionality as well :(
+[22:13] jan____: cool
+[22:13] jan____: the_undefined: node should step up
+[22:14] the_undefined: jan____: well, so far ryan has been hesitant to include a "util" module
+[22:15] the_undefined: jan____: anyway, this is my "poor man sprintf" I use in my projects http://gist.github.com/255633
+[22:15] jan____: yeah, that's neat, but I don't want to have to include that everywhere
+[22:15] the_undefined: me neither
+[22:15] the_undefined: ryah: you around?
+[22:15] jan____: yeah ryah, you around? :)
+[22:16] sudocarl: sprintf -> http://github.com/carlsverre/bitr/blob/master/lib/sprintf.js
+[22:16] jan____: sudocarl: it's not about an implementation, but the default availability
+[22:16] the_undefined: If ryah would agree on having some sort of util module for making up for some of the more obvious shortcomings of JS, it would be largely an API issue of figuring out what things to include and what not 
+[22:16] sudocarl: jan____, ah :)
+[22:17] the_undefined: sudocarl: looks like a wicked implementation so
+[22:17] jan____: @boucher says Narwahl has it
+[22:17] the_undefined: yeah, they do have a util module
+[22:17] the_undefined: I would almost propose shipping node.js with underscore
+[22:18] the_undefined: but they don't care about strings it seems
+[22:18] the_undefined: :|
+[22:18] sudocarl: the_undefined, its pretty awesome
+[22:20] aurynn: sudocarl, so I'm having an issue here
+[22:21] sudocarl: whats up?
+[22:21] Tautologistics: Does anyone know of the current state of HTTP request parsing? Did anyone complete this or is there any thought of moving this code to JS?
+[22:21] aurynn: sudocarl, http://privatepaste.com/690e89f29c
+[22:21] aurynn: if I do that, then it's correctly sequenced
+[22:22] aurynn: PREPARE, EXECUTE, EXECUTE, EXECUTE, QUERY, CLOSE
+[22:22] jan____: Tautologistics: I doubt it's gonna move to JS. ryan did some great work on the C there.
+[22:22] sudocarl: aurynn, whats wrong?
+[22:22] aurynn: but if I do this:
+[22:22] aurynn: http://privatepaste.com/b4d21873e3
+[22:22] sudocarl: oh you wantto execute them in order?
+[22:22] aurynn: it shows up in that sequemce
+[22:23] aurynn: it does execute in order
+[22:23] aurynn: so I'm trying to figure out how to buffer in-callback queries
+[22:23] aurynn: because they logically happen before the close
+[22:24] sudocarl: hm...  I am a bit confused, these don't have to happen in order because your executing them in parallel
+[22:24] aurynn: But right now it gets buffered after
+[22:25] aurynn: they don't, it just ends up that way for ease
+[22:25] Tautologistics: Hmmm, thanks
+[22:26] aurynn: and it has to be done serially underneath
+[22:26] Tautologistics: aurynn: create a queue?
+[22:26] the_undefined: Tautologistics: do you have any problem with it?
+[22:26] aurynn: I have a queue
+[22:26] the_undefined: (the http parser?)
+[22:26] aurynn: the problem is items get buffered on my queue after the close() gets buffered 
+[22:27] Tautologistics: I have one in JS already from another project that might have fit in here
+[22:27] sudocarl: hmmm
+[22:27] aurynn: because those items are being buffered in the callbacks
+[22:27] aurynn: and I don't know how to handle this
+[22:28] the_undefined: Tautologistics: I guess it would be cool, but parsing HTTP is fairly low-level, so I think its good that its in C performance-wise
+[22:29] the_undefined: (nothing stops you from providing an alternative http module built on the tcp module so)
+[22:29] the_undefined: In fact, I think it would be quite cool to have something like that
+[22:29] JoePeck has joined the channel
+[22:29] Tautologistics: No, nothing stops me =) Performance won't be as good but done right it would not be significant
+[22:30] Tautologistics: I think it opens up the functionality to more hackers, ergo features and fixes
+[22:30] Tautologistics: I'd guess less than 
+[22:30] sudocarl: aurynn, I am not sure...
+[22:30] Tautologistics: 5% of people involved in node.js would be confortable working in the C side of things
+[22:31] aurynn: anyone have any ideas on how to buffer items after you've buffered your "close the buffer" command?
+[22:31] aurynn: sudocarl, that's where I'm at.
+[22:31] the_undefined: Tautologistics: if you can back up your claim of the performance difference being "non-significant" I'd love to see that ;)
+[22:31] aurynn: which is why I'm thinking no requests in callbacks
+[22:31] the_undefined: Tautologistics: you'll have have no chance competing for memory usage / connection
+[22:31] aurynn: which is pretty restrictive
+[22:32] Tautologistics: Only if one creates a parser per request
+[22:32] the_undefined: Tautologistics: well, other than bug fixes, I don't think the http parser will need a lot of contributions
+[22:32] jtaby has joined the channel
+[22:32] the_undefined: Tautologistics: I think ryans parser uses 127 byte / connection, I doubt you can do that in JS :)
+[22:33] the_undefined: * 124 bytes
+[22:33] the_undefined: Tautologistics: http://four.livejournal.com/1033160.html
+[22:34] Tautologistics: Working on a test to see exactly what the difference is
+[22:35] the_undefined: Tautologistics: keep us posted, it would be a good case study of the benefits to have things done in C vs JS
+[22:35] Tautologistics: But what does that 124 bytes represent? The size is really dependent on what's contained in the request headers
+[22:35] the_undefined: if it really is much less of a difference than everybody thinks that would be cool
+[22:36] mediacoder: but its still blasphemy :-)
+[22:36] the_undefined: Tautologistics: I think its the memory required by parser beyond holding the actual request, but you'd have to ask ryan to clarify exactly
+[22:36] the_undefined: Tautologistics: by the time the request gets into your hands as a HttpRequest object, it is obviously much more ;)
+[22:37] aurynn: sudocarl, so that's what I'm smashing my head on, as I write the DBI spec
+[22:37] Tautologistics: Seeing as how it is a single thread shouldn't that be a constant overhead regardless of connection count?
+[22:37] sudocarl: aurynn, sounds smashing :D
+[22:37] Tautologistics: Unless that's the overhead of some state structure
+[22:37] aurynn: sudocarl, it's hard.
+[22:38] the_undefined: Tautologistics: it is very likely the state needed by the parser while processing the request, otherwise it would be irrelevant
+[22:40] Tautologistics: We shall see =)
+[22:46] isaacs: deanlandolt_, tlrobinson: you around?
+[22:46] deanlandolt_: yo
+[22:46] tlrobinson: isaacs: yea
+[22:46] isaacs: so, i've been playing around with some async-node-jsgi stuff.l
+[22:47] deanlandolt_: sweet
+[22:47] isaacs: here's the thing that's a bit strange...
+[22:47] isaacs: jsgi seems to basically deal with two things: request and response.
+[22:47] isaacs: however, in a node/async http conversation, you ideally have a more complicated set of things.
+[22:47] deanlandolt_: how's that?
+[22:48] isaacs: you've got the request coming in, with a streaming body firing "body" and "complete" events
+[22:48] isaacs: then, to send the request out, you'd ideally have something similar
+[22:48] deanlandolt_: yeah, and the same going out
+[22:48] isaacs: right
+[22:48] isaacs: so... if we're gonna say "either return {status,headers,body} or a promise for the same", you've still got this odd case where you'er expected to eventually have the whole body all at once.
+[22:49] kriskowal: if we built a zlib api, i could make tusk work on node, i think.
+[22:49] isaacs: kriskowal: that would be stellar
+[22:49] kriskowal: i made some progress on getting narwhal to run on node last night.
+[22:49] cadorn has joined the channel
+[22:49] hassox_ has joined the channel
+[22:49] deanlandolt_: isaacs: yes, but (in my proposal at least) you could also have body be a promise
+[22:49] isaacs: (back to re: node async jsgi) i've been sketching an api where the "body" can be a "write stream" which is a thing that fires "body" events.
+[22:50] kriskowal: i'll need help from tom and anyone else who can pitch in to get file, binary, and io working
+[22:50] isaacs: becasue it's not just a promise, you see, it's a data+eof thing
+[22:50] tlrobinson: isaacs: we do intend to be able to asynchronously stream the body
+[22:50] isaacs: tlrobinson: right, what i'm trying to figure out is a) what the non-crappy api for that looks like, and b) how we can do that in such a way that you can still have cool middleware that is agnostic as to the sync/async nature of the app it's middleing
+[22:51] tlrobinson: isaacs: there just needs to be two promises. one for headers, one for eof
+[22:51] isaacs: when jsgi says "a response looks like {blah}" then it's very simple, and we can wrap things easily, and the world is awesome.
+[22:51] isaacs: when jsgi says "a response looks like {blah} or a promise of {blah}" it gets more complex.
+[22:51] deanlandolt_: isaacs: agreed
+[22:52] isaacs: tlrobinson: well, the body itself needs to be a promise, or you need a promise for the whole thing.
+[22:52] isaacs: or better yet, the body should be a "stream" which is an event emitter that sends "body" and "complete" events.
+[22:52] tlrobinson: yes
+[22:52] jan____: yo tlockney 
+[22:52] jan____: do
+[22:52] isaacs: so then, the response is: a) a complete response obj, b) a response obj with a streaming body, or c) a promise that will eventually become either a or b
+[22:52] jan____: yo tlrobinson 
+[22:52] jan____: :)
+[22:53] isaacs: and writing middleware just became awful
+[22:53] tlrobinson: hey jan____. sorry i couldn't make it out last night
+[22:53] pdelgallego has joined the channel
+[22:53] kriskowal: middleware is an interesting issue.
+[22:53] deanlandolt_: isaacs: not with a helper that effectively makes everything async
+[22:53] isaacs: now every middleware has to check what it's getting each time.. that seems noxious
+[22:53] deanlandolt_: or rather makes everything /look/ async
+[22:53] kriskowal: working with promises usually involves a Q.when function
+[22:54] isaacs: deanlandolt_: but the benefit of jack as it is, is that i can write an app, and wrap it in ANY middleware, and middleware can be written such that it just takes a function, and returns a function.
+[22:54] kriskowal: which is a top-level variant of krizyp's promise.then; it accepts either a promise or a fully resolved object and returns a promise
+[22:54] kriskowal: my point being that Q.when could greatly simplify the middleware case
+[22:54] deanlandolt_: kriskowal: ugh! thanks for the reminder...i've been fighting with an issue that should solve
+[22:55] isaacs: kriskowal: so that effectively promise-izes an object into a promise that returns that object?
+[22:55] kriskowal: if you use Q.when, you can be agnostic about whether a thing is resolved or not
+[22:55] isaacs: kriskowal: but that still doesn't handle the case of the streaming body.
+[22:55] kriskowal: not on its own
+[22:55] deanlandolt_: isaacs: progress-emitting promises
+[22:56] deanlandolt_: and a helper lib that allows you to tag onBody callbacks onto it
+[22:56] isaacs: hm..
+[22:56] kriskowal: yeah, .forEach(write) could return a promise that resolves when it's finished writing.
+[22:56] quirkey has joined the channel
+[22:57] kriskowal: the Q.when methodology presumes that your callback can return a promise to further defer.  i don't see how that works in node yet, but i intend to make it so.
+[22:57] inimino: the_undefined: I think it's 132 bytes now :)
+[22:57] the_undefined: inimino: heh
+[22:58] kriskowal: basically, i think node need's ref-send for that to work, and ref-send only depends on an api to enqueue an event to the loop
+[22:58] deanlandolt_: kriskowal: can you elaborate on wha tyou mean by .forEach(write)? i was assuming a three-arg promise (with progressCallback) but it seems you're implying something simpler
+[22:58] kriskowal: which is why i was asking earlier if there was a low level api for enqueue(callback)
+[22:59] isaacs: deanlandolt_: jack's response object body is a thing that can forEach over a bunch of things that are toByteString-able
+[22:59] isaacs: so ["foo", "bar"] is a valid body object
+[22:59] deanlandolt_: yeah, understood
+[22:59] isaacs: so is { forEach : function (f) { f(theNextBit()) } }
+[22:59] kriskowal: if you want to stream, and to do so in a way that's a progressive enhancement on what we have, .forEach could be told to return a promise that resolves when all of the output has been written.
+[22:59] isaacs: right
+[23:00] deanlandolt_: yeah, but how do you flush your pieces?
+[23:00] kriskowal: the internals of forEach would return a promise, and every successive call to its callback could return a new promise until all the output is down the line
+[23:00] deanlandolt_: oh...that oughtta work
+[23:01] isaacs: kriskowal: then how do you know it's done?
+[23:01] jan____: how would I make a blocking HTTP request? req.finish(callback) doesn't seem to return a promise I could .wait() on
+[23:01] kriskowal: simplest case: forEach = function (write) {return write("foo")}.  write would return a promise.  that promise would resolve when all of "foo" is downstream
+[23:01] jan____: deanlandolt_: you mean me?
+[23:01] isaacs: i was thinking something like this: body:{forEach:function(f){ p = new Promise; stream.addListener("body", f).addListener("complete", function () { p.emitSuccess() }); return p } }
+[23:02] the_undefined: jan____: create a second promise which you use wait() on and fire it from within the finish callback
+[23:02] jan____: the_undefined: yuck, for realz!
+[23:02] isaacs: so basically, the forEach() call would return a promise which would resolve when the stream is done.
+[23:02] jan____: ?
+[23:02] the_undefined: jan____: but yeah, req.finish not providing a promise is weird
+[23:02] jan____: yeah
+[23:02] deanlandolt_: jan____: no, i was talking about kriskowal..but how goes it, by the way?
+[23:02] jan____: fixplz
+[23:02] jan____: deanlandolt_: good, thanks, you? :)
+[23:02] kriskowal: next up: forEach = function (write) {return write("foo").then(function () {return write("bar")})}
+[23:02] the_undefined: jan____: it's high on my list of things I care about, ryan seems to be interested in the idea of making node's API more consistent
+[23:02] inimino: jan____: why do you need a synchronous HTTP request?
+[23:03] deanlandolt_: jan____: can't complain...just getting back into some couch awesomeness :)
+[23:03] jan____: inimino: my prototype needs that.
+[23:03] kriskowal: i will need sync http for tusk if i don't want to rewrite it.  also: i don't want to rewrite it.
+[23:03] jan____: deanlandolt_: cool
+[23:03] jan____: kriskowal: amen
+[23:03] the_undefined: jan____: I'll probably kick-start a "Node Interface Guideline" which lays down rules & suggestions that will be obeyed by node core and serves as a guide for 3rd party module developers
+[23:03] isaacs: kriskowal: why do you need sync http for tusk?
+[23:04] aurynn: the_undefined, I'd be interested in helping on that. I'm hammering on a DBI guideline
+[23:04] kriskowal: to not have to rewrite it.
+[23:04] isaacs: oh, because tusk assumes sync http right now?
+[23:04] kriskowal: it's, in the node ideology, old and busted.
+[23:04] kriskowal: yes
+[23:05] isaacs: i see.
+[23:05] the_undefined: aurynn: great, I don't really want to write all of it :)
+[23:05] jan____: the_undefined: I'll help
+[23:05] aurynn: the_undefined, :)
+[23:05] the_undefined: alright, it's on my task list - anybody feel free to beat me to the punch for getting it started
+[23:05] the_undefined: it will probably be a long discussion anyway
+[23:05] the_undefined: :)
+[23:05] erichocean: so I'm looking at the node_postgres adaptor
+[23:05] erichocean: it only using libev, not evcom
+[23:06] aurynn: ACTION is frustrated with postgres-js
+[23:06] erichocean: and the evcom C++ member function are protected
+[23:06] erichocean: is anyone writing a C extension using evcom?
+[23:06] kriskowal: so, i'm lame in c.  any ideas on how to make a zlib api?
+[23:06] the_undefined: aurynn: I would really like node to ship with a set of guides for different interfaces. 
+[23:06] the_undefined: I would also like a "Node/CommonJS Module Guidline"
+[23:06] erichocean: basically, I need to call a function from JavaScript and have it send data on the tcp connection I pass as an argument
+[23:07] aurynn: the_undefined, that'd be lovely. I'm not sure how to write my interface.
+[23:07] the_undefined: which explains how awesome module's should be laid out
+[23:07] aurynn: http://privatepaste.com/b4d21873e3 <- Anyone have any comments on how to buffer items in callbacks above .close ?
+[23:07] isaacs: kriskowal: so, i sort of went a little down that path to provide a glob function for node.fs
+[23:07] kriskowal: aye
+[23:07] the_undefined: everybody is kinda doing their own style depending on their ruby/python/whatever background and I do not dig that :)
+[23:08] isaacs: the_undefined: i think the nature of javascript is that styles do not always match between projects.
+[23:08] kriskowal: commonjs modules are inspired by python.  there's not much point in layering them like ruby, imo.
+[23:08] kriskowal: since they do not (yet) conflate the type system.
+[23:08] erichocean: frankly, the proposals for JavaScript modules all suck
+[23:09] erichocean: including CommonJS
+[23:10] isaacs: kriskowal: apparently, i didn't save what ryah told me about putting synchronous things in the process pool...
+[23:10] kriskowal: ACTION chirps
+[23:10] isaacs: i said to myself "sure, that's simple, i'll remember that"
+[23:10] isaacs: and then didn't
+[23:10] kriskowal: nice
+[23:10] the_undefined: isaacs: sure, but I'd like node to be consistent internally and make that knowledge about what makes node itself consistent available to everybody
+[23:11] the_undefined: isaacs: anybody is free to write whatever code they want to : )
+[23:11] isaacs: i said to myself "if i forget, it's in my local irc log anyhow" neglecting the fact that i's a tiny needle in a big haystack...
+[23:11] isaacs: the_undefined: that makes sense.  personally, i'll stick to node's style when writing code for node, and narwhal's when writing code for narwhal, and yui's when writing code for yui, and my own when writing code for myself.
+[23:11] the_undefined: isaacs: totally reasonable
+[23:12] the_undefined: kriskowal: yeah exactly, but all the cargo cult ruby scientists  are bringing that style with them without questioning it
+[23:13] inimino: erichocean: the CommonJS modules seem better than the others I have seen so far
+[23:13] isaacs: the_undefined: what sort of things are you referring to?
+[23:13] isaacs: the_undefined: just snake_case method names?
+[23:13] erichocean: inimino: oh, CommonJS not worse than, say, Python or Ruby
+[23:13] erichocean: what's dumb is that people seem to think that's as good as it gets
+[23:14] the_undefined: isaacs: no, I mean /lib/my_library.js + /lib/my_library/my_actual_library.js
+[23:14] the_undefined: that's just stupid
+[23:14] bryanl has joined the channel
+[23:14] isaacs: ah, i see.
+[23:14] erichocean: I'm *thrilled* that modules are not part of the ECMAScript definition
+[23:14] the_undefined: personally I like to organize my code in /dep for dependencies
+[23:14] erichocean: it means we can innovate
+[23:14] the_undefined: and /lib for what makes my code my code
+[23:14] inimino: erichocean: that would seem to be "good enough" for a dynamic language then
+[23:14] inimino: erichocean: what do you like better than Python/Ruby's modules?
+[23:14] the_undefined: but I'm not so focused on promoting that as I'm on promoting things that are just useless
+[23:14] the_undefined: ;)
+[23:14] isaacs: erichocean: i agree.  i would encourage you to write up what you think would make modules better.
+[23:15] kriskowal: erichocean. so, ihab and i are making proposals for modules to tc39 next month.
+[23:15] isaacs: erichocean: especially, i'd very much like to see a module system that borrowed more of the learnings from the FE world.
+[23:15] isaacs: yui's use() statement, jquery's require, etc.
+[23:15] kriskowal: so, if you've got brilliant ideas, this is the time to mention them
+[23:15] inimino: ("FE"?)
+[23:15] erichocean: kriskowal: that saddens me greatly
+[23:15] jan____: hm, any ideas why response.sendBody() would cause curl to report problems in the chunky parser?
+[23:15] isaacs: FE = frontend
+[23:15] jan____: transfer encoding is < transfer-encoding: chunked
+[23:16] erichocean: inimino: http://www.cs.utah.edu/flux/knit/knit.html is pretty cool
+[23:16] kriskowal: erichocean: that saddens me greatly
+[23:16] isaacs: as in, dhtml, no synchronous nothin (unless you don't mind killing kittens), slow networks, angry spiteful browsers, etc.
+[23:16] the_undefined: jan____: you on HEAD?
+[23:16] the_undefined: jan____: this would very likely be a sign of encoding issues
+[23:17] erichocean: it's hard to imagine a world without C-style linking (and everything we've built on top of that foundation)
+[23:17] erichocean: putting modules into the language definition will kill innovation IMO
+[23:18] inimino: erichocean: looks interesting
+[23:18] kriskowal: i see.
+[23:19] erichocean: people today complain about all of the different ways to link JS code
+[23:19] inimino: erichocean: with any luck the committe will be as indecisive and the process as dysfunctional as last time and nothing will come of it
+[23:19] aurynn: People tend to just complain
+[23:19] erichocean: but I think that's a virtue (at this time), because it means we can try new stuff
+[23:19] kriskowal: in any case, our proposal is to add components to the language that will make it easier/possible to write good module systems.  hermetic eval.  parse(text):AST
+[23:19] jan____: the_undefined: not on head
+[23:20] inimino: those are both good things
+[23:20] erichocean: we have our own system in SC, Dojo has there's, Google has another, YUI another
+[23:20] erichocean: never before has there been this much work on linkers – and I'm loving it
+[23:20] erichocean: hermetic eval is cool
+[23:20] erichocean: definitely add that
+[23:20] inimino: (I'm not sure I want to lock down an AST format either, though)
+[23:20] inimino: hermetic eval is great
+[23:20] the_undefined: jan____: what version?
+[23:20] erichocean: SC === SproutCore
+[23:21] jan____: v0.1.18-14-g27fcae7
+[23:21] tlrobinson: erichocean: we've had 15 years to innovate. the lack of a standard module system is a barrier to interoperability 
+[23:21] jan____: the_undefined: fiddling with encodings, curl seems happy now, firefox is still out
+[23:21] erichocean: we've had 15 years to get a decent JS VM
+[23:21] erichocean: now the innovation starts because JS can actually, you know, be used
+[23:22] actsasflinn has joined the channel
+[23:22] inimino: yes, there is tons of innovation happening with modules
+[23:23] the_undefined: jan____: g27fcae7 is no commit I can find, weird
+[23:23] jan____: :)
+[23:23] jan____: might be my commit
+[23:23] the_undefined: anyway, if you're version is older than nov 11 you are out lof luck
+[23:23] the_undefined: * of
+[23:23] the_undefined: http://github.com/ry/node/commit/bffee5eda44b98991774d66998e7065355aa461f
+[23:24] the_undefined: * your
+[23:27] deanlandolt_: isaacs: when you were asking about async jsgi were thinking at all about async requests as well?
+[23:27] isaacs: deanlandolt_: yes.
+[23:28] isaacs: imo, http should ideally be a world in which nothing is synchronous ever.
+[23:28] isaacs: except one line after the next
+[23:28] isaacs: and that should always be simple local fast things.  slow stuff, like talking to the file system or over a tcp pipe, should always be async
+[23:28] deanlandolt_: that's a pretty foreign world to a lot of folks
+[23:28] isaacs: deanlandolt_: true.  and there should be ways for the end user to sycnronize, like with wait(), but that should never ever happen at the framework/lib level.
+[23:29] deanlandolt_: i agree with that
+[23:29] isaacs: people get used to it with ajax easily enough.
+[23:29] isaacs: from my pov, nodejs is just ajax applied to the file system.
+[23:29] deanlandolt_: heh...that would make a great tagline
+[23:29] isaacs: ok, but in that case, let's call it xhr applied to the file system.
+[23:29] isaacs: i forgot how much i loathe the term "ajax"
+[23:30] deanlandolt_: well, i just loathe the "x"
+[23:30] isaacs: especially when people say "ajax" and they're referring to creating a dynamic script tag.
+[23:30] tlrobinson: isaacs: or when they say "ajax" and they're referring to javascript
+[23:30] deanlandolt_: that /is/ asyncronous js though ;)
+[23:30] isaacs: true
+[23:31] isaacs: tlrobinson: omgyes, extra hate.  "can we round those corners with ajax?"
+[23:32] isaacs: "sure, lemme just ajax up my editor here, sprinkle a little ajax in the css.  have the designer put some ajax in his photoshop comps and send that over to me.  meanwhile, maybe you could pour some ajax in your coffee and drink it."
+[23:32] kriskowal: or, here's one for tlrobinson, they say "ajax" and they mean programs with dollar signs.
+[23:33] isaacs: i once saw a resume or a webdev which described a web app he built "100% in ajax and css"
+[23:33] isaacs: i was thinking, "so... you didn't use ANY markup...?  like... anywhere?"
+[23:34] tlrobinson: isaacs: maybe it was a "javascript:" url
+[23:34] isaacs: tlrobinson: hahaha
+[23:36] tlrobinson: you could probably get by with just a script tag. <script>alert("ok")</script> works
+[23:37] tlrobinson: (that's basically how cappuccino is, though the index.html has a bit more so it's valid etc)
+[23:38] elliottcable has joined the channel
+[23:38] isaacs: tlrobinson: as long as it's served as html, just a script tag is perfectly "valid" imo.
+[23:39] trevor: How interested is node.js in implementing the CommonJS apis?
+[23:39] isaacs: for the sorts of things that cappuccino is, just a script tag is probably fine, i think.
+[23:39] isaacs: trevor: sorta.
+[23:40] elliottcable: trevor: more interested than I would like us to be.
+[23:40] elliottcable: trevor: d-:
+[23:40] deanlandolt_: trevor: which apis are you refererring to? commonjs doesn't have too much nailed down on the async side of things
+[23:41] trevor: "sort of" meaning that nobody feels like doing it right now, or "sort of" meaning there are disagreements?
+[23:41] tlrobinson: ACTION growls at elliotcable
+[23:41] elliottcable: ACTION has put in about 150 man-hours of work trying to reverse the damage that that ‘securable modules’ crap has caused, and is fairly bitter against the entire CommonJS movement
+[23:41] trevor: deanlandolt_: None in particular, I'm just generally interested
+[23:42] elliottcable: ’sup tlrobinson 
+[23:42] rictic has joined the channel
+[23:42] bentomas: elliottcable: you just missed a whole discussion on modules in node. 
+[23:43] elliottcable: bentomas: Dam.
+[23:43] deanlandolt_: trevor: as am i...but i think the best bet would be to start working on and agitating for async versions of the proposals (particularly fs-base i imagine)
+[23:43] elliottcable: ACTION shrugs
+[23:43] elliottcable: the community has very largely diverged from any passing similarity to what I’m wanting to see; I’m pretty much at ease with the fact I’m going to have to build my own infrastructure from scratch for packaging/testing/distrobution
+[23:43] isaacs: trevor: both.
+[23:43] isaacs: basically, afaik, the position is this:
+[23:44] trevor: deanlandolt_: I see what you mean. much of the proposed apis in commonjs 0.5 are fundamentally different than that node.js uses now
+[23:44] isaacs: commonjs is doing a great job coming up with consistency, and when possible and convenient, it makes sense to be consistent with commonjs.
+[23:44] isaacs: that being said, if node's needs are different, it makes no sense to sacrifice those needs for hte sake of consistency.
+[23:44] elliottcable: I also generally dislike the concept. There’s various SSJS implementations for a *reason*; that allows diversity, allows me to find one I like (Node.js) and use it.
+[23:44] trevor: Sure
+[23:44] deanlandolt_: foolish consistencies and all that...
+[23:45] elliottcable: But if they all conform to a single standard… why bother having multiple ones? Then, if I don’t like that single standard, I’m buttfucked; because *every* option out there conforms to it.
+[23:45] elliottcable: I’m fairly glad @ryah seems to be taking CommonJS with at least a pinch of salt, and isn’t rushing to destroy everything Node is just to conform.
+[23:45] isaacs: especially, when a commonjs api enforces synchronicity, it's generally not going to be consistent with node's philosophy
+[23:45] deanlandolt_: but still, there's a groundswell of demand for async (in no small part due to node) so i think there will be consistently more push for async in the api proposals
+[23:45] isaacs: most of the time.
+[23:45] isaacs: synchronous require() is easy to implement, and not completely terrible.
+[23:46] kriskowal: there need to be async commonjs apis.  it's actually a shame that this group isn't more involved in making proposals.  it's not a locked room.
+[23:46] elliottcable: (yes completely terrible #2¢)
+[23:46] elliottcable: kriskowal: actually, that’s the impression I got.
+[23:46] deanlandolt_: elliottcable: they're just apis -- as long as they're async you can always wrap them
+[23:46] isaacs: elliottcable: as a veteran of web development since the mid-90s, i can say, multiple platforms is rarely as good as one platform.
+[23:46] elliottcable: kriskowal: I wrote up an *extensive* discussion of the problems with require() for them, was something like 1,500 words…
+[23:46] kriskowal: i really would like to see a bunch of of proposals with "a-" prefixes
+[23:46] isaacs: sorry, multiple apis, rather
+[23:46] elliottcable: kriskowal: their response>? “Oh, we’re done with that, and uninterested in your point of view. Too bad you weren}t here in March.”
+[23:47] JimBastard has joined the channel
+[23:47] elliottcable: deanlandolt_: not really; There’s no way to get out of the require() crap. Hence why I’m having to build my own from scratch, literally.
+[23:47] JimBastard: eeek we talking about dynamically loading modules?
+[23:47] deanlandolt_: elliottcable: fair enough -- that's a fundamental building block
+[23:47] kriskowal: i'm sure i used those exact words.  it's true that we shouldn't retrofit what we've got already.  require.async is on the table though.
+[23:48] elliottcable: deanlandolt_: I’m actually trying to build my replacement in such a way that require() could be re-implemented on *top* of it, in a clean way
+[23:48] trevor: elliottcable: Could you link me to that write up of yours? I'm curious as to why you don't like require so much
+[23:48] deanlandolt_: but i don't see why you'd be against standardizing on low level async i/o apis and things like binary
+[23:48] isaacs: kriskowal: have you seen node's require function?
+[23:48] kriskowal: yes
+[23:48] isaacs: it's literally: return requireAsync(module).wait()
+[23:48] kriskowal: it's very similar to my browser-side require
+[23:48] JimBastard: jquery.require is coming soon! huzaaah
+[23:48] elliottcable: trevor: there’s actually a better one, now; GitHub, comments at the top of from.js
+[23:48] elliottcable: trevor: Here’s my current API: http://github.com/elliottcable/poopy.js/blob/new-acquire/lib/from.js
+[23:49] tlrobinson: JimBastard: jquery.require is completely different though, isn't it?
+[23:49] kriskowal: require() in browser-side narwhal is require.when(id, function () {require(id)}) essentially the same
+[23:49] elliottcable: ugh, I don’t want to leave such an interesting and relevant conversation, but I *really* have to eat.
+[23:49] kriskowal: yeah.  food would be a good idea at some point today.
+[23:49] aurynn: Sushi!
+[23:49] kriskowal: dinner, breakfast, what's the difference.
+[23:50] deanlandolt_: brinner FTW
+[23:50] elliottcable: deanlandolt_: Put it this way: I was pretty fine with how Node did file acquire-ing *before* CommonJS, and then CommonJS happened.
+[23:50] kriskowal: what was it before?
+[23:50] elliottcable: deanlandolt_: so I’m sort of intuitively assuming that, since I like the way Node does things now, if it conforms to a spec that comes out of the committee clusterfuck that is CommonJs, I will no longer like them.
+[23:51] deanlandolt_: elliottcable: i'd chalk that up to the pain of early adoption...but i can see how you may see things differently :)
+[23:51] elliottcable: kriskowal: fairly primitive and basic
+[23:51] elliottcable: deanlandolt_: It’s less the change that was the pain, I can deal with that; It’s what it changed *into*.
+[23:51] kriskowal: i meant exactly
+[23:51] elliottcable: deanlandolt_: from a low-level API that I can build my own desires on top of, to a high-level thing I can’t easily work around
+[23:51] kriskowal: can i trouble you for a primitive or basic example?
+[23:51] elliottcable: kriskowal: http://github.com/ry/node/blob/v0.1.14/doc/api.txt
+[23:52] elliottcable: shit, that may not have been far enough back
+[23:52] kriskowal: so it would seem
+[23:52] elliottcable: anyway, afaicr, it *always* did the whole exports thing, which is fairly painful. I’d have always enjoyed a much lower-level-yet one, which is what I’m implementing on top of process.compile() now
+[23:53] elliottcable: ACTION notes down the people involved - kriskowal, deanlandolt_, tlrobinson, JimBastard, isaacs, I’ll be back in an hour or two, if y’all’re here, I’ll try to bring the topic back up
+[23:53] elliottcable: aurynn: and that’s *exactly* what I’m planning to have. BRB Unagi!
+[23:53] deanlandolt_: elliottcable: when you're able to require() in libraries from all over the internets you may see things differently :)
+[23:53] isaacs: elliottcable: enjoy your unagi.
+[23:53] aurynn: so is there a best-case for async APIs of synchronous buffers?
+[23:54] elliottcable: deanlandolt_: what do you mean?
+[23:54] elliottcable: deanlandolt_: I hate this security shit. Don’t run code you don’t trust, it’s not difficult, nor is it complex.
+[23:54] deanlandolt_: elliottcable: i'll be here in an hour when you get back
+[23:54] elliottcable: deanlandolt_: making the system more difficult to use / more complex *just in the name of security* is one thing that pisses me off more than pretty much anything
+[23:54] elliottcable: deanlandolt_: okay! ’ta
+[23:55] isaacs: elliottcable: "Don't run code you don't trust" is only easy in the small.  in large/interesting cases, it quickly gets out of hand.
+[23:56] isaacs: ACTION doesn't much trust any code he wrote more then 10 minutes ago.
+[23:56] isaacs: s/en/an/
+[23:57] elliottcable: isaacs: good points all, but I *really* have to run. /mark’d
+[23:58] erichocean: premature standardization is premature optimization's ugly cousin
+[23:59] erichocean: my opinion is that we don't yet have enough experience writing linkers for prototype languages with a strong async need
+[23:59] inimino: erichocean: I guess you like Closure?
+[23:59] erichocean: and thus we should focus on enabling implementors, but not standardizing implementations -- for now
+[23:59] deanlandolt_: erichocean: but that's the beauty of standards -- ifyou don't like them dont use them

@@ -1,0 +1,1551 @@
+[00:06] martyn_ has joined the channel
+[00:13] rob42 has joined the channel
+[00:13] <rob42> how have you guys found the performance of node.js vs, say, ruby+eventmachine?
+[00:13] <rob42> I'm finding the performance to be incredible
+[00:14] <Tim_Smart> rob42: Cool :p
+[00:15] <rob42> :)
+[00:15] tmpvar has joined the channel
+[00:16] <rektide> re: avro & node-avro, tmpvar did post this: http://groups.google.com/group/nodejs/msg/a2020366da9bf67d
+[00:16] <rektide> oh hello back
+[00:16] tmpvar_ has joined the channel
+[00:27] tmpvar_ has joined the channel
+[00:33] tmpvar has joined the channel
+[00:35] cadorn has joined the channel
+[00:37] <isaacs> Tim_Smart _ry felixge: Hey, when/if you guys get a second, I'd love to hear any thoughts on this proposal: http://groups.google.com/group/nodejs/browse_thread/thread/7e4cb5dd8ef87d76
+[00:39] <felixge> isaacs: I ran into this before, but I couldn't describe it as well as you have
+[00:39] <Tim_Smart> isaacs: Will it solve the issue requiring a dir with a index.js, and then requiring the index.js directly?
+[00:39] <isaacs> Tim_Smart: i didn't touch that, but it could be done at the same time
+[00:39] <isaacs> Tim_Smart: i tried to just focus on teh problem at hand.
+[00:39] <Tim_Smart> I guess __filename would do it, yeah
+[00:40] <isaacs> Tim_Smart: well, if you did require("./foo") and then later did require("./foo/index"), then they'd have separate entries at the top level of the cache
+[00:40] <Tim_Smart> I'm currently trying to run modules in a sandbox using evalcx
+[00:40] <felixge> isaacs: your solution looks too complicated
+[00:41] <isaacs> felixge: i agree.  but i'm not sure how to make it any simpler.
+[00:41] <felixge> isaacs: in fact, ryan is probably going to bring up removing the module system all together again :D
+[00:41] <isaacs> hahaha
+[00:41] <felixge> I'm wondering why we need module caching
+[00:42] <isaacs> felixge: it cuts down load time
+[00:42] <felixge> how much?
+[00:42] <isaacs> felixge: also, 2 other things
+[00:42] <felixge> you should never use require() during runtime unless you want to hot reload something
+[00:42] <isaacs> felixge: 1. if you require a module you might not want to do the setup again, just get the old exports.
+[00:42] <felixge> and I don't care if my script starts up in 20ms or 200ms
+[00:42] <isaacs> felixge: 2. circular requires necessitate SOME kind of cache
+[00:42] <felixge> ah, right
+[00:42] <felixge> the circular stuff sucks
+[00:43] <isaacs> a.js does require("b").  b.js does require("a")
+[00:43] <isaacs> if it's cahced, you jsut return the "unfinished" object
+[00:43] <isaacs> incidentally, for the same reason, i need a package registry to do circular dependencies in npm
+[00:43] <isaacs> but that's another godawful long thread
+[00:43] <felixge> :D
+[00:44] <felixge> anyway, looking at the problem I have no better solution to offer
+[00:44] <felixge> but I'm on my 2nd club mate for tonight, miracles may occur
+[00:44] <felixge> :)
+[00:44] <isaacs> i think it's a good idea to have a bundled module loading system.  and the code is absolute spaghetti atm
+[00:44] <felixge> yes, if ryan kills the module system I will kill myself
+[00:44] <felixge> :)
+[00:44] <Tim_Smart> isaacs: Why are we skipping functions with evalcx?
+[00:44] <Tim_Smart> for the sandbox
+[00:45] <isaacs> Tim_Smart: because function scopes destroy the sandboxing, and v8 yells at you when you try to run a function from context A in context B
+[00:45] <isaacs> (at least, it did last year, don't know if that's supported somehow)
+[00:45] <Tim_Smart> Time to find out :p
+[00:45] <isaacs> hehe
+[00:45] <isaacs> Tim_Smart: you can't do the ->ToObject()->Clone() on the function, though
+[00:45] <isaacs> Tim_Smart: because it wont' be a function after you do that
+[00:46] <Tim_Smart> ToFunction()?
+[00:46] <isaacs> Tim_Smart: i don't think that functions have a Clone(), do they?
+[00:46] <Tim_Smart> no, why don't we just pass by reference?
+[00:46] <isaacs> Tim_Smart: because they're different contexts
+[00:48] <isaacs> Tim_Smart: let's say you're running some malicious code.  and that malicious code does someObj.__defineGetter__("foo", function () { require("sys").eval("rm -rf /") })
+[00:48] <Tim_Smart> right, so v8 sandboxes aren't as cool as spidermonkey ones
+[00:48] <isaacs> Tim_Smart: if by "cool" you mean "hideously insecure", then, yes
+[00:48] <carsonm> Does anyone know if the net2 branch is the future? Or maybe parts of it?
+[00:48] <Tim_Smart> isaacs: I want to get require() into the sandbox :p
+[00:48] <Tim_Smart> etc
+[00:48] <isaacs> Tim_Smart: i see
+[00:49] <isaacs> well, try it
+[00:49] <isaacs> ie, remove the line that does the continue() if it's a function, and see if you can pass functions back and forth
+[00:49] <Tim_Smart> I have, but you got a continue for functions
+[00:49] <Tim_Smart> ok I will :p
+[00:49] <isaacs> i was going off of what i'd remembered from times long gone about functions being tied to their context
+[00:50] <Tim_Smart> good times, it gets passed in as a function
+[00:50] <isaacs> weird
+[00:50] <isaacs> Clone()?
+[00:50] <isaacs> that just seems so... unsafe.
+[00:51] <isaacs> i mean, your evalcx code could get at callee.caller and whatnot
+[00:52] <Tim_Smart> v8 might null those values or something. Will find out I guess
+[00:54] jed_ has joined the channel
+[00:56] <isaacs> Tim_Smart: oh, i wonder if you'll just get a permission error, since the context's SecurityToken isn't the same?
+[00:56] <Tim_Smart> testing now
+[00:56] <isaacs> that's how iframes can talk to one another (or can't, if they're on different domains)
+[00:56] <isaacs> nice
+[00:56] mjr_ has left the channel
+[00:57] dekz has joined the channel
+[01:05] ditesh has joined the channel
+[01:07] joshbuddy has joined the channel
+[01:09] <isaacs> Tim_Smart: so, what's the verdict?
+[01:09] <Tim_Smart> that its a big hack :p
+[01:09] <isaacs> hahaha
+[01:10] <isaacs> i mean, can you pass functions in and actually get a working require() into evalcx?
+[01:10] <isaacs> cuz that'd be kinda neat
+[01:12] <isaacs> Tim_Smart: at the very least, it'd make andy and edwin happy
+[01:12] <isaacs> Tim_Smart: and i suppose, even if the functions were a leak, it would be like a box-model security type thing.  ie, you only have access to what i show you, so it's up to me to be explicit and only share what's safe to share
+[01:16] <Tim_Smart> Yeah well, atm I got it going almost, except instanceof in the node context doesn't point to the right constructors
+[01:19] <isaacs> Tim_Smart: oh, right, huh?  since it created a new copy of those things
+[01:19] <isaacs> but i think that's a pretty reasonable caveat
+[01:19] <Tim_Smart> Yeah, new context = new Function, Array etc etc
+[01:20] voodootikigod_ has joined the channel
+[01:20] <isaacs> the alternative is to go through all the things in the sandbox, test its constructor, etc.
+[01:20] <Tim_Smart> well I got node-repl going :p
+[01:20] <isaacs> OH! hey, you should probably do clone() on arrays, too
+[01:20] <isaacs> yeah, the repl's one place where cx really can be awesome
+[01:20] <isaacs> you can make the .clear a LOT less hacky
+[01:20] creationix has joined the channel
+[01:20] <isaacs> like, it can *actually* give you a brand new context
+[01:21] <isaacs> anyway, because arrays are byref, I could get your array in my cx code, and do "ar.__proto__.push = myEvilFunction"
+[01:22] <Tim_Smart> you should just clone everything like you do with objects, as everything in Javascript is an object pretty much
+[01:22] <isaacs> the alternative would be to change the __proto__ in the EvalCX() c++ function to point everything at the sandboxed version, which is wonky
+[01:22] <isaacs> Tim_Smart: but then if you pass 3 in, it's not 3, it's Number(3)
+[01:22] <isaacs> which isn't the same thing, because JavaScript is a dick.
+[01:23] <Tim_Smart> OK, we can eliminate the exceptions I guess
+[01:23] <isaacs> that's what IsObject() did, i thought.
+[01:23] <isaacs> ie, any native (non-object) would return false from that
+[01:23] <Tim_Smart> Yeah arrays are objects
+[01:23] <isaacs> so arrays return true from IsObject()?
+[01:23] <Tim_Smart> not sure, will have to test that one
+[01:24] <isaacs> i'd think it would, since v8::Array inherits from v8::Object
+[01:24] <mikeal> arrays are objects with a length property
+[01:25] <mikeal> :)
+[01:25] <Tim_Smart> Yeah it should then
+[01:25] <mikeal> oh, this is in C land
+[01:25] <isaacs> oh, weird, v8::Date *doesn't* inherit from v8::Object
+[01:25] <mikeal> i needed to scroll up
+[01:25] <isaacs> mikeal: hehe
+[01:26] <mikeal> the Date object is all kinds of fucked up
+[01:26] <isaacs> Tim_Smart: yeah, assuming that v8 is sane here, you'd have to test for IsObject(), IsDate() and IsExternal()
+[01:26] <isaacs> if any of those are true, then Clone()
+[01:26] <Tim_Smart> isaacs: You can fix your patch if you want :p
+[01:26] <isaacs> hahah
+[01:27] <isaacs> Tim_Smart: well, when i say "you" i really mean "the human team".  who actually types the code is irrelevant
+[01:27] <isaacs> Tim_Smart: it's us vs the machines
+[01:27] <Tim_Smart> hopefully we are winning, but no-one knows for sure
+[01:27] <isaacs> so, otoh, maybe it makes sense to not clone anything, and just say "if you hand evalcx an object, then evalcx will have your object"
+[01:27] joshbuddy has joined the channel
+[01:27] <mikeal> that's how SM works
+[01:28] <isaacs> right, so then it's up to the caller to be safe
+[01:28] <isaacs> or not
+[01:28] <isaacs> Tim_Smart: how's that sound to you?  would that make it easier for you to do what you're trying?
+[01:28] <Tim_Smart> Sounds good
+[01:29] <felixge> do you guys need some decent date libraries?
+[01:29] <felixge> * know
+[01:29] <felixge> something to make things easy like adding '1 hour' to a date object?
+[01:29] <isaacs> felixge: philip tellis ported php's date() function to js, i believe
+[01:29] <isaacs> date() and strtotime
+[01:30] <felixge> isaacs: got a link?
+[01:30] <felixge> does it have tests?
+[01:30] <felixge> :)
+[01:30] <Tim_Smart> nodejs_v8: Object.getOwnPropertyNames(new Date())
+[01:30] <nodejs_v8> Tim_Smart: []
+[01:30] <Tim_Smart> nodejs_v8: Object.getOwnPropertyNames(Date)
+[01:30] <nodejs_v8> Tim_Smart: ["now", "arguments", "UTC", "length", "name", "prototype", "caller", "parse"]
+[01:31] <Tim_Smart> Date.parse('25/4/2010')
+[01:31] <isaacs> felixge: ok, so, it's strftime, not strtotime: http://hacks.bluesmoon.info/strftime/
+[01:31] <Tim_Smart> nodejs_v8: Date.parse('25/3/2010')
+[01:31] <nodejs_v8> Tim_Smart: NaN
+[01:32] <Tim_Smart> nodejs_v8: You fail
+[01:32] <nodejs_v8> Tim_Smart: Exception: SyntaxError: Unexpected identifier
+[01:32] <felixge> Tim_Smart: Date.parse is just picky
+[01:32] <isaacs> Tim_Smart: i was hoping to see "You is undefined"
+[01:32] <inimino> carsonm: it's the future
+[01:33] <Tim_Smart> isaacs: OK, I'm going to try pass everything by reference
+[01:33] <felixge> damn, I really don't want to write date libraries at 2 am :(
+[01:33] <felixge> *sigh*
+[01:34] <inimino> if you're writing the date library you can make it be whatever time you like
+[01:34] <Tim_Smart> felixge: Go to bed then :p
+[01:34] <felixge> Tim_Smart: I got my agenda, and sleep ain't on it until thursday :(
+[01:36] <inimino> js> var hr=3600*1000; new Date(+new Date + 1*hr)
+[01:36] <gbot2> inimino: Tue Mar 16 2010 22:36:22 GMT-0400 (EDT)
+[01:37] <inimino> JavaScript date handling is pretty painful.
+[01:37] <inimino> felixge: what kind of API do you want?
+[01:37] <inimino> there's a Ruby-like one if you like that sort of thing
+[01:38] <felixge> I guess this will do:
+[01:38] <felixge> nodejs_v8: new Date(+new Date - 60 * 60 * 1000)
+[01:38] <nodejs_v8> felixge: {}
+[01:38] <felixge> nodejs_v8: new Date(+new Date - 60 * 60 * 1000).toString()
+[01:38] <nodejs_v8> felixge: "Wed Mar 17 2010 00:37:45 GMT+0000 (UTC)"
+[01:38] <felixge> nodejs_v8: new Date(+new Date - 2 * 60 * 60 * 1000).toString()
+[01:38] <nodejs_v8> felixge: "Tue Mar 16 2010 23:37:53 GMT+0000 (UTC)"
+[01:38] <felixge> yeah, works
+[01:38] <felixge> inimino: I actually want as little 3rd party code as possible. Anything without unit tests is not acceptable
+[01:39] mjr_ has joined the channel
+[01:39] <isaacs> _ry: you seeing the evalcx stuff above?  http://github.com/isaacs/node/commit/1cfb0d41ae29dc654437ee48e5187169d471f14b
+[01:39] <isaacs> Tim_Smart: fixed like we talked about here: http://github.com/isaacs/node/commit/1cfb0d41ae29dc654437ee48e5187169d471f14b
+[01:40] <Tim_Smart> isaacs: You wouldn't need to copy it back wouldn't you? everything is referenced
+[01:40] <isaacs> Tim_Smart: well, but, when you turn it into a new context global, you're actually not getting the same object.
+[01:41] <isaacs> you have to copy in order to pick up new globals that may have been created
+[01:41] <isaacs> or modified
+[01:41] <Tim_Smart> Ah ok
+[01:42] <Tim_Smart> yeah, other than that, those were the changes I made on my local branch
+[01:42] <carsonm> inimino: thanks, I'm glad I noticed someone talking about it.  I was looking for unix domain support.
+[01:44] <Tim_Smart> yay, fully securable modules
+[01:45] stepheneb has joined the channel
+[01:48] temoto has joined the channel
+[01:49] <temoto> Hello. Does Node.js use aio_* family for file IO?
+[01:52] <rektide> holy shit i didnt know evalcx was eval(code,obj)
+[01:52] <rektide> word
+[01:53] <Tim_Smart> isaacs: I tapped a filename argument to evalcx
+[01:53] <isaacs> Tim_Smart: word
+[01:53] <Tim_Smart> anyway, time to commit this shi
+[01:53] <isaacs> Tim_Smart: you should reply to my patch thread with your filename update
+[01:54] <Tim_Smart> sure
+[01:54] <isaacs> that's a good idea.  didn't think of that
+[01:54] <isaacs> rektide: yeah, it defaults to {} if you don't pass in anything
+[01:57] okito has joined the channel
+[01:58] <Tim_Smart> isaacs: Going to have to change 'instanceof Function' to 'typeof === 'function''
+[01:58] <Tim_Smart> due to a different sandbox for every module
+[01:59] <isaacs> Tim_Smart: wow, that's a bit lame
+[01:59] <isaacs> what's this for?
+[01:59] <Tim_Smart> only 2 lines need changing though
+[01:59] <Tim_Smart> addListener
+[01:59] <Tim_Smart> and removeListener
+[01:59] <isaacs> Tim_Smart: wait, what are you doing with evalcx?
+[01:59] <Tim_Smart> isaacs: Fully securable modules
+[01:59] <isaacs> ok... to replace node's existing require(), or be an add-on to it?
+[01:59] temoto has left the channel
+[02:00] <Tim_Smart> isaacs: Nothing will change, except a modules global context won't leak into the next one
+[02:01] <Tim_Smart> And you can require, without worrying about your globals getting messed up
+[02:01] <isaacs> oh, so you're swapping out the process.compile() with a process.evalcx?
+[02:01] <Tim_Smart> yeah
+[02:01] <isaacs> i think that might destroy express.
+[02:01] <rektide> process.evalcx is enough to get env-js going
+[02:01] <rektide> Tim_Smart: 
+[02:02] <rektide> i havent looked at, what is it, runtime.js or what not
+[02:02] <rektide> there's one file with all the rhino deps
+[02:02] <Tim_Smart> isaacs: Why, what does express do, naughty things?
+[02:03] <isaacs> Tim_Smart: it's only naughty if you say no to it.
+[02:03] <isaacs> ;P
+[02:03] <Tim_Smart> isaacs: No!
+[02:03] <isaacs> hehe
+[02:03] <isaacs> yeah, it puts stuff on the global object
+[02:03] <Tim_Smart> rawr >.>
+[02:03] <isaacs> but you could probably just expose "global" on the context obj, and if you really WANT to use globals, you can.
+[02:03] <isaacs> but at least then it won't be by accident.
+[02:04] <isaacs> or, you could write a completely separate module loader, and we could move that out of node.js (or greatly reduce it)
+[02:04] <Tim_Smart> global already has global attached to it
+[02:04] <isaacs> Tim_Smart: right, but i mean, as the context obj, you pass in {global:global}
+[02:04] <Tim_Smart> And I'm just doing a 1 level deep copy
+[02:04] <isaacs> so you can still do global.foo to pollute things
+[02:04] <Tim_Smart> to the sandbox object
+[02:04] <isaacs> i see, so express could still work
+[02:04] <Tim_Smart> yeah
+[02:05] <isaacs> it'd just have to do global.foo = bar rather than just foo = bar
+[02:05] <isaacs> for the record, i don't approve of global pollution.  but people like express.
+[02:05] <Tim_Smart> It breaks coffeescript though >.>
+[02:06] Yuffster has joined the channel
+[02:06] <carsonm> Would it be a waste of time to make a simple fcgi interface for node.js that could be used with nginx, etc?
+[02:07] <rektide> no
+[02:07] <carsonm> It would just be one less thing to think about node having to handle.
+[02:07] <rektide> just.... not super easy
+[02:07] <carsonm> I think it will actually be pretty easy
+[02:07] <rektide> well, its being able to not think about anything your other http server already has setup
+[02:08] <rektide> there's no other real advantage
+[02:08] dnolen has joined the channel
+[02:08] brandon_beacher has joined the channel
+[02:09] joshbuddy has joined the channel
+[02:09] <carsonm> yeah, it almost seems like the http lib shouldn't be part of node itself
+[02:09] <rektide> its not, its in a module
+[02:09] <carsonm> yeah but it comes with it is all
+[02:10] <rektide> yes
+[02:10] <carsonm> unlike things like mq or database support
+[02:11] <Tim_Smart> isaacs: http://github.com/Tim-Smart/node/compare/module-sandbox
+[02:13] <isaacs> Tim_Smart: instead of using the wrapper, why not just create the sandbox obj with those values in it?
+[02:13] mjijackson has joined the channel
+[02:13] <Tim_Smart> I did that initially
+[02:13] <Tim_Smart> But I forget why I reverted
+[02:14] <mjijackson> ashb: Didn't you point to an example some time last week of how one could extend markdown-js with their own extension?
+[02:14] <isaacs> people bitch about require() putting their code in a function unexpectedly.  that'd kinda solve the problem.
+[02:15] <isaacs> ok, i gotta run.  Tim_Smart, i'm gonna be all over require() stuff tomorrow for the module.id wonkiness that is breaking npm a little bit these days.
+[02:16] <mjijackson> ashb: Sorry ... *dialect* is the word that is used in the code.
+[02:16] <isaacs> so i'll review your kit in more detail then.  feel free to email me about it if you do more tonight.
+[02:16] dandean has joined the channel
+[02:16] <Tim_Smart> isaacs: OK cool
+[02:16] erikvold has joined the channel
+[02:18] aryounce has joined the channel
+[02:21] ryandotsmith has joined the channel
+[02:21] ryandots_ has joined the channel
+[02:22] cdorn has joined the channel
+[02:23] captain_morgan has joined the channel
+[02:24] <captain_morgan> felixge, Where does the "node-stress" module you're using in Dirty v2 come from?
+[02:25] <felixge> captain_morgan: /Users/felix/.node_libraries/node-stress :)
+[02:26] <captain_morgan> Uhh huh..
+[02:26] <captain_morgan> You have it up anywhere? 
+[02:26] <felixge> captain_morgan: let me push it
+[02:26] <captain_morgan> doesn't look to be on github
+[02:26] <captain_morgan> thanks
+[02:27] <felixge> no guarantees, no docs - but it's been helpful for me so far
+[02:28] <felixge> captain_morgan: http://github.com/felixge/node-stress
+[02:28] <captain_morgan> I can pretty well guess what it does.. just didn't want to rewrite it to run the benchmarks
+[02:28] <captain_morgan> rad, thanks
+[02:28] <felixge> captain_morgan: it should work fairly well for "sync" tests. Async support is also in there, but it will run all tests at the same time unless you put them in seperate files
+[02:29] <captain_morgan> ok
+[02:29] <captain_morgan> and is this something you are continuting to work with/develop?
+[02:29] <felixge> captain_morgan: I'd like to work on it more, yes
+[02:29] <felixge> I like the main idea of it a lot
+[02:29] <felixge> you tell it how many "runs" you want and how much time to spend on each run
+[02:30] <felixge> and it will double the "iterations" variable passed to your benchmark until the benchmark takes long enough to run
+[02:30] <felixge> this way the benchmark should have absolutely no effect on what is being benchmarked, and you don't have to figure out the right values
+[02:31] <felixge> one thing I'd like to do is support for slopes to give some ideas on the Big-O traits of a function
+[02:31] <felixge> but not sure when I'll find the time
+[02:31] quirkey has joined the channel
+[02:31] <captain_morgan> sounds cool
+[02:31] <captain_morgan> I'll be knock this around a little over the next couple days
+[02:32] <captain_morgan> thinking I will be using Dirty for a project i'm working on
+[02:33] <felixge> captain_morgan: :)
+[02:33] <felixge> let me know if you run into any issues
+[02:33] <felixge> the branch version should work well right now
+[02:33] <felixge> but I'm going to polish it up further before JSConf
+[02:34] <captain_morgan> cool
+[02:34] <captain_morgan> I'll give you some feedback on how it goes
+[02:34] <felixge> captain_morgan: cool, thanks
+[02:34] <captain_morgan> so far SQLite, CouchDB, and Mongo have not worked out
+[02:35] <captain_morgan> or I'm being fickle
+[02:41] <Tim_Smart> hah, just released securable modules would break the entire test suite
+[02:44] ditesh|cassini has joined the channel
+[02:48] BryanWB has joined the channel
+[02:50] JimBastard_ has joined the channel
+[02:50] <JimBastard_> JAVASCRIPT PARTY
+[02:50] <JimBastard_> sup Tim_Smart 
+[02:51] jed_ has left the channel
+[02:51] <Tim_Smart> ello JimBastard_ 
+[02:51] tmpvar_ has joined the channel
+[02:57] <tmpvar> yo JimBastard 
+[02:57] <JimBastard_> hey hey
+[02:58] <felixge> captain_morgan: what was the problem? Limitations of the db? Or client situation in node?
+[03:00] <felixge> anyway, 4am ... I think it's bed time
+[03:01] RayMorgan has joined the channel
+[03:02] jashkenas has joined the channel
+[03:10] <CIA-77> node: 03isaacs 07master * r31ed37f 10/ (src/node.cc test/simple/test-eval-cx.js): 
+[03:10] <CIA-77> node: evalcx shouldn't be too fancy
+[03:10] <CIA-77> node: After getting some feedback from Mikeal Rogers and Tim Smart, it was decided
+[03:10] <CIA-77> node: that evalcx should not try to do any fancy security stuff, and instead leave
+[03:10] <CIA-77> node: that in the hands of the user. To comply more with spidermonkey, everything
+[03:10] <CIA-77> node: is passed in, and objects are passed in by reference rather than being
+[03:10] <CIA-77> node: cloned. - http://bit.ly/adob7a
+[03:12] binary42 has joined the channel
+[03:24] blazzy_ has joined the channel
+[03:29] BryanWB has joined the channel
+[03:29] rtl has joined the channel
+[03:32] r11t has joined the channel
+[03:32] rednul has joined the channel
+[03:33] JimBastard_ has joined the channel
+[03:34] JimBastard_ has joined the channel
+[03:39] ditesh|cassini has joined the channel
+[03:54] joshbuddy has joined the channel
+[03:54] joshbuddy has joined the channel
+[03:54] BryanWB has joined the channel
+[04:00] joshholt has joined the channel
+[04:01] markwubben has joined the channel
+[04:03] ssteinerX has left the channel
+[04:06] creationix has joined the channel
+[04:13] joshholt_ has joined the channel
+[04:30] ryandotsmith has joined the channel
+[04:30] PyroPeter has joined the channel
+[04:31] quirkey has joined the channel
+[04:32] jed has joined the channel
+[04:44] isaacs has joined the channel
+[04:45] JimBastard_ has joined the channel
+[04:58] cloudhead has joined the channel
+[05:10] mikeal has joined the channel
+[05:12] okito has joined the channel
+[05:12] chakrit1 has joined the channel
+[05:13] chakrit2 has joined the channel
+[05:17] <mattly> is there a writeup somewhere on how to use narwhal stuff in node?
+[05:21] bpot has joined the channel
+[05:22] <tlrobinson> mattly: it's still somewhat experimental, but kriskowal would be the person to ask
+[05:22] <mattly> heh
+[05:24] <tlrobinson> mattly: basically you need kris's branch of node until ryan merges some of the changes in. eventually i'd like narwhal to be an add on to a stock build of node http://github.com/kriskowal/node
+[05:24] aguynamedben has joined the channel
+[05:25] <mattly> tlrobinson: gotcha
+[05:25] <mattly> i'm considering porting a fledgling rack (ruby) app to node, i think it would be a good fit, but i'm looking for an implementation of wsgi/rack and jack seems the most mature
+[05:29] creationix has left the channel
+[05:30] dnolen has joined the channel
+[05:50] kriszyp has joined the channel
+[05:58] mcarter has joined the channel
+[06:01] jed has joined the channel
+[06:05] gf3 has joined the channel
+[06:06] Yuffster has joined the channel
+[06:10] teemow has joined the channel
+[06:11] isaacs has joined the channel
+[06:35] jed has joined the channel
+[06:39] kris928 has joined the channel
+[06:39] <micheil> why do I always not catch tim >_>
+[06:40] <kris928> Hey all, I'm trying to setup a new node.js machine except it is leopord and not snow leopord this time. Node.js installed ok but now kiwi cannot find express which I installed. I'm getting an error that process.fs is undefined in kiwi. Any ideas?
+[06:41] r11t has joined the channel
+[06:43] <micheil> kris928: last I knew, kiwi wasn't part of node, it's more then likely an issue with kiwi
+[06:43] <kris928> I think it has something to do with node.js not installing completely because some system libraries were not found
+[06:43] <micheil> kris928: probably best to open up a bug / issue on the project's github issues page
+[06:43] <kris928> when I run configure, I get "not found" on ssy/eventfd.h and sys/epoll.h
+[06:44] <micheil> kris928: try doing starting node-repl
+[06:44] <micheil> no
+[06:44] <micheil> I don't think they are used on os x
+[06:44] <micheil> or create a empty file, do "var fs = require("fs") " in it
+[06:44] <micheil> and try running it
+[06:44] <kris928> I just got the same thing working on snow leopord machine earlier today so I'm not sure it's a problem with kiwi. I'll try that
+[06:46] <kris928> yeah process.fs.stat("foo") after require("fs") fails in node-repl too
+[06:48] JimBastard__ has joined the channel
+[06:48] <kris928> micheil, any ideas why that might be?
+[06:49] <JimBastard__> wow it seems i have a few friends logged in
+[06:50] <micheil> kris928: sorry, no, I haven't been working with node for a little while
+[06:50] <kris928> micheil, nevermind I know why that is in repl - strange that this worked earlier today
+[06:57] jed has joined the channel
+[07:03] <tmpvar> night
+[07:08] <kris928> micheil, FYI got it all working. Looks like the most recent version of node is not compatible with kiwi, I just reverted to an older revision for now.
+[07:14] BryanWB has joined the channel
+[07:15] <JimBastard__> i love how my github languages tab usually comes up 100% javascript
+[07:19] kjeldahl has joined the channel
+[07:47] Gruni has joined the channel
+[07:48] <CIA-77> node: 03Krishna Rajendran 07master * r84277ea 10/ (src/node_dns.cc test/disabled/test-dns.js): Check for callback argument in PTR lookup - http://bit.ly/aeeu8U
+[07:50] sveisvei has joined the channel
+[08:25] markwubben_ has joined the channel
+[08:26] markwubben_ has joined the channel
+[08:27] ssteinerX_ has joined the channel
+[08:43] voodootikigod_ has joined the channel
+[08:45] Gruni has joined the channel
+[08:46] QuietKnight has joined the channel
+[08:54] sveimac has joined the channel
+[08:56] hassox has joined the channel
+[09:01] Tim_Smart has joined the channel
+[09:15] Tim_Smart has joined the channel
+[09:22] felixge has joined the channel
+[09:22] felixge has joined the channel
+[09:23] javajunky has joined the channel
+[09:24] jed has joined the channel
+[09:32] <ashb> mjijackson: yeah towards the end of markdown.js
+[09:32] <ashb> search for Maruku
+[09:33] lifo has joined the channel
+[09:35] tisba has joined the channel
+[09:39] sveimac has joined the channel
+[09:39] lifo_ has joined the channel
+[09:44] <Tim_Smart> ashb: Where was that JS implementation of Markdown again? Might replace showdown with it
+[09:48] <ashb> http://github.com/evilstreak/markdown-js/
+[09:48] <ashb> i should merge it so its 1 file
+[09:48] <ashb> it doesn't need to be 2
+[09:49] <sztanpet> god i hate plain markdown with a passion, github flavored is ok
+[09:49] <ashb> 'falvoured' is part of the problem with markdown - there are like 7000 different flavour
+[09:50] <ashb> but one of the things we wanted to do with that markdown impl was make it easy to add dialects without having to re-write everything
+[09:52] <Tim_Smart> ashb: Is there any HTML -> Markdown for JS?
+[09:53] bridge has joined the channel
+[09:53] <Tim_Smart> At present I am using a PHP solution called markdownify
+[09:53] <ashb> Tim_Smart: not yet - its not something we've needed to do
+[09:54] <Tim_Smart> OK. That's cool
+[09:54] <ashb> html -> md is a lot easy than plain text -> md tho
+[09:54] <ashb> oh and one fairly big caveat: we dont yet support inline HTML
+[09:54] <ashb> cos I personally think its an abomination ;)
+[09:55] <ashb> patches welcome tho
+[09:56] <Tim_Smart> Ah OK. Some guy got into a argument with me because he didn't like <pre><code> tags
+[09:56] <Tim_Smart> Which Markdown uses, and unfortunately he is very opinionated
+[09:57] <ashb> what's his argument?
+[09:57] <Tim_Smart> (btw I prefer <pre><code> tags)
+[09:59] <Tim_Smart> ashb: http://userscripts.org/topics/48140#posts-229090
+[10:00] <ashb> 'its visually unappelaing' has *nothing* to do with the markup
+[10:02] <ashb> yeah i dont buy his argument
+[10:02] <Tim_Smart> Yeah he tries to justify himself later on down :D
+[10:03] <ashb> and i'm not quite sure what classifies as 'ugly' to him
+[10:04] <ashb> but *anyway*
+[10:04] <ashb> markdown.js gives you an intermediate representation on JsonML when its still markdown
+[10:04] <ashb> so he could make it output WTF he likes for codeblocks
+[10:05] <Tim_Smart> Yeah, he is just hard to please
+[10:06] <Tim_Smart> I gave him a code suggestion later on, and the same guy pretty much pulled a tantrum, and muttered something bout security
+[10:06] ithinkihaveacat has joined the channel
+[10:07] <Tim_Smart> then decided I was the worst thing that ever crossed his path
+[10:07] <Tim_Smart> so meh
+[10:11] felixge has joined the channel
+[10:14] <ashb> :)
+[10:33] BryanWB has joined the channel
+[11:03] joshholt_ has joined the channel
+[11:05] ryandotsmith has joined the channel
+[11:06] ryandots_ has joined the channel
+[11:13] mjijackson_ has joined the channel
+[11:16] Joshua__Holt_ has joined the channel
+[11:17] joshholt_ has joined the channel
+[11:18] joshholt_ has joined the channel
+[11:19] joshholt_ has joined the channel
+[11:20] MattJ has joined the channel
+[11:20] Joshua__Holt_ has joined the channel
+[11:22] joshholt_ has joined the channel
+[11:27] Joshua__Holt_ has joined the channel
+[11:30] voodootikigod_ has joined the channel
+[11:37] kjeldahl has joined the channel
+[11:43] binary42 has joined the channel
+[11:43] kjeldahl has joined the channel
+[12:00] mooit has joined the channel
+[12:11] drostie has joined the channel
+[12:18] kjeldahl has joined the channel
+[12:25] maritz has joined the channel
+[12:31] alex-desktop has joined the channel
+[12:34] drostie has joined the channel
+[12:35] ryandotsmith has joined the channel
+[12:39] ryandotsmith has joined the channel
+[12:47] mjijackson_ has joined the channel
+[12:49] mjijackson_ has joined the channel
+[12:54] kjeldahl has joined the channel
+[12:54] pmuellr has joined the channel
+[12:57] davidsklar has joined the channel
+[12:59] ryandotsmith has joined the channel
+[13:07] kriszyp has joined the channel
+[13:11] isaacs has joined the channel
+[13:12] quirkey has joined the channel
+[13:13] BryanWB has joined the channel
+[13:21] kjeldahl has joined the channel
+[13:22] kjeldahl has joined the channel
+[13:30] khaase has joined the channel
+[13:30] <khaase> _ry: poke
+[13:31] JAAulde has joined the channel
+[13:31] <JAAulde> morning all
+[13:36] mjijackson has joined the channel
+[13:37] joshholt_ has joined the channel
+[13:37] alexmchale has joined the channel
+[13:38] mjijackson_ has joined the channel
+[13:49] paul_ has joined the channel
+[13:50] confounds has joined the channel
+[13:55] gf3 has joined the channel
+[13:59] rtl has joined the channel
+[14:01] ashb has joined the channel
+[14:05] binary42 has joined the channel
+[14:09] rolfb has joined the channel
+[14:17] stepheneb has joined the channel
+[14:18] alex-desktop has joined the channel
+[14:31] aryounce has joined the channel
+[14:33] n8o_ has joined the channel
+[14:45] Yuffster has joined the channel
+[14:51] jed_ has joined the channel
+[14:53] brapse has joined the channel
+[14:55] jed__ has joined the channel
+[14:57] jed___ has joined the channel
+[15:05] alexiskander has joined the channel
+[15:11] jherdman has joined the channel
+[15:13] gwoo has joined the channel
+[15:23] dnolen has joined the channel
+[15:25] kjeldahl has joined the channel
+[15:26] creationix has joined the channel
+[15:26] kjeldahl has joined the channel
+[15:30] jherdman has joined the channel
+[15:31] bentomas has joined the channel
+[15:32] qFox has joined the channel
+[15:32] <bentomas> creationix:  I can't get node-persistence to work, what version of Node is it compatible with currently?
+[15:32] <bentomas> (specifically sqlite)
+[15:32] <creationix> good question
+[15:32] <creationix> 0.1.30 was the last I tested I think
+[15:32] <creationix> I'm going to change the API this week though, be warned
+[15:33] stepheneb has joined the channel
+[15:33] joshbuddy has joined the channel
+[15:33] <bentomas> yeah, you mentioned that, but I'm trying to get some sort of connection to sqlite up an running. I can change my code later this week if necessary
+[15:34] <creationix> well, good luck
+[15:34] <bentomas> thanks!
+[15:35] <creationix> I should have the new version tonight (about 13 hours)
+[15:35] jed_ has joined the channel
+[15:35] <bentomas> oh wow, well maybe I can find something else to do in the mean time
+[15:40] christkv has joined the channel
+[15:41] MattJ has joined the channel
+[15:49] jed_ has left the channel
+[15:54] dnolen has joined the channel
+[15:57] deanlandolt has joined the channel
+[15:57] RayMorgan has joined the channel
+[16:02] QuietKnight has joined the channel
+[16:04] khaase has joined the channel
+[16:07] okito has joined the channel
+[16:08] joshbuddy has joined the channel
+[16:08] joshbuddy has joined the channel
+[16:10] tlynn has joined the channel
+[16:14] blackdog has joined the channel
+[16:19] javajunky has joined the channel
+[16:26] mrjjwright has joined the channel
+[16:29] kjeldahl has joined the channel
+[16:29] tjholowaychuk has joined the channel
+[16:30] aryounce has joined the channel
+[16:35] tisba has joined the channel
+[16:36] r11t has joined the channel
+[16:38] brandon_beacher has joined the channel
+[16:40] khaase has joined the channel
+[16:40] r11t_ has joined the channel
+[16:45] r11t__ has joined the channel
+[16:51] bpot has joined the channel
+[16:55] RayMorgan_ has joined the channel
+[17:01] stephenlb has joined the channel
+[17:05] RayMorgan has joined the channel
+[17:08] stepheneb has joined the channel
+[17:09] bpot_ has joined the channel
+[17:09] okito has joined the channel
+[17:13] aguynamedben has joined the channel
+[17:16] pyrotechnick has joined the channel
+[17:17] <pyrotechnick> is /doc/api.txt the source file of http://nodejs.org/api.html?
+[17:17] codeswing has joined the channel
+[17:18] whoahbot has joined the channel
+[17:20] <ashb> pyrotechnick: for the moment, yeah think so
+[17:21] <pyrotechnick> ashb: aight
+[17:21] <pyrotechnick> cheers
+[17:21] joshholt__ has joined the channel
+[17:21] <tjholowaychuk> its asciidot i think
+[17:21] <tjholowaychuk> something like that
+[17:21] xueyu has joined the channel
+[17:21] <ashb> it's moving to markdown iirc
+[17:21] <ashb> creationix: speaking of which - markdown.js is now just the one file
+[17:28] <creationix> ashb: thanks
+[17:28] <creationix> I'll look into it, probably tomorrow
+[17:30] <JimBastard> sup creationix 
+[17:31] <pyrotechnick> creationix: good work on markdown ^w^ KISS FTW
+[17:31] dandean has joined the channel
+[17:32] mjijackson has joined the channel
+[17:33] <pyrotechnick> creationix: i just found a silly typo in your "what is this" how to node article if u wanna checkit
+[17:33] <creationix> sure, what is it?
+[17:34] <pyrotechnick> pull requested
+[17:36] <pyrotechnick> how many of you prodogs use coffeescript?
+[17:36] <jherdman> hey JimBastard. did you ever figure out your AOP problem from yesterday?
+[17:37] <mattly> pyrotechnick: +1
+[17:37] <JimBastard> not really, its a shitty problem. the real solution like voodootikigod pointed out is to step back and create proper tests
+[17:37] <JimBastard> im gonna use window.onerror as a stop-gap for now
+[17:37] <pyrotechnick> mattly: whatchu writing?
+[17:37] <JimBastard> so i have SOME idea if the client errors
+[17:38] <pyrotechnick> node stuff i presume...
+[17:38] mikeal has joined the channel
+[17:38] <tjholowaychuk> where is this markdown.js ?
+[17:38] <mattly> pyrotechnick: porting over a rack-based cms type app thing
+[17:38] <JAAulde> Is the owner of other FreeBSD build slave here?
+[17:39] <mattly> sadly there don't seem to be any decent rack-like interfaces that work well without promises, yet
+[17:39] <pyrotechnick> mattly: you've seen jack?
+[17:39] <pyrotechnick> mattly: oh...
+[17:39] <pyrotechnick> mattly: old code?
+[17:39] <creationix> tjholowaychuch: I think he's talking about http://github.com/evilstreak/markdown-js
+[17:39] <mattly> pyrotechnick: yeah they're all pre 0.1.30 or something
+[17:39] <creationix> I'm currently using a modified version of showdown, but I plan on switching to the other once it's ready
+[17:39] <pyrotechnick> mattly: is there much code in jack?
+[17:39] <mattly> pyrotechnick: and jack is narwhal, which i understand is sort-of runable on node but that's still experimental
+[17:39] <pyrotechnick> ohh
+[17:40] <tjholowaychuk> creationix: ah cool, I have a way lighter implementation in the works
+[17:40] <tjholowaychuk> just no repo yet
+[17:40] <creationix> sounds cool
+[17:40] <creationix> I'm a fan of lightweight
+[17:40] <pyrotechnick> creationix: we've put haml-js to good use
+[17:40] <pyrotechnick> http://github.com/DaNCeR/requisition-test
+[17:40] <ashb> creationix: tjholowaychuk: yeah thats the one
+[17:41] <creationix> as long as I can extend it with custom tags
+[17:41] <ashb> tjholowaychuk: our needs are stated in the reeadme
+[17:41] <creationix> pyrotechnick: cool
+[17:41] <ashb> mainly its 1) not direct text->text, 2) well-formed html 3) not have to re-write everything to add a new dialect (of which there are about 7000)
+[17:41] <pyrotechnick> there was something my BP wanted to ask you but i forget now
+[17:42] <mattly> pyrotechnick: part of the problem is that the *sgi interface specifies that the app's function should _return_ something, which becomes very tricky or even impossible in callbacks
+[17:42] <mattly> without promises
+[17:42] <pyrotechnick> there are still promises i believe
+[17:42] <pyrotechnick> i've seen some >0.1.30 code with them
+[17:43] <ashb> I'm a big fan of processing steps exposing their intermeidate forms
+[17:43] <mattly> i modified jsgi-node to pass in a respond function in addition to the request and then i just call respond
+[17:43] <mattly> but
+[17:43] <pyrotechnick> mattly: let me have a look
+[17:43] <mattly> Error: Promise has been removed. See http://groups.google.com/group/nodejs/msg/0c483b891c56fea2 for more information.
+[17:43] <mattly>     at new <anonymous> (node.js:11:11)
+[17:43] <mattly> that's from both "require('promise')" and "require('events').Promise"
+[17:43] <pyrotechnick> oh reallly
+[17:44] <pyrotechnick> grr im trying to remember this code
+[17:44] <mattly> i may just write my own :D
+[17:44] <mattly> or :'(
+[17:45] atmos has joined the channel
+[17:45] <pyrotechnick> mattly: we were heaps keen on jack, so i'm kinda sad now i hear the implementations have sunken down the sink
+[17:45] <pyrotechnick> i didnt much like the syntax though
+[17:46] <pyrotechnick> so maybe this was a good thing ultimately
+[17:46] <ashb> what syntax?
+[17:46] <pyrotechnick> like chaining them all together
+[17:46] <ashb> oh the promise sytnax?
+[17:46] <pyrotechnick> no jack
+[17:46] <pyrotechnick> i didnt mind promises TBH
+[17:46] <ashb> jack is a module - what syntax does it hack?
+[17:46] <ashb> *have
+[17:46] <pyrotechnick> i had kind of dreamt for similar facilities in PHP
+[17:47] <ashb> or am i thinking of a differetn jack?
+[17:47] <pyrotechnick> jack like rack for node
+[17:47] <ashb> (entierly possible - there are like 40 JS projects named jack i'm sure)
+[17:47] <ashb> yeah - its just a module isn't it - what syntax does it have?
+[17:48] <mattly> well it's not the syntax so much as it's not really evented
+[17:48] <ashb> jack != JSGI
+[17:48] <mattly> right
+[17:48] <mattly> ejsgi looks promising
+[17:48] <pyrotechnick> mattly: http://howtonode.org/do-it-fast
+[17:49] <ashb> can't remember exactly what ejsgi looks like anymore
+[17:49] <ashb> but lst time i looked at the async options for jsgi it was my preference.
+[17:49] <mattly> http://github.com/isaacs/ejsgi
+[17:49] <ashb> i'm not really a fan of the boilerplate you have to use to use promises
+[17:50] <mattly> honestly i'd rather do what i did to esjgi, just modified it to pass in a respond function to call
+[17:50] <pyrotechnick> i imagine you could substitute the promise stuff in ejsgi for that in do
+[17:50] <ashb> mattly: i propsed that a while ago i think
+[17:50] khaase has joined the channel
+[17:50] <mattly> function app(request, respond) { respond({status: 200, headers:{}, body:["Hello World"]}) }
+[17:51] <ashb> mattly: that doesn't let you stream the body tho
+[17:51] <pyrotechnick> lol
+[17:51] <pyrotechnick> http://github.com/ithinkihaveacat
+[17:51] <pyrotechnick> "Like JSGI, but using streams for the request bodies."
+[17:51] <creationix> I actually don't use Do much, I have a minimilist version of flow-js I use for everything now
+[17:51] <pyrotechnick> is he lying then?
+[17:52] <tjholowaychuk> I find if you abstract your routines enough you dont really need some fancy thing like Do and friends
+[17:52] <tjholowaychuk> at least I have not come across a need for them yet
+[17:53] <ashb> http://gist.github.com/251804
+[17:53] <ashb> mattly: the first form there
+[17:53] <JimBastard> im using event emitters and named events
+[17:53] <JimBastard> my event chain isnt too complex though
+[17:53] <ashb> http://gist.github.com/251577
+[17:53] <mattly> ashb: interesting
+[17:54] <ithinkihaveacat> pyrotechnick: ? that description on my github page comes from isaacs's ejsgi (mine's a fork)
+[17:54] <ashb> mattly: stolen wholesale from Perl's plack
+[17:54] <mattly> heh
+[17:54] <pyrotechnick> ithinkihaveacat: i know, i was lolling at your name
+[17:54] <ashb> why bother infenting something when you can seal it :)
+[17:54] <pyrotechnick> ^w^ because it's awesome
+[17:54] rauchg has joined the channel
+[17:55] <pyrotechnick> ithinkihaveacat: i'm curious though, have you verified whether or not you have a cat yet?
+[17:55] <ithinkihaveacat> pyrotechnick: heh, okay
+[17:56] <mattly> ashb: where does the responder come from in that gist?
+[17:56] <ashb> the [EA]JSGI server passes it in
+[17:56] <ashb> doesn't really need the extra function
+[17:57] <mattly> ah
+[17:57] <ithinkihaveacat> pyrotechnick: i still can't be certain
+[17:57] <pyrotechnick> ithinkihaveacat: man that cow video on your blog is uberdisturbing
+[17:57] <ashb> could just as easily be a property on the request, or a 2nd argument
+[17:57] <mattly> maybe "request.respond()"
+[17:58] <ashb> tbh its probably pretty damn similar to EJSGI
+[17:58] <ithinkihaveacat> pyrotechnick: sometimes i think i do, sometimes not
+[17:58] <ashb> mattly: http://github.com/isaacs/ejsgi/blob/master/examples/baseline.js
+[17:58] <ashb> compare to that
+[17:58] <mattly> i think the main problem is that the jsgi specification says that a function should return its response
+[17:58] <ashb> sure - EJSGI isn't strictly JSGI and doesn't have to be
+[17:58] <mattly> and without promise-like contraptions that's just hard to do
+[17:59] <mattly> right
+[17:59] <ithinkihaveacat> pyrotechnick: yeah, they're belgian cows, they're great.  they were curious about me, and i'm from the city so i was curious about them as well
+[17:59] <ashb> to my mind it just should have the same feel
+[17:59] <pyrotechnick> ithinkihaveacat: you should write that underneath it
+[17:59] <ashb> the one major different between my proposal and EJSGI as it stands is:
+[17:59] <mattly> I like request.respond({status:200, body:["Hello World"]}) as an api
+[17:59] <ashb> my proposal you can't get hold of a stream until you've sent the headers
+[17:59] <ashb> explicitly.
+[18:00] <mattly> nicely mirrors rack's app.call
+[18:00] <ashb> mattly: sure - but thats sync
+[18:00] <mattly> hm
+[18:00] <mattly> ok so i'm still new to node :D
+[18:00] <mattly> and thinking this way
+[18:00] <pyrotechnick> HES STILL DEMANDING INPUT IN HIS HELLO WORLD APP
+[18:01] <deanlandolt> ashb: have you given any thought to the async forEachable object as stream?
+[18:01] <ashb> speaking of hello worlds apps: http://blog.ianbicking.org/2010/03/16/web-server-benchmarking-we-need/
+[18:01] <ashb> deanlandolt: not givne much thought to ajsgi since december :)
+[18:01] stepheneb_ has joined the channel
+[18:02] <ashb> deanlandolt: but an explicit 'write this chunk' rather than 'here let me return the next chunk' fits better with my mental models
+[18:02] <deanlandolt> heh...yeah, same here...i've been using the async forEachable thing (using kriszyp's LazyArray stuff) for quite a while now and i'm loving it though
+[18:02] <deanlandolt> ashb: that's what the asyn cforEachable does
+[18:02] tmpvar has joined the channel
+[18:03] <mattly> bah
+[18:03] tmpvar_ has joined the channel
+[18:03] <mattly> maybe i'll just do the simplest thing and say fuck all
+[18:03] <pyrotechnick> has anyone run into anyone else using node for gameservers?
+[18:03] <deanlandolt> just like with current jsgi where you can return a response -- the body must have a forEach functoin...so when you're setting it up it you have a "write this chunk" setup...
+[18:03] <mattly> and build some sort of middleware thing on top of the standard http stuff
+[18:03] xueyu_ has joined the channel
+[18:03] <deanlandolt> the "promise" part is really only to communicate that you're done writing
+[18:03] <creationix> http://github.com/ry/node_docs/blob/master/index.js#L12
+[18:04] khaase has left the channel
+[18:04] <creationix> pyrotechnick: I'm making one in the next couple of months
+[18:04] <pyrotechnick> creationix: no way rly?
+[18:04] QuietKnight has joined the channel
+[18:04] <ashb> deanlandolt: not a fan of promises :/
+[18:04] <creationix> yep, though I don't think I'll release anything till after my talk at TXJS
+[18:05] <pyrotechnick> creationix: let it bake, let it bake
+[18:05] <pyrotechnick> creationix: what technologies for the client? you're not tackling webgl are you?
+[18:05] <creationix> no, either canvas or raphaeljs
+[18:05] <pyrotechnick> raphael is svg right?
+[18:06] <creationix> svg and vml
+[18:06] <pyrotechnick> works in ie too yeah?
+[18:06] <creationix> so it works in IE
+[18:06] <pyrotechnick> sick
+[18:06] <pyrotechnick> we're probs gunna draw our UI with that
+[18:06] <ashb> raphaeljs++
+[18:06] mjr_ has joined the channel
+[18:06] <ashb> you can't use CSS with it, but apart from that its wonderful
+[18:06] <pyrotechnick> to hell with css
+[18:06] <creationix> I think I'll use raphael since it's got built-in tweening and stuff
+[18:06] <creationix> handy for games
+[18:07] <pyrotechnick> yeah and the performance looks pretty damn impressive too
+[18:07] <creationix> for simple stuff, I'll find how far I can push it
+[18:07] <tjholowaychuk> I want to port cocos2d to node *drool*
+[18:07] <pyrotechnick> i've seen some people rewriting the flash runtime in it
+[18:07] <creationix> their demo page is crap slow on my netbook though
+[18:08] <pyrotechnick> tjholowaychuk: how does that have anything to do with serverside js?
+[18:08] <tjholowaychuk> pyrotechnick: it does not really, but why limit node to servers? writing a game in JS vs objective-c would be much more fun
+[18:08] <mjr_> It'd be pretty handy to make graphics in node and then ship them out to browser clients.
+[18:09] <tmpvar_> creationix, nice work on the docs
+[18:09] <pyrotechnick> tjholowaychuk: i see i see, are there any bindings to like SDL for javascript or something
+[18:09] <creationix> thanks
+[18:09] tmpvar has joined the channel
+[18:09] <tjholowaychuk> pyrotechnick: not that I know of, started some the other day but cant find time right now
+[18:09] <tmpvar> stupid xfce keeps launching 2 copies of xchat 
+[18:09] <creationix> tjholowaychuck: I'd love bindings to webview (the html renderer from webkit)
+[18:10] <creationix> for local games and apps
+[18:10] <pyrotechnick> mjr_: you can, i have seen bindings to imagemagik and stuff
+[18:10] <tmpvar> creationix, what about bindings to something like cairo?
+[18:10] <pyrotechnick> mjr_: on the node modules page
+[18:10] <creationix> works too, it's just that most javascript people already know html css and canvas
+[18:10] <QuietKnight> I've written a basic PNG encoder in pure JS, but havent released it (yet)
+[18:11] <pyrotechnick> QuietKnight: that's intense
+[18:11] <tmpvar> lol
+[18:11] <tjholowaychuk> to many choices lol
+[18:11] <tjholowaychuk> im having a hard time even choosing between box2d and chipmunk
+[18:11] <tjholowaychuk> ive only used chip
+[18:11] <QuietKnight> planning on using it in a game. Dynamic graphics on the client if possible (data urls), delegating to server is not possible (node)
+[18:11] <pyrotechnick> creationix: can you tell me anymore about your game?
+[18:12] <tjholowaychuk> cairo's api is nice tho, not as ugly as most c shit
+[18:12] <mjr_> creationix: just sent you a pull request.  Let me know what you think of my example code.  I love your doc framework.
+[18:12] stepheneb has joined the channel
+[18:12] <tmpvar> tjholowaychuk, i think the cool thing about cairo is that it works everywhere
+[18:12] <tjholowaychuk> that too
+[18:12] <creationix> pyrotechnick: it will be real-time battles in space across the internet
+[18:12] <tjholowaychuk> I will look into it some more
+[18:13] <tmpvar> creationix, you are going to need udp support for that, right?
+[18:13] <pyrotechnick> sockets
+[18:13] <pyrotechnick> are probs fast enough in our experience
+[18:13] <tmpvar> tcp = slow, udp = lightning
+[18:13] <mjr_> You can do some pretty reasonable gaming over TCP most of the time.
+[18:13] <creationix> well, browsers don't do udp
+[18:14] <pyrotechnick> yeah i was having this debate with my BP yesterday
+[18:14] <ashb> tcp isn't strictly slow
+[18:14] <pyrotechnick> people are unaware that many triple a game titles have been using tcp for years
+[18:14] <mjr_> I'm doing live voice over HTTP, and it is often great.
+[18:14] <tjholowaychuk> and cairo has REAL docs OMG haha, thats a first
+[18:14] <creationix> besides I'll keep the traffic to a minimum and use websockets so it should be plenty fast.
+[18:14] <tmpvar> ^_^
+[18:14] <QuietKnight> creationix: have you done actual tests yet for the client-side? Its funny because I've also looked into a web-based space game (think Subspace or Cosmic Rift), but found that SVG is too slow and canvas kills the CPU
+[18:14] <tmpvar> tjholowaychuk, you going to take the dive?
+[18:14] <tjholowaychuk> sure am
+[18:15] <tjholowaychuk> after a bit of research of course, but I will check it out
+[18:15] <creationix> I did make a game a while back and found that svg was too slow then
+[18:15] <creationix> sousaball.creationix.com
+[18:15] <mjr_> Over many mobile networks, TCP ends up being as fast as UDP because of air interface retransmission.
+[18:15] <tmpvar> nice, hit me up when/if you get a project setup.. ive been meaning to dive in for a while now
+[18:15] <creationix> it's canvas now
+[18:15] <pyrotechnick> i dont want to make you guys cry or anything
+[18:16] <pyrotechnick> but
+[18:16] <tjholowaychuk> tmpvar: sounds good
+[18:16] <pyrotechnick> if you have the audacity to click this link
+[18:16] <pyrotechnick> http://ie.microsoft.com/testdrive/Default.html
+[18:16] <pyrotechnick> youll see some nice canvas demos (they all seem to work on chromium nightlies)
+[18:16] <JimBastard> my friend is at MIX and hes all like yo the new IE is awesome, im like. microsoft makes an internet browser? really?
+[18:16] <pyrotechnick> JimBastard: lol. at least they're trying with ie9
+[18:16] <tjholowaychuk> fuck lol i hate them
+[18:16] <tjholowaychuk> so bad
+[18:17] <pyrotechnick> JimBastard: it's pages like this that give me hope
+[18:17] <ashb> JimBastard: they still haven't got standard support right
+[18:17] <tmpvar> lol
+[18:17] <tjholowaychuk> if they deprecated ALL their older browsers then I will stop hating
+[18:17] <JimBastard> surely it wont have 0-day errors that will root my machine
+[18:17] <ashb> http://twitter.com/jaffathecake/status/10614034213
+[18:17] <QuietKnight> I wound up just going pure HTML/JS for my game. Doesn't scale quite as well as canvas, but also doesnt max out the CPU
+[18:17] <QuietKnight> there is a great canvas library out there for games.. let me see if I can find it..
+[18:18] <pyrotechnick> QuietKnight: sweet
+[18:18] <ashb> webGL is better suited, no?
+[18:18] <mjr_> Ha.  SVG-oids works really well in Safari.
+[18:18] <tmpvar> chrome only games
+[18:18] <pyrotechnick> mjr_: yeah thems microsoft bitches can actually chrome
+[18:18] <QuietKnight> http://code.google.com/p/cakejs/
+[18:19] <QuietKnight> webGL is great, but I want to support as many browsers as possible :)
+[18:19] <pyrotechnick> webgl will be in all next major revisions
+[18:19] <pyrotechnick> which i dare say is less than 12 months off
+[18:20] <pyrotechnick> we've targeted july for our first game / platform /engine / editor
+[18:20] <tjholowaychuk> shit apparently I have cairo installed already
+[18:20] <tjholowaychuk> weird
+[18:20] <QuietKnight> http://www.effectgames.com/effect/ <-- also cool
+[18:20] <tjholowaychuk> do any of you guys make money off these games?
+[18:20] <pyrotechnick> we're not on target so we're kinda hoping it's a bit later than we first anticipated, more like 12 like i say now instead of 6 months
+[18:20] <pyrotechnick> tjholowaychuk: that's the plan
+[18:20] <QuietKnight> mine is still in early development, so no. But hopefully eventually
+[18:20] <tjholowaychuk> whats the business model for that
+[18:21] <QuietKnight> pyro, I didn't catch the beginning of the convo. Are you working with creationix or somebody else?
+[18:21] <pyrotechnick> tjholowaychuk: for us it's taking on steam in the webgl universe
+[18:21] <softdrink> node = blindingly easy to create data fakers for web dev
+[18:21] <pyrotechnick> we see theyve changed to webkit so we're expecting webgl games from them
+[18:21] <pyrotechnick> so we're kinda gunna try take a stab at webgl distribution bundled with the tech to make the games
+[18:21] <tjholowaychuk> hmm
+[18:21] <tjholowaychuk> sounds cool
+[18:21] Gruni has joined the channel
+[18:21] <pyrotechnick> and make a pilot game or two as tech demos
+[18:21] isaacs has joined the channel
+[18:21] <tjholowaychuk> I think it would be sweet to have a MMO RTS type thing maybe
+[18:22] <creationix> I'm just making a game for my TXJS talk in June
+[18:22] <tjholowaychuk> I guess people could make facebook games or something for revenue 
+[18:22] <QuietKnight> oh gotcha
+[18:22] <creationix> hopefully it will live beyond my talk though
+[18:22] <pyrotechnick> tjholowaychuk: yeah that's slated as our first game but we're deciding atm wether we want to switch
+[18:22] <pyrotechnick> tjholowaychuk: basically it's MMO simcity
+[18:22] <JimBastard> hey creationix i was thinking about yout idea last night about extending object for getting process.mixin type behaviors
+[18:22] <tjholowaychuk> I wrote a starcraft clone a while back haha was pretty fun just css / html tho
+[18:22] <pyrotechnick> but with a heavy emphasis on transport
+[18:22] <JimBastard> that might be a fun thing to work on at the hackathon
+[18:23] <creationix> sure, it wouldn't take more than an hour
+[18:23] <JimBastard> yaaaa
+[18:23] <QuietKnight> tjholowaychuk- did you do pathfinding? I found that to be one of the more difficult things
+[18:23] <JimBastard> i should send those invites out
+[18:23] <pyrotechnick> webgl people, are any of you keen to setup a community?
+[18:23] <pyrotechnick> kinda like a meta-blog
+[18:24] <tmpvar> QuietKnight, A* is fairly simple
+[18:24] <QuietKnight> yea, that wasnt the hard part
+[18:24] <QuietKnight> the hard part was creating a navigation mesh for A* to run on
+[18:25] <pyrotechnick> a* fails in js
+[18:25] <pyrotechnick> greedy FTW
+[18:25] <tmpvar> yeah
+[18:25] <creationix> I'm pretty sure I won't need A for my game (space physics are easy)
+[18:25] <creationix> A*
+[18:26] <pyrotechnick> creationix: is your ssjs going to be opensource
+[18:26] <creationix> of course
+[18:26] <creationix> after the presentation
+[18:26] <pyrotechnick> we'll totally commit
+[18:26] Aduros has joined the channel
+[18:27] <QuietKnight> My final solution was: determine vertices from a tile-based map, run a constrained delaunay triangulation (removing "non-walkable" edges), then run A* on that.
+[18:27] RayMorgan has joined the channel
+[18:27] <QuietKnight> the constrained delaunay triangulation was the hard part, for a number of reasons. Anyways, fun, but difficult
+[18:27] <tmpvar> yeah QuietKnight its pretty intensive (possible too much so for js)
+[18:28] <QuietKnight> I got it :)
+[18:28] <tmpvar> oh? where? :P
+[18:28] <tmpvar> pics or it isnt real
+[18:28] <QuietKnight> haha
+[18:28] <orlandov> QuietKnight: sorry i haven't been following the conversation, but on the topic of A* have you seen http://greenmayo.com/dev/CarterHenry/
+[18:29] <tmpvar> grid based a* is really easy haha
+[18:29] <pyrotechnick> he just walked through a wall...
+[18:30] <pyrotechnick> and again
+[18:30] <pyrotechnick> through a diagonal
+[18:30] <QuietKnight> grid-based, yea
+[18:30] <QuietKnight> taking a grid and "vectorizing" it is hard
+[18:30] <QuietKnight> one sec for pic
+[18:30] <pyrotechnick> maybe because he is a ninja
+[18:31] <orlandov> ninjas have no need for vectors!
+[18:32] dnolen has joined the channel
+[18:32] <QuietKnight> http://img202.imageshack.us/img202/1245/pathing.png
+[18:33] <QuietKnight> oh yea. And theres a path "smoothing" technique after A*
+[18:33] <tmpvar> very nice
+[18:33] <QuietKnight> orange edges are navigation mesh. blue is result of A*. green is after smoothing
+[18:34] <pyrotechnick> dude that is ultra
+[18:34] <tmpvar> now for 3d :P
+[18:34] unomi has joined the channel
+[18:34] <QuietKnight> tmpvar- hell no
+[18:35] <QuietKnight> yea, I've got it to the point where I can have two dudes walking around on the map (pathing), and real-time communication via websockets and node
+[18:35] <pyrotechnick> how come ur using the vertex and not the edges for a* or is that just how it's drawn?
+[18:35] <QuietKnight> pretty cool stuff
+[18:36] <tmpvar> QuietKnight, agreed that is cool, nice job
+[18:36] <pyrotechnick> your path seems to use the vertex too
+[18:36] <QuietKnight> pryo, eh? Using vertexes cause I need to get from point A to point B
+[18:36] <pyrotechnick> QuietKnight: hmm
+[18:36] <QuietKnight> obviously those are connected by the edges, each with a weight (the distance)
+[18:37] <pyrotechnick> that's waypoint though not a navmesh :(
+[18:37] <QuietKnight> no
+[18:37] <QuietKnight> a waypoint walks from predefined points
+[18:37] <tmpvar> i think the waypoint is calculated off of the navmesh
+[18:37] <QuietKnight> my start and end points are not predefined
+[18:37] <pyrotechnick> lol
+[18:38] <QuietKnight> furthermore, path smoothing definitely leaves the "waypoints"
+[18:38] <pyrotechnick> your green line should run through the center of each edge along the path
+[18:38] <pyrotechnick> i mean your blue line
+[18:39] <pyrotechnick> and then your green line should slightly deviate from this and curve for natural movement
+[18:39] <QuietKnight> http://www.ai-blog.net/archives/000152.html
+[18:39] <pyrotechnick> i write pathfinding algorithms for THQ ^w^
+[18:39] <pyrotechnick> well i implement them
+[18:40] <QuietKnight> err
+[18:40] <QuietKnight> do you mean why don't I use the edge midpoints as vertices in the nav mesh as well?
+[18:40] <pyrotechnick> no i mean you dont use vertices with a navmesh
+[18:40] <pyrotechnick> you use polygons
+[18:41] <pyrotechnick> you should have an adjacency graph of edges not vertices
+[18:41] <QuietKnight> dude
+[18:41] <QuietKnight> the polygons are the triangles
+[18:41] <QuietKnight> based on delaunary triangulation
+[18:41] <QuietKnight> then the vertices of the triangles are the nodes in the nav mesh
+[18:41] <pyrotechnick> yes
+[18:41] <pyrotechnick> and then the cost of cross an edge should be the distance between the center of each triangle
+[18:42] <pyrotechnick> lol
+[18:42] <pyrotechnick> navmeshes done have nodes
+[18:42] <pyrotechnick> they have polygons, be it triangles, but that's a polygon all the same
+[18:42] <pyrotechnick> i believe you have waypoints there
+[18:42] <pyrotechnick> but that's better in a maze anyway
+[18:43] <pyrotechnick> please trust me
+[18:43] <pyrotechnick> i'll try find some pictures
+[18:43] <pyrotechnick> see this?
+[18:43] <pyrotechnick> http://theory.stanford.edu/~amitp/GameProgramming/polygon-navmesh-faces.png
+[18:43] <tmpvar> yes
+[18:43] <QuietKnight> I was just trying to find that
+[18:44] <QuietKnight> I used that site (even picture) extensively
+[18:44] <QuietKnight> read the rest of that page though
+[18:44] joshbuddy has joined the channel
+[18:44] <QuietKnight> you can use different things for the nav mesh
+[18:44] <QuietKnight> the center point (as in this pic), or the vertices, of the midpoints of the edges, etc
+[18:44] <QuietKnight> look at the rest of the pix there
+[18:44] <pyrotechnick> "Polygonal map"
+[18:45] <pyrotechnick> okay
+[18:45] <QuietKnight> can you link the actual page?
+[18:45] <QuietKnight> I seem to be having issues
+[18:45] <pyrotechnick> http://theory.stanford.edu/~amitp/GameProgramming/MapRepresentations.html
+[18:45] <tmpvar> node related question: who here is running node in production?
+[18:45] <QuietKnight> thanks
+[18:45] <pyrotechnick> WHAT A NODE Q IN HERE WTF?
+[18:46] <pyrotechnick> we're running a node proxy in production
+[18:46] <QuietKnight> this is what I'm doing: http://theory.stanford.edu/~amitp/GameProgramming/polygon-navmesh-vertices.png
+[18:46] <pyrotechnick> yeah i can see how you were mislead
+[18:46] <tmpvar> pyrotechnick, what sort of load does it see and how stable is it?
+[18:46] <QuietKnight> and a quotation from the page: "Using vertices is better for obstacle avoidance, and if you’re using path smoothing it won’t negatively affect path quality."
+[18:47] <QuietKnight> pyro- mislead?
+[18:47] <pyrotechnick> neither have anything to do with obstacle avoidance really that's quite a blind statement to make
+[18:47] gJ|Alex has joined the channel
+[18:48] <QuietKnight> pathing is obstacle avoidance, no?
+[18:48] <pyrotechnick> pathfinding is pathfinding, it's your mesh that dictates obstacle avoidance 
+[18:48] <QuietKnight> fair enough
+[18:49] <pyrotechnick> but in your game
+[18:49] <pyrotechnick> do your characters walk through the center of the rooms or around the corners?
+[18:49] <QuietKnight> both? they follow the green line
+[18:49] <pyrotechnick> around the walls*
+[18:50] steadicat has joined the channel
+[18:50] <pyrotechnick> i think you will have problems with larger rooms
+[18:50] <pyrotechnick> the only time that green path isnt following the edges is at the start and endpoints
+[18:50] <QuietKnight> in the first room it walks through it goes through the center of the room
+[18:51] <QuietKnight> it goes from "door" to "door"
+[18:51] <QuietKnight> and there is not an edge there
+[18:51] <QuietKnight> in the mesh. It does that due to path smoothing
+[18:51] <pyrotechnick> did you do this hybrid approach thing?
+[18:51] <QuietKnight> the blue line does walk around walls
+[18:51] <QuietKnight> no
+[18:51] <pyrotechnick> id say it's just the drawing maybe
+[18:51] <QuietKnight> you see the blue and green lines, right?
+[18:51] <pyrotechnick> i dunno dude if it looks good then it doesnt matter it's just i've never seen this before
+[18:52] <QuietKnight> I feel like you're thinking I walk the blue line
+[18:52] <pyrotechnick> nah im not silly
+[18:52] brandon_beacher has joined the channel
+[18:52] <pyrotechnick> just i can forsee problems
+[18:52] <pyrotechnick> like with a wide character
+[18:52] <pyrotechnick> you'll want it to walk through the middle of the doorway
+[18:52] <QuietKnight> I have to create a new mesh for different character radius
+[18:53] <pyrotechnick> do you'll need to consider the edges and have them influence the path
+[18:53] <QuietKnight> I also have a radius in here (half a square)
+[18:53] <QuietKnight> *already
+[18:53] <pyrotechnick> please show me when it's in action dude i'm keen
+[18:54] <pyrotechnick> is that drawing with canvas?
+[18:54] <QuietKnight> yea
+[18:54] <pyrotechnick> that's awesome
+[18:54] <QuietKnight> final product doesnt use canvas, just used it for drawing the paths and such
+[18:54] <pyrotechnick> what will it draw with
+[18:55] <QuietKnight> plain ol HTML/Javascript
+[18:55] <pyrotechnick> orly
+[18:55] <tmpvar> pyrotechnick, no love :P
+[18:55] <pyrotechnick> that was you saying that performance sucked aye
+[18:55] <QuietKnight> characters will be rendered on the fly using that png encoder I mentioned:) and data uris
+[18:55] <JimBastard> yeah javascript party invites have been sent
+[18:55] <pyrotechnick> tmpvar: so distracted, all you need to do is mention games or anything affiliated and i'm gone
+[18:55] <tmpvar> word
+[18:55] <JimBastard> caus there aint no party like a javascript party caus a javascript party got node
+[18:55] <tmpvar> yeah, i hear yah.. 
+[18:55] <pyrotechnick> umm
+[18:56] <tmpvar> JimBastard, we got some lan action wut wut
+[18:56] <JimBastard> tim and i started to rework the node-persistence api a bit last night, its looking better already
+[18:56] <pyrotechnick> it's much better than our ruby solution which was using eventmachine so it was all streamed and evented
+[18:57] <pyrotechnick> QuietKnight: do you have a blog?
+[18:57] <QuietKnight> no, although I've done enough cool things with this game that I should start one
+[18:57] <pyrotechnick> definately
+[18:57] <pyrotechnick> we're at that stage too
+[18:57] <pyrotechnick> my BP said to me today he's like we're so overdue for a blog i have about 1001 articles in my head, i fully agreed
+[18:58] <mjr_> tmpvar: I've got a couple of node servers in production, but they are in roles that can tolerate outages.
+[18:58] <pyrotechnick> tmpvar: did you ask about stability?
+[18:58] <QuietKnight> pyro- what you mentioned earlier is very interesting. You're talking about Valve's Steam, right?
+[18:58] <pyrotechnick> i'm yet to see one crash
+[18:58] <pyrotechnick> yes
+[18:58] <pyrotechnick> QuietKnight: yes
+[18:59] <tmpvar> pyrotechnick, how much load to they experience?
+[18:59] <QuietKnight> thats a great idea to be able to use webgl with a large audience
+[18:59] <pyrotechnick> we run 30 on a single VPS, 512 megs of ram although the traffic to each node is quite low because of that
+[19:00] <pyrotechnick> QuietKnight: i'm not 100% sure that that's their motivation for moving to webkit, it might just be that they're preparing for their entry into mac and linux but i have a feeling they're going to try webkit out
+[19:02] <QuietKnight> well its a good catch and if it pans out could be quite lucrative
+[19:02] pmuellr_ has joined the channel
+[19:03] <QuietKnight> btw, I'm fairly new to Node, but it has made writing the backend for this stuff an absolute breeze. So thanks all you core devs :P
+[19:03] <pyrotechnick> tmpvar: i am told they have peaked at 30K req/hour but we've had some crashes i didnt know about
+[19:03] jherdman has joined the channel
+[19:03] <pyrotechnick> we are running a patched node though
+[19:04] <pyrotechnick> which is untested
+[19:04] <pyrotechnick> for more ssl support
+[19:04] <tmpvar> ah
+[19:04] <tmpvar> alright, thanks
+[19:05] <pyrotechnick> is that alot, i really have no idea i'm a programmer we've outsourced the hosting for this project, been there done that, never going back ever again
+[19:05] <pyrotechnick> they're just (almost) blind proxies though
+[19:06] <QuietKnight> tmpvar- have you seen the post on google re: trying to max out Node?
+[19:06] <tmpvar> ill look
+[19:06] <QuietKnight> not production runs, but quite interesting
+[19:06] whoahbot has joined the channel
+[19:06] <pyrotechnick> the only real logic they do is screwing with headers so they appear transparent
+[19:06] <QuietKnight> http://groups.google.com/group/nodejs/browse_thread/thread/d19df83c7fd1f3ca/c7c6883bf85ae3a1
+[19:06] <pyrotechnick> i wouldn't exactly call them app servers
+[19:07] <QuietKnight> and in particular: http://groups.google.com/group/nodejs/msg/afb6e7273042f90a
+[19:08] <QuietKnight> again, not production, but does kind of give an idea of what might be possible
+[19:09] <QuietKnight> pyro- one other small thing you might be interested in, and vaguely on the topic of SSL. I can't support SSL (due to legacy websockets stuff), so I'm implementing SRP for login authentication. Its pretty cool, and has a side-effect of providing private session keys for encrypting certain pieces of traffic
+[19:11] <pyrotechnick> legacy websockets stuff?
+[19:11] <pyrotechnick> that sounds like a PITA
+[19:11] <pyrotechnick> cool solution though
+[19:13] javajunky has joined the channel
+[19:15] <pyrotechnick> QuietKnight: how often do you regen the keys?
+[19:16] jed_ has joined the channel
+[19:17] drostie has joined the channel
+[19:19] <QuietKnight> I don't really plan on using the keys (as in I don't plan on encrypting much traffic)
+[19:19] <QuietKnight> I could change my mind, but I'm not sure how necessary encrypting "Player A moves to square (1,1)" is
+[19:21] <QuietKnight> but its just nice to have them around, in case I do want to encrypt certain pieces of information (using a CC from in-game, for instance)
+[19:21] okito has joined the channel
+[19:23] <pyrotechnick> mmm
+[19:23] <pyrotechnick> CC requires ssl though at least in non 3rd world countries
+[19:23] <pyrotechnick> but i get your point
+[19:24] <pyrotechnick> QuietKnight: have you found canvas to be really that slow?
+[19:24] <QuietKnight> it requires certification (not sure if SSL is part of that certification; that you may know). But yea, the point's the same.
+[19:24] <QuietKnight> not slow, just cpu consuming
+[19:24] <QuietKnight> similar to flash
+[19:25] <QuietKnight> I also didn't spend a whole awful lot of time with it. I considered writing my own scenegraph with certain optimizations I was thinking about, but decided against it
+[19:25] <pyrotechnick> when using a draw loop?
+[19:25] <QuietKnight> yea
+[19:25] bentomas has joined the channel
+[19:26] <pyrotechnick> i imagine you can code quite well seeing that pathfinding stuff so this isnt an attack on you but i've seen some fucking dodgy draw code aye i hope canvas doesnt get a bad name from code like that
+[19:26] <QuietKnight> CAKEJS is quite amazing, but it re-renders every object on each loop
+[19:26] <QuietKnight> I was using cakejs
+[19:26] <QuietKnight> which yea, isnt exactly optimized
+[19:26] <pyrotechnick> so you were contemplating doing like vnc kinda shit?
+[19:26] <pyrotechnick> i think flash does that now too
+[19:27] <pyrotechnick> i forget what they're called
+[19:27] <pyrotechnick> redraw regions or something
+[19:27] <QuietKnight> yea, partial updating or rendering or whatever
+[19:27] <QuietKnight> yea
+[19:27] <pyrotechnick> that came with AS3.0 if i'm not mistaken
+[19:27] <QuietKnight> which means I'd need to calc bounds, and see what was stacked on top of each other, and redraw those objects + affected objects
+[19:28] <QuietKnight> definitely possible
+[19:28] <QuietKnight> just... yea.
+[19:28] <pyrotechnick> yeah not fun
+[19:28] <QuietKnight> other thing was IE6&7.
+[19:28] <pyrotechnick> so you're going for the masses?
+[19:28] Aduros has joined the channel
+[19:28] <pyrotechnick> that's something we've completely written off with webgl which has kind of been nice really
+[19:29] <pyrotechnick> is basically not having to support anything but an A++++++++++ (we're talking almost a year from now) browser
+[19:29] <QuietKnight> I don't think I'm trying to do anything extra to support IE 6
+[19:29] <QuietKnight> if it works, great. If not, oh well. Gonna require at least IE7. But yea, I'd like that share.
+[19:29] <pyrotechnick> but i'm a web dev by trade so i feel your pain dude trust me
+[19:29] <pyrotechnick> it's a shit
+[19:29] <QuietKnight> haha, yea, webgl is a crazy goal :) which is why I liked your Steam idea so much
+[19:30] <pyrotechnick> that's where we want to be dude
+[19:30] <pyrotechnick> distribution
+[19:30] <pyrotechnick> but we think with that comes having a trademark engine too and some flagship games
+[19:30] jan____ has joined the channel
+[19:30] rnewson has joined the channel
+[19:31] <pyrotechnick> kinda hit the nail on the head though with the first game
+[19:31] <QuietKnight> I'm mostly doing this for the heck of it. Ever since I was 11 I wanted to write my own MMO. Now I finally can.
+[19:31] <pyrotechnick> ^w^
+[19:31] cpleppert has joined the channel
+[19:31] <pyrotechnick> we decided on an MMO simcity
+[19:31] <QuietKnight> I think my chances of actually "making" it are slim-to-none
+[19:31] <pyrotechnick> dude
+[19:32] <pyrotechnick> no way i've seen your pathfinding, it's so good i couldnt even understand it, i doubted it
+[19:32] <pyrotechnick> anyway, at first i didn't really realise what that meant until i started coding it
+[19:32] <pyrotechnick> then i was like dudes...
+[19:32] <pyrotechnick> what is simcity
+[19:32] <pyrotechnick> and they're like it's a game
+[19:32] <pyrotechnick> and i'm like yeah...but what type of game
+[19:32] <pyrotechnick> and they're like a simulator
+[19:32] <pyrotechnick> and i'm like yeah but what does it simulate
+[19:32] <pyrotechnick> and they're like worlds
+[19:33] <pyrotechnick> and i'm like yeah but what do you do when you actually play simcity
+[19:33] <pyrotechnick> and they're like you build worlds
+[19:33] <pyrotechnick> and i'm like yeah and what is that
+[19:33] <pyrotechnick> and they're like AHHHHHH a game editor
+[19:33] <pyrotechnick> so
+[19:34] <pyrotechnick> between toolbars and camera movements and picking and spawning and rearranging and tweaking values and all that nonsense we've begun our game editor inadvertently 
+[19:34] <QuietKnight> haha
+[19:34] <QuietKnight> that, not too far of a leap there
+[19:34] <QuietKnight> *that=yea
+[19:34] <JimBastard> what is up with this recurring theme on the mailing list of russian programmers posting messed up benchmarks 
+[19:34] <pyrotechnick> i'm heaps keen to see what everyone is hacking together though dude
+[19:34] <QuietKnight> did you take a look or know about that "effect games" link I sent earlier
+[19:35] <pyrotechnick> i think i clicked it
+[19:35] <QuietKnight> might give you some ideas
+[19:35] <QuietKnight> its a games editor
+[19:35] rnewson has left the channel
+[19:35] <QuietKnight> havent actually used it, but I've seen some of the finished games, and they're quite god
+[19:36] <pyrotechnick> fuck me dude is this webgl
+[19:36] <QuietKnight> nope
+[19:36] <QuietKnight> pure HTML/JS
+[19:36] <isaacs> JimBastard: inorite!?
+[19:36] <QuietKnight> I don't think they use canvas/svg, but they may
+[19:36] <JimBastard> lol
+[19:37] <JimBastard> i think its russian developers not wanting to believe anything is close to nginx, which is kinda funny caus node and nginx are very diffirent things
+[19:37] <pyrotechnick> lol yeah i was just typing that up JimBastard
+[19:38] <pyrotechnick> have you seen the nginx website
+[19:38] <JimBastard> yes?
+[19:38] <pyrotechnick> it's scarerely communist 
+[19:39] <pyrotechnick> it looks like it was designed by westwood
+[19:39] <QuietKnight> pyro- also, http://waroflegends.jagex.com/   recent game that is sorta MMO SimCity. I think its kinda popular, but dead simple graphics/gameplay. Again, might give you some ideas :)
+[19:39] <isaacs> mikeal: hey, is the js-registry sync working for you in the latest node?
+[19:40] <mikeal> i removed the sync script
+[19:40] <mikeal> you use couchapp now
+[19:40] <mikeal> npm install couchapp
+[19:40] <isaacs> yeah, that's what i mean
+[19:40] <isaacs> mikeal: i'm getting an odd crash in the event loop when http.js tries to emit("close")
+[19:40] <mikeal> let me make sure
+[19:40] <isaacs> pulling from your latest repo
+[19:41] <jan____> mikeal: isaacs: Hi!
+[19:41] <mikeal> works for me
+[19:41] <isaacs> weird!
+[19:41] <isaacs> hi, jan____ 
+[19:42] <isaacs> i'm getting this: http://gist.github.com/335638
+[19:42] <mikeal> so
+[19:42] <mikeal> either there is no couchdb there
+[19:43] <mikeal> or it's some kind of auth failure
+[19:43] <isaacs> hmm....
+[19:43] <isaacs> there is definitely couchdb there
+[19:43] <mikeal> http://couch.izs.me/jsregistry
+[19:43] <mikeal> 404
+[19:43] <isaacs> mikeal: it's a vm
+[19:43] <pyrotechnick> QuietKnight: what's your github so i can keep in contact
+[19:43] <isaacs> so, unless you can point your /etc/hosts at my laptop, you're not gonna see it
+[19:43] cloudhead has joined the channel
+[19:44] <mikeal> haha
+[19:44] <mikeal> hrm......
+[19:44] <isaacs> but i've got a jsregistry db in it, shows up in futon just fine
+[19:44] <isaacs> and it's admin party
+[19:44] <mikeal> super weird
+[19:44] <mikeal> try removing the design document and then syncing
+[19:45] <isaacs> this doesn't spit out any errors: $ couchapp --sync --couch http://couch.izs.me/jsregistry
+[19:45] <mikeal> that's because there is no ddoc
+[19:45] <isaacs> k
+[19:45] <mikeal> it's not actually doing anything
+[19:45] <mikeal> i just added an error when you do that
+[19:45] n8o has joined the channel
+[19:46] <isaacs> k
+[19:46] <mikeal> so
+[19:46] <isaacs> if you feel like it, wanna put some sys.debug()s in there just saying what's happening?
+[19:46] <mikeal> did you already setup the vhost?
+[19:46] <isaacs> yeah
+[19:46] <mikeal> ah ha!
+[19:47] <isaacs> the virtual host is not the same hostname, though
+[19:47] <isaacs> couch.izs.me is just plain couch
+[19:47] <mikeal> you're trying to sync to the vhost which is probably rewriting to /design/app/_rewrite
+[19:47] <isaacs> js-registry.izs.me is the vhost
+[19:47] <QuietKnight> pyro- check pm
+[19:47] <mikeal> oh, damn
+[19:47] <mikeal> there goes that theory
+[19:47] <mikeal> so when you still http://couch.izs.me/jsregistry in your browser you see the JSON for the database
+[19:48] <isaacs> yep
+[19:48] <isaacs> i see this: {"db_name":"jsregistry","doc_count":0,"doc_del_count":0,"update_seq":0,"purge_seq":0,"compact_running":false,"disk_size":79,"instance_start_time":"1268823985499100","disk_format_version":5}
+[19:48] <mikeal> and you're sure the sync fails?
+[19:48] <isaacs> yeah
+[19:48] <mikeal> because the error looks like it happens after
+[19:48] <mikeal> ok
+[19:48] <isaacs> well, couch doesn't have the data, it looks like
+[19:48] <isaacs> but yeah, the crash does seem to come after.
+[19:48] <isaacs> when it's closing the connection
+[19:48] <isaacs> (or something...)
+[19:48] <mikeal> what does couchdb say?
+[19:48] <mikeal> anything?
+[19:49] jherdman has joined the channel
+[19:49] <mikeal> is there some kind of crash?
+[19:50] <isaacs> nope
+[19:50] <isaacs> couchdb is not reporting anything.
+[19:51] <isaacs> not so much as a GET
+[19:51] <isaacs> or even a HEAD
+[19:51] <isaacs> it's ok.
+[19:52] <isaacs> i'm gonna rewrite require() first, and then if it's still breaking this evening and you haven't seen it break yet, i'll take a look.
+[19:52] <isaacs> the WAY it's breaking is very interesting.
+[19:52] jherdman has joined the channel
+[19:52] <mikeal> it looks like it's never connecting
+[19:52] <isaacs> yeah
+[19:53] mies has joined the channel
+[19:53] <isaacs> oh.... wait...
+[19:53] <isaacs> so, http:393 is incoming.emit("end")
+[19:53] <isaacs> it's failing at the end of the uploaded data
+[19:54] <isaacs> ok, this is fascinating...
+[19:54] <mikeal> hrm......
+[19:56] <mikeal> i don't see how I'm suppose to have a handler for this error
+[19:56] <mikeal> when http can't connect
+[19:56] <isaacs> well, http is connecting
+[19:56] <isaacs> but it's failing at the end of the message for some reason
+[19:56] <mikeal> because from what I can tell, ClientRequest doesn't emit an error, and response is never emitted
+[19:56] <mikeal> right now i'm just trying to add proper handling when you do try to connect to a site that's not there
+[19:57] dnolen has joined the channel
+[19:57] <isaacs> well, i'm pretty sure that's not it
+[19:57] <isaacs> because futon can do PUTs just fine, and curl PUTs work
+[19:57] <isaacs> there's something about couchapp's messages that isn't quite right.  and it's wokring for you, so it's some very interesting edge case.
+[19:58] Tim_Smart has joined the channel
+[19:58] brandon_beacher has joined the channel
+[19:59] <pyrotechnick> isaacs: you broke webchat with that massive json
+[19:59] <mikeal> a while back I had an issue with proper host headers, but that should be fixed
+[19:59] <isaacs> pyrotechnick: whoops, sorry!
+[19:59] <mikeal> oh no wait
+[19:59] <mikeal> that's not fixed in this code
+[19:59] <pyrotechnick> ^w^
+[19:59] <mikeal> dammit
+[19:59] <mikeal> oh no, i'm wrong, it's in here
+[20:00] <QuietKnight> pyro- hi. I had said check pm, but I think you crashed?
+[20:00] <pyrotechnick> isaacs: not your fault, they should be doing some overflow: hidden or something at least
+[20:00] <pyrotechnick> LEARN2CSS
+[20:00] <isaacs> pyrotechnick: true that.  looked fine in colloquy :)
+[20:00] <mikeal> yeah, i can't figure this out
+[20:01] <pyrotechnick> i kinda miss colloquy, my mate got me addicted to limechat
+[20:01] <mikeal> _ry: what do I listen to, and on which objects, to see if my HTTP client failed to connect?
+[20:01] <QuietKnight> mIRC ftw
+[20:01] <isaacs> mikeal: ping me if you figure it out.  i gotta run for a bit.
+[20:01] <mikeal> i will
+[20:01] <isaacs> thanks!
+[20:02] <mikeal> oh
+[20:02] <mikeal> wait, nevermind
+[20:02] <mikeal> that wouldn't be it
+[20:05] <mikeal> ah HA
+[20:05] <mikeal> "error" on client AND request
+[20:11] nalply has joined the channel
+[20:17] <nalply> _ry: I did some work on net2 Buffer. I added a 'd' format to Unpack (for IEEE 754 double) and also wrote a pack() method. Interested?
+[20:18] joshbuddy_ has joined the channel
+[20:25] felixge has joined the channel
+[20:25] felixge has joined the channel
+[20:30] tlrobinson_ has joined the channel
+[20:30] stephenlb has joined the channel
+[20:33] okito has joined the channel
+[20:46] tilgovi has joined the channel
+[20:46] pmuellr has left the channel
+[20:47] mattly has joined the channel
+[20:55] nalply has left the channel
+[21:02] <CIA-77> node: 03Ryan Dahl 07net2 * r04c06b9 10/ (25 files in 6 dirs): child process now use net.Socket - http://bit.ly/cbMyyf
+[21:03] <_ry> http://github.com/ry/node/blob/d96c52694a56e10f2ba5db239680cb6a0af02120/test/fixtures/echo.js
+[21:04] <_ry> oops
+[21:04] <_ry> http://github.com/ry/node/blob/04c06b91493762dea34d91c34f2a33ebaa919eca/test/fixtures/echo.js
+[21:04] <JimBastard> echo echo
+[21:04] <_ry> ^-- tell me that isn't beautiful
+[21:04] <_ry> true encoding free pipes
+[21:04] <_ry> all on a single code base
+[21:05] <JimBastard> if you say so boss
+[21:05] <JimBastard> ima file this under, "thar be magic thar"
+[21:06] <_ry> http://github.com/ry/node/blob/04c06b91493762dea34d91c34f2a33ebaa919eca/test/simple/test-child-process-ipc.js
+[21:07] <_ry> in particular 
+[21:07] <_ry> http://github.com/ry/node/blob/04c06b91493762dea34d91c34f2a33ebaa919eca/test/simple/test-child-process-ipc.js#L20
+[21:07] <inimino> that is nice :)
+[21:08] <maritz> heelp, i can't motivate myself to start on the new node.js project i have planned. i just keep watching more and more the office and firefly... :(
+[21:08] <JimBastard> _ry:  in RE to your comment on the mailing list about node projects. tim_smart and i are close to releasing a pretty sweet open-source node app and web service
+[21:08] <inimino> _ry: I guess things are going well with net2 :)
+[21:08] <maritz> think that should be fixed before any other bug in node
+[21:09] <tmpvar> _ry, nice one
+[21:09] <JimBastard> one that ACTUALLY does stuff, not just theortical framework code
+[21:10] <Tim_Smart> _ry: Time for WebWorkers?
+[21:10] <Tim_Smart> :p
+[21:10] <_ry> very close now
+[21:10] <Tim_Smart> _ry: What is left to do?
+[21:11] <_ry> i need to get the http client running on net2 and file i/o using buffers
+[21:11] <Tim_Smart> Does Web Workers need that to work?
+[21:12] <_ry> well - net2 needs to be merged
+[21:12] okito has joined the channel
+[21:13] <_ry> someone just posted http://img696.imageshack.us/img696/5114/resulti.png on twitter
+[21:13] <_ry> but i don't see how that's possible
+[21:13] <_ry> they clearly made some errors :)
+[21:14] <Tim_Smart> yeah, I would assume that too
+[21:15] <Tim_Smart> 2x faster than tornado? Must be dreaming...
+[21:15] <JimBastard> fffffuuuuu twisted
+[21:15] <_ry> well - especially twisted 5 times slower than torando
+[21:16] <_ry> there is no way
+[21:16] <_ry> maybe the horizonal axis is mislabled, maybe it's sec/requests 
+[21:17] <davidsklar> ha!
+[21:17] <atmos> haha
+[21:17] <atmos> i love how thin doesn't even have a bar
+[21:20] <atmos> irb
+[21:20] <atmos> lulz
+[21:20] <maritz> it has 1px! :D
+[21:22] <maritz> okay, but that 1px is only #7c7c7c while the normal border of the bars is #000... so it has 0 < N < 1 px.
+[21:27] <tmpvar> wow, thats really impressive
+[21:28] <tmpvar> wonder if there is an article associated with it heh
+[21:28] <mattly> nice
+[21:29] <softdrink> *perk*
+[21:30] <softdrink> found it: http://github.com/lucasts/Async_Test
+[21:31] <mattly> it'd be interesting to see thin on ruby 1.9 vs. 1.8, it looks like they ran it on 1.8
+[21:32] <ashb> softdrink: what kind of benchmakrs are they?
+[21:32] <ashb> simple hello world ones? BAH!
+[21:32] <ashb> hellow world is fucking useless as a benchmark
+[21:32] <softdrink> ashb: damn right.
+[21:33] <mattly> benchmarking: ur doin it wrong
+[21:34] <softdrink> we should write a small suite of benchmarks, and do something like the programming language shootout
+[21:34] <_ry> softdrink: yes
+[21:34] <ashb> softdrink: i linked to a post by the wsgi guy earlier
+[21:34] <ashb> he has good ideas
+[21:34] <softdrink> except for the whole no-free-time thing...
+[21:34] <softdrink> ACTION scrolls
+[21:35] <_ry> arlo is working on integrating benchmarks into the buildbot
+[21:35] <mattly> http://jan.prima.de/~jan/plok/archives/175-Benchmarks-You-are-Doing-it-Wrong.html#variables
+[21:36] <softdrink> i'm either blind or it scrolled off my buffer ashb
+[21:36] <softdrink> or both.
+[21:36] <ashb> softdrink: check my delicious: ashberlin
+[21:36] <softdrink> k
+[21:37] <ashb> on mobile connection right now so fiddly for me to do it
+[21:37] <softdrink> thankie. *reads*
+[21:38] <softdrink> that reminds me:  is anyone fronting node with nginx? why/why not?
+[21:40] <JimBastard> im using nginx as our web server
+[21:40] <mikeal> node is already great at handling concurrent connections, so i don't put anything in front of it
+[21:40] <JimBastard> nginx serves all static content, then we proxy_pass all dynamic requests
+[21:40] <JimBastard> i dont see any reason to serve static content from node
+[21:40] <mikeal> non-blocking disc IO vs blocking :)
+[21:40] <softdrink> *nod*
+[21:41] <mikeal> nginx uses blocking IO for serving files off the disc
+[21:41] <softdrink> ACTION moves everything into a ramdisk
+[21:41] <JimBastard> but if its all static files how many times does it have to actually load the file from HD ?
+[21:41] blackdog has joined the channel
+[21:42] <JimBastard> with node we had no caching solution so we were re-reading our static files via the file module EVERYTIME
+[21:42] <mikeal> you could do the same in node without much work
+[21:42] <blackdog> is it just me or has github been sucking all day?
+[21:42] <mikeal> all week
+[21:42] <mikeal> fork queue is BROKEN
+[21:42] <JimBastard> feel free to go into #github and bitch at tekkub
+[21:42] <JimBastard> PLEASE say that i sent you
+[21:42] <blackdog> :)
+[21:46] <softdrink> JimBastard: what sort of site are you using node on?
+[21:50] <JimBastard> its a free web hook platform
+[21:50] <JimBastard> hook.io
+[21:50] <JimBastard> we havent launched yet
+[21:50] <JimBastard> v0.1 in a couple of weeks i hope
+[21:50] <softdrink> huh. interesting
+[21:51] <JimBastard> it will be a free service and an open-source software project
+[21:51] <JimBastard> with the same name for both
+[21:52] kjeldahl has joined the channel
+[21:52] <JimBastard> im actually hosting a hackathon tommorow where creationix and myself (and a few others) will be working on node stuff
+[21:52] <JimBastard> and a lot of the node stuff revolves around getting that project to work
+[21:52] <JimBastard> node-persistence, node-oauth, node-twitter
+[21:52] <JimBastard> we've been making a bunch of contributions
+[21:53] <softdrink> i wish we were using node at work instead of a bunch of little ruby things
+[21:55] <JimBastard> we use ruby at work
+[21:55] <JimBastard> this is my own project
+[21:56] hassox has joined the channel
+[21:56] derferman has joined the channel
+[21:57] <softdrink> i've pretty much decided on node for a personal project since i can more easily express myself in js than anything else these days
+[21:57] isaacs has joined the channel
+[21:57] dandean has joined the channel
+[22:07] alexiskander has joined the channel
+[22:09] devinus has joined the channel
+[22:09] <devinus> will node WebWorker's actually be threads?
+[22:10] tilgovi has joined the channel
+[22:10] <_ry> devinus: no
+[22:11] <_ry> JimBastard: have you seen http://github.com/orlandov/node-sqlite
+[22:11] <_ry> JimBastard: still under development - but it's the shit
+[22:11] <JimBastard> _ry:  i've seen most of the db wrappers for node
+[22:12] <_ry> in-process async 
+[22:12] <JimBastard> the goal is to have a common interface for dealing with multiple database vendors
+[22:12] <JimBastard> so ideally i would take that driver and port it into node-persist
+[22:12] <JimBastard> take his code, put the common wrapper around it
+[22:12] <devinus> _ry: aren't they threads in the browser?
+[22:13] <JimBastard> im working with creationix on it this week (hes visiting from texas) we having a node hackathon party on thursday night
+[22:13] <_ry> devinus: i don't know. depends on the implementation
+[22:13] <JimBastard> a few noders are coming
+[22:13] <mjr_> It'd be great if we had the same API for sqlite than HTML5 has, even though it is ugly and complicated.
+[22:13] <_ry> devinus: in chrome it's processes
+[22:13] <_ry> devinus: like god intended
+[22:13] <devinus> _ry: in node they will be proesses?
+[22:14] <_ry> yes
+[22:14] <devinus> _ry: oh thank god, thats all i wanted to know
+[22:14] <devinus> _ry: want to utilize some cores :)
+[22:14] Tim_Smart has joined the channel
+[22:16] <_ry> fork and conquer
+[22:16] QuietKnight has left the channel
+[22:17] <_ry> ACTION away
+[22:19] <mikeal> anyone know if do supports parallel chains?
+[22:20] <Tim_Smart> mikeal: E.g. ?
+[22:21] <mikeal> like
+[22:21] <Tim_Smart> I was going to make a prototype for doing parallel actions
+[22:21] <mikeal> do.parallel(Do.chain(one, two),Do.chain(three, four))(function (results) {})
+[22:22] <mikeal> run the two chain pairs in parallel
+[22:28] tmpvar has joined the channel
+[22:28] <JimBastard> i think Do can do parrells
+[22:28] <JimBastard> also kry zips library?
+[22:30] tmpvar has joined the channel
+[22:36] <JimBastard> http://github.com/yourmother
+[22:36] <JimBastard> damn you binary42 
+[22:36] <binary42> Heheh.
+[22:36] <JimBastard> i just forked yourmother
+[22:36] <JimBastard> i sent her a pull request.....and she accepted
+[22:36] <binary42> JimBastard: You asked for accounts. At least she follows you.
+[22:36] KungFuHamster has joined the channel
+[22:36] <JimBastard> we'll be merging later tonight
+[22:38] <JimBastard> i think i might know a trick for getting thousands and thousands of watchers on a project
+[22:38] <JimBastard> i might try it when i get home for fun
+[22:38] <atmos> MAKE A GAME OMG
+[22:38] <binary42> Create thousands of accounts?
+[22:38] <JimBastard> naaah ill pm you
+[22:38] <binary42> Amazon's mechanical turk.
+[22:39] pedrobelo has joined the channel
+[22:45] okito has joined the channel
+[22:49] gf3 has joined the channel
+[22:53] mattly has joined the channel
+[22:56] <CIA-77> node: 03pyrotechnick 07master * r8aaffe7 10/ doc/api.txt : Fixing a typo in the fs.readFile example. - http://bit.ly/doCgJq
+[22:56] <CIA-77> node: 03Ryan Dahl 07master * r2d7e86e 10/ (82 files in 12 dirs): Upgrade V8 to 2.1.5 - http://bit.ly/9b0cB2
+[22:58] <Tim_Smart> Whats new in V8 2.1.5?
+[22:58] <JimBastard> they took out some of the tomatoe juice and replaced it with carrot juice
+[22:58] <Tim_Smart> Performance improvements ^^
+[22:59] <_ry>  82 files changed, 3732 insertions(+), 104751 deletions(-)
+[22:59] <_ry> yes
+[22:59] <_ry> :)
+[22:59] <Tim_Smart> That is a lot of deletion :
+[22:59] <Tim_Smart> :p
+[23:00] <_ry> (they just deleted a data file from the tests)
+[23:00] <Tim_Smart> oh
+[23:00] <JimBastard> thats like my coworker bragging about his influence on our project (i was like installing a 10k library and running the installer script doesnt count)
+[23:01] <JimBastard> impact rather, not influence
+[23:02] <mattly> so is there like, some "how to do async properly 101" writeup somewhere?
+[23:02] <mattly> i figure as long as i'm dinking around with this stuff i may as well do it right
+[23:04] <JimBastard> have you read www.howtonode.org ?
+[23:04] <JimBastard> there are a few articles that might help in regards to event flow
+[23:04] <mattly> been skimming it
+[23:04] <mattly> ah ok
+[23:04] <JimBastard> thats targetted for node.js obviously though
+[23:04] <mattly> right
+[23:06] <Tim_Smart> mattly: Have you done much browser Javascript?
+[23:07] <mattly> Tim_Smart: yes
+[23:07] <Tim_Smart> Well, just think event listeners
+[23:07] <mattly> mostly with prototype.js but getting more into event-driven with jquery recently
+[23:07] <mattly> ok
+[23:08] orlandov has joined the channel
+[23:08] <Tim_Smart> The whole "when this finishes, call this function" deal
+[23:08] <orlandov> .
+[23:18] mrjjwright has joined the channel
+[23:20] voodootikigod has joined the channel
+[23:24] brianm has joined the channel
+[23:29] rnewson has joined the channel
+[23:31] r11t has joined the channel
+[23:31] <orlandov> omg... node has isArray()
+[23:31] <orlandov> <3
+[23:32] derferman has joined the channel
+[23:33] <rnewson> is it possible to start a new request from a response callback? it hangs for me, so I'm assuming I'm blocking the event loop by doing something stoopid.
+[23:33] <rnewson> use case is I need to do a HEAD call before a PUT.
+[23:37] devinus has joined the channel
+[23:39] creationix has joined the channel
+[23:39] <Tim_Smart> rnewson: Is this for HTTP Client?
+[23:40] <rnewson> yes.
+[23:40] <Tim_Smart> rnewson: Close the connection first?
+[23:40] <rnewson> could I have been that stupid? let's find out...
+[23:41] <Tim_Smart> I'm not sure >.< You have to listen for the 'data' and 'end' event, so maybe chuck the request in the end event
+[23:41] <mjr_> it is possible to start a new HTTP request from a response callback.  That's how you can use node as a proxy.
+[23:41] <rnewson> hm, it's not that.
+[23:42] <rnewson> I need to proxy the original call still, so I can't close that one. hmm.
+[23:42] <rnewson> it's for couchdb. I need to do a HEAD to get the ETag so I can pass it in an If-Match on the PUT.
+[23:42] <rnewson> but the PUT might have a request body.
+[23:43] <Tim_Smart> Have 2 http clients?
+[23:45] <rnewson> that sounds right to me, will try. thanks.
+[23:45] <mjr_> Here's an example of a proxy to couchdb:
+[23:45] <mjr_> http://gist.github.com/335873
+[23:47] <rnewson> mjr_: thanks, had something pretty much like that.
+[23:48] nicketynick has joined the channel
+[23:48] <nicketynick> heh, there are a bunch of people idling in #nodejs, which I just accidentally joined
+[23:50] <Tim_Smart> lawl
+[23:53] <nicketynick> is nodejs threadsafe? i'm writing an extensions module. should I make an effort to make sure its reentrant?
+[23:53] <orlandov> are you planning on using threads for something?
+[23:53] <nicketynick> no i'm not, but I don't want to break other people's assumptions
+[23:54] <rnewson> gotta run, thanks for suggestion.s
+[23:54] <orlandov> in general, you shouldn't have to worry about thread safety
+[23:55] felixge has joined the channel
+[23:55] felixge has joined the channel
+[23:55] <_ry> nicketynick: thread safe? it's thread-free
+[23:55] <nicketynick> i'm looking through, the nodejs source and I think I'm seeing a bunch of global state floating around. so I guess I don't have to worry
+[23:55] <orlandov> threads are used very sparingly in node, only as a last resort
+[23:55] <orlandov> to wrap sync stuff
+[23:56] <_ry> nicketynick: you can make the assumption that all node functions are synchronous
+[23:56] <_ry> there are no threads
+[23:56] <orlandov> asynchronous? :)
+[23:57] <nicketynick> _ry: got it. thank you
+[23:57] <_ry> synchronous in state
+[23:57] <orlandov> ah yeah
+[23:57] <orlandov> iow: only one thing happening at a time?
+[23:58] <_ry> yes

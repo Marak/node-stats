@@ -1,0 +1,2386 @@
+[00:00] <EF> Trying to make node on Snow Leopard (10.6.3). Anyone have any luck with this? Pretty sure this is my problem: ld: warning: in /opt/local/lib/libssl.dylib, file was built for i386 which is not the architecture being linked (x86_64) 
+[00:01] <EF> (and same for 2 other libs)
+[00:02] <mjr_> _ry: it may come as no surprise that on linux this works perfectly.  There is no buffering delay, libev wakes me up for every packet.
+[00:02] progrium has joined the channel
+[00:03] <isaacs> hey, someone installed something into the npm registry without me having to be involved at all.  that's AWESOME
+[00:03] <jwm> EF: the host on mac is x86_64
+[00:03] <mjr_> _ry: but I can't run dtruss on node on my computer without it crashing node, so that's annoying.
+[00:03] <progrium> fictorial: hi
+[00:03] <_ry> mjr_: hmm yeah i don't know what that's about
+[00:04] <_ry> EF: port reinstall openssl
+[00:04] <bmizerany> _ry: look right? https://gist.github.com/ec572a515b3daf308391
+[00:04] <jwm> you can install the i386 version of gcc
+[00:05] <_ry> mjr_: you can try using EVBACKEND_KQUEUE here http://github.com/ry/node/blob/1036aa9762c7f08a0f0e9552da7c4fbbb6eec091/src/node.cc#L2068
+[00:05] <_ry> bmizerany: yes
+[00:05] <EF> jwm: Do I need to install some other libssl (and libcrypto and libz) or something? Oh - I see. Different gcc.
+[00:05] <bmizerany> _ry: ok.  doing a make
+[00:05] devinus has joined the channel
+[00:05] <progrium> anybody know if its possible to redirect stdout from within node?
+[00:06] <_ry> progrium: we're working on a bug right now related to that
+[00:07] <_ry> but generally yes
+[00:07] <progrium> oh? which bug?
+[00:08] <maushu> isaacs, I shall attempt to install npm into npm.
+[00:09] <maushu> The universe implodes?
+[00:09] <isaacs> maushu: it's already there
+[00:09] <isaacs> maushu: that's what make does
+[00:09] <maushu> ...
+[00:09] <maushu> Drat!
+[00:09] <isaacs> maushu: http://registry.npmjs.org/npm
+[00:10] <progrium> _ry: it seems the only way to do it is with process forking?
+[00:11] <_ry> progrium: what do you mean, exactly?
+[00:11] <progrium> _ry: to set sys.stdout to say a file
+[00:11] <progrium> i can emulate with a parent process
+[00:11] <jwm> EF: apparently nobody is having the same problem as you, try reinstalling your libs hehe
+[00:13] <progrium> _ry: also, is this the canonical bug/issue repository? http://github.com/ry/node/issues 
+[00:14] <_ry> progrium: node script.js > file
+[00:15] <progrium> _ry: yes. i can't do that. i'm trying to write a twistd like wrapper
+[00:15] <_ry> progrium: ah you're daemonizing
+[00:15] <progrium> _ry: to daemonize, set log, pid, uid, chroot, etc
+[00:15] <_ry> yeah i think we should probably have special support for that...
+[00:15] <_ry> just in the case of daemonizing...
+[00:16] <_ry> there isn't really a way to do that right now
+[00:16] <progrium> _ry: i figure i can fork and have the parent process take stdout of child and write to a file
+[00:17] <progrium> i already have to wrap the script that's run to set the uid after it binds/listens on ports
+[00:17] <EF> jwm: Hm...however I go about that.. Okay, thanks. Maybe upgrading to Snow Leopard left something broken.
+[00:17] <jwm> eww you didn't do a complete reinstall EF?
+[00:17] <jwm> :)
+[00:18] devinus has joined the channel
+[00:18] <progrium> but its getting pretty complicated
+[00:18] <progrium> to fake all this stuff
+[00:18] <jwm> EF: you can use macports to reinstall stuff
+[00:18] <jwm> and update them
+[00:18] <jwm> like ry said
+[00:18] <bmizerany> _ry: nothing. https://gist.github.com/68de2377bb094db37801
+[00:18] <bmizerany> _ry: I'm still only getting that one simple line
+[00:18] <bmizerany> of debug
+[00:19] <_ry> bmizerany: you're using node_g ?
+[00:19] <bmizerany> _ry: what is that?
+[00:19] <_ry> NODE_DEBUG=1 ./node_g blah.js > out
+[00:19] <bmizerany> oh
+[00:19] <_ry> bmizerany: sorry - that's the debug build
+[00:19] <bmizerany> ok. that's better
+[00:21] <_ry> progrium: i think daemonizing always requires forking doesn't it?
+[00:22] <_ry> to detach from the tty?
+[00:22] <EF> jwm: Thanks. I'll try to get there with that.
+[00:22] <progrium> _ry: yes, but i'm doing that outside node in python and i don't believe i have control of the child's stdout. maybe
+[00:23] <progrium> i do as long as i'm in python
+[00:23] <progrium> but i use os.execl to switch the process to node
+[00:23] <bmizerany> _ry: says `debug` isn't defined in node.js
+[00:24] <_ry> bmizerany: hah groan 
+[00:24] <_ry> bmizerany: when i do this i get debugging output
+[00:24] <_ry> NODE_DEBUG=1 ./node_g test/pummel/test-timers.js
+[00:24] <_ry> bmizerany: oh, i see - it got moved to module.js
+[00:25] <bmizerany> _ry: I get it too.  it just failing now on the `debug` I added in the branch statement
+[00:25] <bmizerany> _ry: how do I use it from there?
+[00:25] <_ry> bmizerany: okay just change it to process.writeError('blocking stdout') and process.writeError('nonblocking stdout')
+[00:25] <isaacs> bmizerany: you can just copy it from module.js into node.js
+[00:25] <isaacs> it's like a 3 line function
+[00:26] <fictorial> progrium: hey
+[00:27] <progrium> fictorial: hi
+[00:27] <bmizerany> _ry: nope. error.  undefined writeError for EventEmitter
+[00:27] <_ry> bmizerany: oh sorry . man :)
+[00:27] <_ry> process.binding('stdio').writeError
+[00:27] <bmizerany> np. ;)
+[00:31] <bmizerany> _ry: blocking it is.
+[00:32] <bmizerany> _ry: so where do we go from here?
+[00:32] tracker1 has joined the channel
+[00:32] <_ry> bmizerany: hm yeah. well.
+[00:33] <tracker1> Hi all, I'm having trouble getting nodejs + express working... it's rendering my sample.html.haml from the views folder, but it isn't interpreting the haml, and litterally rendering "%html %head %title..."
+[00:33] <tracker1> I'm using the nodejs drop from 3 days ago, and express 0.9.0 via the latest kiwi
+[00:43] <_ry> bmizerany: gdb --args ./node_g script.js > out
+[00:43] tlrobinson_ has joined the channel
+[00:43] <tracker1> actually it's rendering what looks like the layout.html.haml partially
+[00:43] <_ry> bmizerany: break node::Write
+[00:43] <tracker1> <html></html>
+[00:43] <tracker1> %head %title Test %body #wrapper != body
+[00:43] <_ry> bmizerany: run
+[00:43] charlesjolley has joined the channel
+[00:43] cedricv has joined the channel
+[00:44] <_ry> bmizerany: just to see if it gets down to the C layer
+[00:44] <_ry> http://github.com/ry/node/blob/1036aa9762c7f08a0f0e9552da7c4fbbb6eec091/src/node_file.cc#L547 <-- this is the function
+[00:45] <avidal> *twiddle* building node
+[00:45] <avidal> from head
+[00:46] ditesh|cassini has joined the channel
+[00:47] SvenDowideit has joined the channel
+[00:48] <bmizerany> _ry: https://gist.github.com/a4518c9459f4edddb9f8
+[00:50] felixge_ has joined the channel
+[00:50] <_ry> bmizerany: only interested in the second one
+[00:50] <felixge_> ACTION back to utf8 fun!
+[00:50] <_ry> delete 1
+[00:50] cij_ has joined the channel
+[00:51] <mscdex> _ry: this is a little late, but you can link to line numbers in gists
+[00:52] <mscdex> by appending #LIDx where x is the line number
+[00:52] <bmizerany> _ry: https://gist.github.com/260d51dc59df0dd971b5
+[00:52] tlrobinson_ has joined the channel
+[00:54] <mscdex> it only works for 1-file gists though
+[00:55] <mscdex> otherwise it only goes by the first file
+[00:56] <bmizerany> _ry: is that what you were looking for?
+[00:57] <avidal> hrm
+[01:00] <avidal> hrrrrrrrm
+[01:01] softdrink has joined the channel
+[01:01] <avidal> so is there a common environment option to set if i stick node in something like ~/projects/node that npm respects?
+[01:03] <avidal> i guess i can just add my node directory to my path
+[01:04] robrighter has joined the channel
+[01:06] <mjr_> gah, so this pcap stuff works perfectly on Linux, but keeps doing strange buffering things on osx.  
+[01:07] <isaacs> avidal: build node with that as the --installPrefix, or set the binroot config for npm
+[01:07] <isaacs> avidal: npm config set binroot $HOME/projects/node/bin
+[01:07] <isaacs> avidal: or build node with: ./configure --prefix=$HOME/projects/node
+[01:08] <avidal> i never did a make install on node anyway, just the build
+[01:08] <isaacs> avidal: ?
+[01:08] <isaacs> avidal: oic.
+[01:08] <isaacs> you just did a make, and then copied it out
+[01:08] <isaacs> that's not right.
+[01:08] <avidal> nah i left it right where it was
+[01:08] <isaacs> oh, ok...
+[01:09] <avidal> it has a node binary, why bother with a make install?
+[01:09] <isaacs> avidal: so that node is where node thinks it is
+[01:09] <avidal> indeed my friend...indeed.
+[01:09] <isaacs> avidal: ie, so that process.installPrefix is useful
+[01:09] <isaacs> avidal: anyway, you don't HAVE to do that, it just makes the defaults less dumb.
+[01:10] <avidal> i see
+[01:10] <isaacs> avidal: you can do npm config set binroot to $HOME/projects/npm/executables/ if you want
+[01:10] <isaacs> avidal: it's up to you
+[01:10] <avidal> yeah
+[01:10] <avidal> i actually set it to .node_libraries/bin
+[01:10] <isaacs> oh, ok
+[01:10] <isaacs> that works.
+[01:10] <isaacs> i mean, it's weird.
+[01:10] <isaacs> but whatever.
+[01:11] <avidal> haha
+[01:11] <avidal> i can never come up with proper paths for anything
+[01:11] <bmizerany> _ry: so I changed `  if (isatty(STDOUT_FILENO)) { ` to `if(true) {` for shits, still nada with the redirect.
+[01:12] <avidal> when i want to keep things in my home directory, i'm always at a loss
+[01:12] <isaacs> avidal: it's actually really easy if you just kinda submit to the traditions.
+[01:12] <avidal> like, i'll clone node to ~/projects/node, but i wouldn't know where to set the install prefix
+[01:13] jedschmidt has joined the channel
+[01:13] <isaacs> avidal: right, because node wants to put itself at $PREFIX/bin/node
+[01:14] <isaacs> avidal: since like every other *nix user on the planet does it that way.
+[01:14] <isaacs> :P
+[01:14] <avidal> yeah
+[01:14] <isaacs> maybe you could have ~/projects/node as the prefix, and then put ~/projects/node/bin in your $PATH, and do the configure/make/make install thing
+[01:15] <avidal> yeah that's an option
+[01:15] <bmizerany> _ry: now that I think of it; this also means `heroku logs` will not work, because we redirect stdout to a log. whatever I can do to help, let me know;  I'm not sure where to go from here.  this is a fun one.  :)
+[01:15] <isaacs> for bonus points, put ~/projects/node/man/man1 in your manpath, and do npm config set root $HOME/projects/node/lib/node
+[01:15] <_ry> bmizerany: i think we should poke around in that Write function
+[01:16] scott_gonzalez has joined the channel
+[01:16] <_ry> bmizerany: with gdb - that's what's being called to print to stdout
+[01:16] <scott_gonzalez> _ry: node is too fast
+[01:16] <bmizerany> _ry: right.  I was redirecting the to a file using `run test.js > foo`
+[01:17] <_ry> bmizerany: if you could break here
+[01:17] <_ry> http://github.com/ry/node/blob/1036aa9762c7f08a0f0e9552da7c4fbbb6eec091/src/node_file.cc#L616
+[01:17] <bmizerany> ok
+[01:17] tmpvar has joined the channel
+[01:17] <_ry> bmizerany: and "print buf"
+[01:17] <bmizerany> _ry: k
+[01:17] ditesh|cassini has joined the channel
+[01:17] <_ry> hopefully that will be your string you're trying to print
+[01:17] <_ry> scott_gonzalez: ?
+[01:17] <isaacs> avidal: you could also use nave to keep things sorted out nicely.
+[01:17] <isaacs> avidal: it actually does all that for you.
+[01:18] <scott_gonzalez> I'm using process.nextTick() to delay a function execution
+[01:18] <scott_gonzalez> but both runs of the event loop are running in the same millisecond
+[01:18] <isaacs> avidal: and if you do "nave use 0.1.95 myprogram.js" then it'll build, install, and switch into a subshell where that node is first in the $PATH
+[01:18] <scott_gonzalez> so I can't use timestamps to keep track of when things are happening
+[01:18] <isaacs> avidal: and then run "node myprogram.js"
+[01:18] <avidal> oh so is nave like virtualenv?
+[01:18] <scott_gonzalez> this is causing problems for webchat -> irc proxying
+[01:18] <isaacs> avidal: a lot like that, yeah
+[01:18] <_ry> scott_gonzalez: nextTick runs very quickly
+[01:19] <isaacs> avidal: if you don't give it a program, then it'll just drop you into that subshell.
+[01:19] <scott_gonzalez> since webchat uses timestamps to keep track of which messages users need to receive
+[01:19] <isaacs> avidal: and it configures node with the --prefix arg, so everything looks right to the env
+[01:19] <_ry> scott_gonzalez: maybe you should use an id or something?
+[01:19] <bmizerany> _ry: https://gist.github.com/bd9ffde0c7a3e9dc02a0
+[01:20] <avidal> hrm
+[01:20] <_ry> bmizerany: is that what you want written out?
+[01:20] <_ry> bmizerany: print len
+[01:20] <bmizerany> _ry: yes.  I assume the ... means there is more.  so that is correct
+[01:20] <_ry> bmizerany: print fd
+[01:20] <bmizerany> $2 = 0
+[01:20] <scott_gonzalez> _ry: wasn't something added to give even more precision for time?
+[01:20] <bmizerany> $3 = 1
+[01:21] <scott_gonzalez> I suppose I could just use auto-incrementing ids
+[01:21] <MattJ> scott_gonzalez: Time isn't unique, stop trying to make it so :)
+[01:21] <_ry> bmizerany: wait, len is 0?
+[01:21] <scott_gonzalez> MattJ: heh, just following _ry's example :-P
+[01:21] <MattJ> ACTION slaps _ry
+[01:21] <bmizerany> _ry: yes
+[01:21] <scott_gonzalez> of course I should know by now not to really trust any of _ry's demos
+[01:22] <_ry> bmizerany: hm - that sounds wrong
+[01:22] <scott_gonzalez> since his goal is always to make something that works for five minutes
+[01:22] <bmizerany> _ry: yeah. I thought that too.  I was waiting to see.
+[01:22] <avidal> hrm, i'll figure out how i want to do this
+[01:23] <_ry> bmizerany: okay can you start again
+[01:23] <_ry> and break here: http://github.com/ry/node/blob/1036aa9762c7f08a0f0e9552da7c4fbbb6eec091/src/node_file.cc#L596
+[01:23] <bmizerany> _ry: sure
+[01:23] <_ry> i want to know what "pos" and "enc" are
+[01:23] <scott_gonzalez> _ry: I've got a proof of concept working for the chat & irc demo
+[01:23] <scott_gonzalez> I'm not actually proxying between the two yet
+[01:24] <_ry> scott_gonzalez: very cool
+[01:24] brapse has joined the channel
+[01:24] <scott_gonzalez> but whenever I type "start" into webchat, it spawn a new webchat user and sends fives messages, then logs out
+[01:24] <_ry> scott_gonzalez: it's going ot be so awesome :)
+[01:24] <scott_gonzalez> so I'll have to do some more refactoring on webchat to make this fully work
+[01:24] <scott_gonzalez> then I'll finish building out ircd
+[01:24] <scott_gonzalez> then the proxying shouldn't be too hard
+[01:25] <_ry> scott_gonzalez: are doing the proper polymorphism?
+[01:25] <scott_gonzalez> I've got it all planned out in my head now
+[01:25] <_ry> (or "going to do")
+[01:25] <_ry> e.g. have two types of "users"
+[01:25] <scott_gonzalez> no
+[01:25] <scott_gonzalez> I was thinking about that
+[01:25] <_ry> where user.sendMsg() is has two different implementations
+[01:26] <_ry> bmizerany: you'll have to step after you break there
+[01:26] <scott_gonzalez> but then I realized I could just make sure that the channels just call methods on the users
+[01:26] <scott_gonzalez> and I can pass whatever I want as a user
+[01:26] <_ry> bmizerany: because pos and enc are undefined at that line
+[01:26] <bmizerany> _ry: yeah.  rebuilding against 0.1.95. master has more commits since.
+[01:27] <bmizerany> _ry: our line #'s are getting messed up
+[01:27] <_ry> bmizerany: oh okay
+[01:27] keeto_ has joined the channel
+[01:27] <progrium> i don't understand how global is supposed to behave
+[01:27] <progrium> it has nothing in it according to inspect?
+[01:27] <progrium> shouldn't it have require, process, etc?
+[01:28] <bmizerany> _ry: https://gist.github.com/c75bd9595d25e506efb7
+[01:29] <bmizerany> _ry: oh wait.  where are you getting your line #'s?
+[01:29] <_ry> bmizerany: master
+[01:30] <bmizerany> _ry: http://github.com/ry/node/blob/master/src/node_file.cc#L596
+[01:30] <isaacs> progrium: require is a local function var.
+[01:30] <_ry> bmizerany: yep
+[01:30] <isaacs> progrium: for fun, try this:  require("sys").puts(arguments.callee.toString())
+[01:31] <_ry> bmizerany: lets PM so we don't flood the channel
+[01:31] <bmizerany> _ry: k
+[01:31] <isaacs> progrium: put that in a file and throw it at node
+[01:32] <progrium> isaacs: ok, so if i wanted pass the full env to another script, the sandbox would include global, export,s require, module, __filename, and __dirname?
+[01:32] <progrium> maybe process?
+[01:32] <progrium> (not sure why its not included in the main local environment shown in that func
+[01:33] <isaacs> progrium: process === global.process
+[01:33] <tmpvar> _ry, would you be fine with using node-waf in all of the build scripts instead of a system level copy?
+[01:33] <isaacs> progrium: because modules run inside a functino.
+[01:33] <progrium> ok
+[01:33] <_ry> tmpvar: ?
+[01:33] <isaacs> progrium: lib/module.js is very informative.
+[01:34] <isaacs> check it out
+[01:34] <tmpvar> i made a couple changes to node-waf to include the deps/v8 folder.. which makes something like python bin/node-waf configure work
+[01:34] <tmpvar> otherwise im getting path issues and some weird syntax issue with the "../deps/v8/tools/jsmin.py"
+[01:34] <mumrah_> anyone have some starting points for getting JS to run in a C program?
+[01:35] <mumrah_> is that something V8 is designed for?
+[01:35] <_ry> tmpvar: for windows?
+[01:35] <mumrah_> or would i need to use spidermonkey
+[01:40] <felixge_> _ry: https://gist.github.com/4f088745385772d3ccc0
+[01:40] cedricv has joined the channel
+[01:40] <felixge_> _ry: I did the combination of the character with the rest of the string thingy
+[01:40] <felixge_> _ry: and added the detailed test case you suggested
+[01:42] <_ry> cool
+[01:43] <_ry> felixge_: can you tell me about the bit shuffling?
+[01:43] <_ry> i don't know utf8
+[01:43] <progrium> isaacs: maybe you can tell me why this doesn't work as expected? http://gist.github.com/404493 it still says require is not defined
+[01:43] <felixge_> _ry: basically I'm just checking for the bit prefixes outlined here: http://en.wikipedia.org/wiki/Utf8#Description
+[01:43] <tmpvar> _ry, yeah
+[01:43] <felixge_> _ry: they indicate how many bytes will follow for a given character
+[01:44] <felixge_> _ry: it could be done with the & operator like you suggested as well
+[01:44] <progrium> isaacs: if you can see what i'm trying to do (should be obvious), maybe there is a better way? eval won't give good debugging for the child script
+[01:45] <isaacs> progrium: yeah, switching contexts is weird.
+[01:45] <isaacs> progrium: i think you might not be able to send the global object in as the context.
+[01:45] <isaacs> progrium: the global object is special
+[01:46] <isaacs> bbiab
+[01:46] <progrium> oh
+[01:46] <progrium> isaacs: i guess i don't need NewContext
+[01:46] <progrium> it seems to work with ThisContext
+[01:49] <felixge_> _ry: so, what do you think? The next step would be to hack this into net.js
+[01:51] mjr_ has joined the channel
+[01:53] tsyd2_ has joined the channel
+[01:56] <_ry> felixge_: i think it looks good
+[01:57] <felixge_> _ry: alright, I'll work on getting it hooked into setEncoding now
+[01:57] <_ry> felixge_: sweet
+[01:58] <_ry> i might want to change those things to bitwise-&
+[01:58] <_ry> oh but you have to check for 0
+[01:59] cij_ has joined the channel
+[01:59] <_ry> felixge_: maybe the bitshift is okay- but the 6 and 30 and stuff should be hex, i think
+[02:05] derbumi has joined the channel
+[02:07] Aria has joined the channel
+[02:07] <_ry> felixge_: i wnat to add callbacks to stream.write() now
+[02:08] <_ry> felixge_: i sat down with mjr_ a while ago and we discussed in great detail how to solve several thorttle probems
+[02:09] <_ry> the result of the discussion was that write() syscalls should be moved to the end of tick, and write() should come with a callback :)
+[02:11] <MattJ> Isn't that almost the "drain" event?
+[02:12] <_ry> in-between 
+[02:12] <_ry> you might want to know when a specific peice of data has left the process
+[02:12] <MattJ> Mmm, ok
+[02:12] <fictorial> what do you guys use for validation of user-supplied values? there are a million ways to do this of course. I'm most familiar with the validators of formencode from python-land. is there something similar for JS that I just don't know about?
+[02:15] <felixge_> _ry: yes, write having a callback is *awesome*
+[02:15] <felixge_> _ry: I really like it in file.WriteStream
+[02:16] <felixge_> _ry: fine with me to have it everywhere :)
+[02:16] <mde> fictorial: Geddy has model/validation: http://github.com/mde/geddy
+[02:16] <mde> The nice thing about it being Node is that you can use the exact same validation code on the client.
+[02:17] <fictorial> indeed. Geddy's validators look familiar! :)
+[02:17] <mde> Yeah, trying to keep a familiar API. :)
+[02:17] <fictorial> right on - so, how modular is this? can it be split out from Geddy?
+[02:18] <fictorial> (er, easily I mean)
+[02:18] <mde> Yes, we're actually using it client-side right now.
+[02:18] <mde> The intention is that it should be usable anywhere.
+[02:18] <mde> So if it's not, it's a bug.
+[02:18] <fictorial> ok
+[02:19] <mde> If you run into issues, just file a GitHub issue.
+[02:21] sh1mmer has joined the channel
+[02:22] ncb000gt has joined the channel
+[02:23] <fictorial> mde: thanks, I will check out Geddy
+[02:24] ssteinerX has left the channel
+[02:24] <mde> fictorial: Excellent, looking for lots of input. :)
+[02:27] <isaacs> mde: put geddy in npm!
+[02:27] <felixge_> _ry: why is 'setEncoding' a method rather than a propert?
+[02:27] <felixge_> * property
+[02:28] <mde> isaacs: Good idea, yeah. As soon as the Postgres support is mostly baked. :)
+[02:28] <isaacs> mde: awesome
+[02:28] joshbuddy has joined the channel
+[02:28] <_ry> felixge_: shrug
+[02:28] <isaacs> mde: if you don't, i swear, i will SO throw a package.json patch at you
+[02:29] <felixge_> _ry: k, not gonna change that now : ). But looks like a fun thing we could break before 0.2 :D
+[02:29] <mde> Haha
+[02:29] <mde> isaacs: I'll have to build a wall of semicolons up for defense. 
+[02:29] <_ry> felixge_: probably can't do that for 0.2 - too many people use it
+[02:30] <isaacs> hehe
+[02:30] <_ry> we'll do some more breaking changes after 0.2
+[02:30] <_ry> need for stability is now though :)
+[02:30] <isaacs> _ry: it could be a getter/setter
+[02:30] <ncb000gt> _ry: +!
+[02:30] <ncb000gt> err +1
+[02:30] <felixge_> _ry: well, we could start by making 'encoding' a public property and removing 'setEncoding' from the docs
+[02:31] <_ry> felixge_: eh, let's just stick with setEncoding for now
+[02:31] <felixge_> isaacs: there is no logic that needs to be executed for encoding, so I don't think we need getters/setters
+[02:31] <isaacs> oh, yeah, then just a public property is fine, i'm sure
+[02:31] <felixge_> _ry: ok
+[02:31] <ncb000gt> So far the method of deprecating things has seemed to be nice, "use y instead of x", when running or using the methods.
+[02:34] <felixge_> _ry: should I write a test case that fires self._readWatcher.callback? Or should I just hack it in without a specific test case?
+[02:35] <felixge_> (it's a little hard to cleanly test the code path in question)
+[02:36] robrighter has left the channel
+[02:36] <_ry> felixge_: i think if it passes the rest of the tests its fine
+[02:37] <felixge_> _ry: ok
+[02:44] ceej_ has joined the channel
+[02:44] <CIA-74> node: 03Ryan Dahl 07master * re232f09 10/ (4 files in 3 dirs): 
+[02:44] <CIA-74> node: fs.WriteStream.write should support buffer
+[02:44] <CIA-74> node: Also re-adding the callback parameter. - http://bit.ly/ciLhGF
+[02:47] <felixge_> _ry: http://github.com/felixge/node/commits/utf8
+[02:48] <progrium> yay!
+[02:48] <progrium> i wrote a twistd-style node daemonizer
+[02:48] <progrium> http://gist.github.com/404549
+[02:48] <progrium> sheds privs, chroots, etc
+[02:48] silence has joined the channel
+[02:48] zomgbie has joined the channel
+[02:49] <_ry> felixge_: would you mind if we renamed it utf8decoder?
+[02:50] <ncb000gt> progrium: interesting, why in python?
+[02:51] <progrium> feel free to port it to c or something
+[02:51] <ncb000gt> haha, nah, i was just curious as to by python vs js with node itself.
+[02:51] <ncb000gt> :s/by/why
+[02:52] <progrium> ncb000gt: i don't believe everything i'm doing is possible from within node
+[02:52] <progrium> it might be
+[02:53] <progrium> i don't see a native fork
+[02:54] <progrium> and originally i was going to use python's chroot instead of calling out to the chroot binary
+[02:54] <progrium> and i'm not sure if you can redirect stdout from within node
+[02:55] <progrium> keep in mind all these things *should* be done in node
+[02:55] <ncb000gt> :)
+[02:55] <progrium> and this functionality *should* come with node out of the box imho
+[02:58] <ncb000gt> _ry: you can't yet set the gid/uid of a child process right? i think i saw something recently about that though.
+[02:59] <ncb000gt> progrium: child processes should get you part of the way there
+[03:00] <progrium> well, but not all of the way
+[03:00] <progrium> and until then, it's not viable
+[03:00] <ncb000gt> yea, it doesn't appear that it's all the way :)
+[03:00] <ncb000gt> yep, still pretty cool though
+[03:04] mjijackson has joined the channel
+[03:08] smtlaissezfaire has joined the channel
+[03:09] aaronblohowiak has joined the channel
+[03:12] smtlaissezfaire has joined the channel
+[03:14] cij_ has joined the channel
+[03:14] <aaronblohowiak> i think node.js kinda irrelevantizes http://pusherapp.com
+[03:14] voodootikigod_ has joined the channel
+[03:15] <progrium> aaronblohowiak: not true
+[03:16] <aaronblohowiak> progrium: i am interested in your thoughts on this
+[03:16] <progrium> aaronblohowiak: you could argue twisted irrelevantizes pusherapp ... or even node.js -- but thats not so
+[03:17] <aaronblohowiak> progrium: i see what you mean. good point.
+[03:17] <aaronblohowiak> it is like saying that sockets irrelevantized pipes
+[03:17] <progrium> yep
+[03:17] <JimBastard_> sup progrium 
+[03:17] <JimBastard_> << marak
+[03:17] <progrium> hi JimBastard_ 
+[03:18] malkomalko has joined the channel
+[03:18] <JimBastard_> aaronblohowiak: unless you are gonna open up a free website that does pusherapp, it doesnt make shit irrelevant
+[03:18] <JimBastard_> its a huge barrier to roll your own web socket server
+[03:18] <JimBastard_> like gigantic
+[03:18] <JimBastard_> if you arent awesome and already in here
+[03:19] alexiskander has joined the channel
+[03:19] <progrium> also, if you're going to do something like pusherapp, you have to make it scale linearly
+[03:20] <aaronblohowiak> JimBastard_:  hmm, good point.  It should make developing something like pusherapp far easier
+[03:20] <progrium> which is something you don't have to worry about if you roll your own. so they're doing hard stuff
+[03:20] <progrium> i'm pretty sure they use nodejs
+[03:20] <JimBastard_> hook.io could do pusher app stuff pretty easily
+[03:20] richcollins has joined the channel
+[03:20] <JimBastard_> i really need to get that shit working
+[03:20] <JimBastard_> stupid real job with large paychecks
+[03:20] <JimBastard_> fuuuuu
+[03:21] <progrium> *nod*
+[03:21] <aaronblohowiak> ACTION agrees
+[03:21] <progrium> trick is to get a job with large paychecks to build it
+[03:21] <JimBastard_> i got a job with large paychecks to build SPA's
+[03:21] <JimBastard_> and i do love my evented front-ends
+[03:21] Tim_Smart has joined the channel
+[03:21] <JimBastard_> (single page apps)
+[03:21] <JimBastard_> SSJS is my hobby
+[03:21] <JimBastard_> lol
+[03:22] <konobi> SPA's?
+[03:22] <JimBastard_> ^^
+[03:22] <JimBastard_> location.hash navigation shit
+[03:22] <JimBastard_> single page ajax apps
+[03:22] <JimBastard_> client side templating
+[03:22] <konobi> ah
+[03:24] <aaronblohowiak> buddy ran out of gas, bbiab!!
+[03:26] nsm has joined the channel
+[03:33] softdrink has joined the channel
+[03:36] steadicat has joined the channel
+[03:38] <siculars> there gonna be some nodejs love at googleio? i'll be there... who else?
+[03:38] deanlandolt_home has joined the channel
+[03:40] <avidal> hrm
+[03:40] <avidal> i'd love to go, but no dice :(
+[03:40] <avidal> maybe in a couple of years
+[03:40] <avidal> at least i get to go to sxsw every year
+[03:41] <felixge_> _ry: renaming to utf8 decoder is ok
+[03:41] <felixge_> _ry: I'm at too many beers for tonight, so I'll ping you with an updated branch tomorrow
+[03:41] PyroPete1 has joined the channel
+[03:41] <siculars> avidal: man so many parties. so little time.
+[03:42] <avidal> yeah for sure
+[03:42] <avidal> sxsw is an easy one to go to though, i live in austin
+[03:42] <Aria> Weird!
+[03:42] <avidal> so it's easy to get the bosses to drop 500 on the interactive badge
+[03:43] <avidal> probably gonna get a plat badge next year
+[03:43] <avidal> but i'd love to go to google io as well as ces and shit
+[03:44] <avidal> especially google io
+[03:44] <avidal> i'd like to go to pycon also, might be able to swing that next year
+[03:44] <avidal> maybe jsconf after that!
+[03:44] <Phazm> felixge_: http://xkcd.com/323/
+[03:49] smtlaissezfaire has joined the channel
+[03:53] <aaronblohowiak> JimBastard_: with SPAs, http/html/css/js is the new X windows
+[03:55] <avidal> i'd like to explore creating something like that someday
+[03:55] <avidal> maybe a mud client if jimbastard doesn't make one for me :P
+[03:56] <mscdex> zzt!
+[03:57] <Ned_> YAY
+[03:57] <Ned_> nodejs in Debian sid got updatinated
+[03:57] <Ned_> 1.95
+[03:57] <Ned_> :p
+[03:58] <Ned_> unfortunately they renamed the binary to nodejs :-(
+[03:58] <avidal> oh cool, didn't know node was being packaged
+[03:59] <Ned_> yeah, having the binary called nodejs is a bit shit though
+[03:59] <avidal> yeah, well, node already exists
+[03:59] <mscdex> lol
+[03:59] <Ned_> it means whenever I have a script (like npm) it won't work properly :-)(
+[03:59] <avidal> amateur radio something
+[03:59] <Ned_> yes, I don't care about amateur radio
+[03:59] <avidal> me either
+[03:59] <avidal> :(
+[03:59] <Ned_> can't they do an alternative or something ?
+[04:00] <avidal> just symlink it?
+[04:00] <Ned_> or a ... err ... what are they called ... redirection ?
+[04:00] <Ned_> avidal: tempted :p
+[04:00] <Ned_> diversion
+[04:00] <Ned_> I think
+[04:00] <avidal> or rather, just clone and build it yourself
+[04:00] <Ned_> the package should have a diversion
+[04:00] <avidal> it's a simple build
+[04:00] <Ned_> for those of us (i.e. everyone) not using ameteur radio package :p
+[04:00] <Ned_> avidal: well, the debian package is tempting
+[04:00] <Ned_> I might email the maintainer
+[04:00] <avidal> yeah i don't know, node moves too fast atm imo
+[04:01] <Ned_> Jérémy Lal <kapouer@melix.org>
+[04:01] <mscdex> someone oughta have a site that hosts .deb and .rpm of node official builds
+[04:01] <Ned_> avidal: Debian unstable is good at keeping up though :-)
+[04:01] <mscdex> checkinstall works great ;-)
+[04:01] <mscdex> then you could have "node" as the binary name
+[04:02] <Ned_> checkinstall ?
+[04:02] <mscdex> yeah, it creates packages from source
+[04:02] <Ned_> right
+[04:02] <Ned_> kinda like dh_make ?
+[04:02] <mscdex> ./configure && make && checkinstall
+[04:02] <avidal> interesting
+[04:02] jedschmidt has joined the channel
+[04:02] <Ned_> mscdex: that's kinda cool
+[04:02] <Ned_> :p
+[04:03] <mscdex> http://www.asic-linux.com.mx/~izto/checkinstall/
+[04:03] <mscdex> i use it to create .deb of node when i build
+[04:03] <Ned_> yeah, was just looking at the debian package of it ;-)
+[04:03] <Ned_> yeah, I'm liking that ...
+[04:03] <mscdex> it also creates slackware packages :P
+[04:03] <avidal> do you just save the old debs?
+[04:03] <mscdex> yeah
+[04:04] <avidal> sounds like you are the perfect person to host a repository then :P
+[04:04] <mscdex> hehe
+[04:04] <Ned_> heh
+[04:04] <mscdex> but i only compile on x64, so x86 would be missing
+[04:04] <Ned_> it wouldn't be difficult to build-farm it
+[04:04] <Ned_> I actually made a proper debian package
+[04:04] <Ned_> that builds from the source tree
+[04:04] <avidal> yeah i suppose you'd need a build box with a handful of vms running, or enough volunteers i suppose
+[04:05] <Ned_> avidal: just vservers
+[04:05] <Ned_> :-)
+[04:05] <Ned_> would be fine
+[04:05] <Ned_> or even just chroots
+[04:06] <mscdex> i'm wondering if you can force it to make a 32-bit binary on a 64-bit machine
+[04:06] <Ned_> mscdex: what if you don't specify --pkgname
+[04:06] <Ned_> ?
+[04:06] <Ned_> does it default to dirname or something ?
+[04:06] <jwm> -m32
+[04:06] <jwm> hehe
+[04:07] <mscdex> Ned_: it makes it based on the package details you give it
+[04:07] <Ned_> er,, interactively ?
+[04:07] <mscdex> by default, yes
+[04:07] sadjester has joined the channel
+[04:07] <Ned_> right
+[04:07] <Ned_> that'll do
+[04:07] <Ned_> ;-)
+[04:07] <Ned_> ACTION is just building node now
+[04:08] <mscdex> although, once you do that, it creates some files that contain the details you entered
+[04:08] <mscdex> so technically you could reuse some of those files i guess
+[04:08] <Ned_> oh, right
+[04:08] <Ned_> cool
+[04:08] <mscdex> but it grabs the version and other stuff automatically
+[04:09] magcius has joined the channel
+[04:09] <mscdex> so really all you have to do is supply a description
+[04:09] <Ned_> yeah
+[04:09] <Ned_> cool bananas
+[04:09] <Ned_> mint
+[04:09] <Ned_> mscdex: thanks for that
+[04:09] <mscdex> room-temperature bananas :>
+[04:10] bpot has joined the channel
+[04:11] <avidal> cool, 3 austinites
+[04:11] <sadjester> austin, who? >.>
+[04:11] <avidal> you
+[04:11] <aaronblohowiak> i brought up building OSX .pkg with _ry and he suggested that it might make sense after 0.2
+[04:11] <avidal> and bpot
+[04:11] <avidal> and me :3
+[04:11] <sadjester> Oh, I know bpot
+[04:12] <sadjester> That's funny.
+[04:12] <bpot> hey
+[04:12] <bpot> haha
+[04:12] <sadjester> ohi.
+[04:12] <bpot> austin ftw
+[04:12] <sadjester> I'm not sure I know who avidal is, though.
+[04:12] <avidal> probably not
+[04:12] <avidal> i mostly idle in here
+[04:12] <avidal> haven't really contributed anything yet
+[04:12] <_ry> aaronblohowiak: you know there is a script for making pkg files
+[04:13] <_ry> er - what's the osx package thing called?
+[04:13] <_ry> dmg?
+[04:13] <avidal> yeah
+[04:13] isaacs_home has joined the channel
+[04:13] <_ry> ./tools/osx-pkg-dmg-create.sh 
+[04:14] <jwm> _ry: what os do you use mostly?
+[04:15] <mscdex> i vote for AmigaOS for the next node.js port!
+[04:15] <aaronblohowiak> _ry: a dmg is going to just be a disk image of the software, not a proper "installer" ie: you dont specify the destination. you would use packagemaker (included in osx) http://developer.apple.com/mac/library/documentation/Darwin/Reference/ManPages/man1/packagemaker.1.html
+[04:16] <jwm> I was thinking of making a qemu/kvm image for node.js
+[04:16] <jwm> and packaging it together
+[04:16] <jwm> hehe
+[04:16] <jwm> vm-node :)
+[04:16] <aaronblohowiak> _ry:  wait, i'm an idiot
+[04:16] <aaronblohowiak> sorry =(
+[04:16] <sadjester> aaronblohowiak: A typical way of installing software that doesn't require any special kind of access or installing into Library locations is a dmg with a draggable .app folder or a parent folder.
+[04:18] <aaronblohowiak> sadjester: yea, that doesnt add it to $PATH
+[04:18] <aaronblohowiak> sadjester: i suppose there could be a separate script that creates a symlink for you like texmate's "enable textmate from terminal" command
+[04:18] <sadjester> Have a script that you double click that asks for permission to make a symlink?
+[04:19] <sadjester> Ya - mvim and lots of other junk takes that route
+[04:19] <aaronblohowiak> sadjester: okie.
+[04:19] <avidal> fffff
+[04:19] <avidal> this guy flaked out on me at the last minute
+[04:20] <avidal> i'm moving in 3 weeks and my girlfriend is pregnant and we've been trying to find a new home for my dog
+[04:20] <sadjester> Trying to find love on craigslist will do that
+[04:20] <sadjester> ahh
+[04:20] <avidal> he's a 6 year old pitt-mix so he won't last long at the pound
+[04:20] <sadjester> love/doghome - interchangeable :P
+[04:20] cij_ has joined the channel
+[04:20] hone has joined the channel
+[04:22] <jedschmidt> for anyone interested, the next rev of (fab) is taking shape. details here: http://bit.ly/aO5ija
+[04:24] tilgovi_ has joined the channel
+[04:26] JimBastard has joined the channel
+[04:41] wilmoore_ has joined the channel
+[04:42] Phazm has joined the channel
+[04:48] WALoeIII has joined the channel
+[04:53] xer0x has joined the channel
+[04:53] <xer0x> Does Node.js compile on powerpc?
+[04:54] <xer0x> (The deps/c-ares directory included on Ry's git doesn't include ppc src)
+[04:54] <xer0x> Wondering if I'll hit any snags beyond that..
+[04:59] <_ry> xer0x: no
+[04:59] <_ry> v8 doesn't target ppc
+[04:59] <xer0x> d'oh! Thanks _ry
+[05:01] <xer0x> btw keep up the awesome work
+[05:02] dgathright has joined the channel
+[05:08] <_ry> xer0x: :)
+[05:09] <freshtonic> I'm getting the following error calling exports.merge after require('ext') : TypeError: Object #<an Object> has no method 'merge'.  The problem seems to be that ext.js's core extensions (to Object) do not seem to be visible after the require('ext') call
+[05:09] <freshtonic> has anyone come across an error like this?
+[05:13] <CIA-74> node: 03Felix Geisendörfer 07master * rcaba9c7 10/ (3 files in 3 dirs): 
+[05:13] <CIA-74> node: Implemented Utf8Decoder module
+[05:13] <CIA-74> node: Allows to safely decode a utf8 stream into strings without breaking
+[05:13] <CIA-74> node: on multibyte characters. - http://bit.ly/bQyTke
+[05:13] <aaronblohowiak> i think i am going mad.  in firefox, it shoes one request, but my app says it is recieving two
+[05:13] <_ry> aaronblohowiak: favicon
+[05:14] <aaronblohowiak> _ry:  the url it is requesting twice is /join?session_id=0.6692899183673735&location=http%3A%2F%2F127.0.0.1%3A8001%2F
+[05:14] felixge has joined the channel
+[05:14] felixge has joined the channel
+[05:14] <_ry> felixge: ping
+[05:14] <felixge> _ry: pong
+[05:14] <_ry> i changed your thing around a little
+[05:15] <_ry> felixge: http://github.com/ry/node/commit/caba9c70c34c1f517ae2fe20a7425cc20c0800fc
+[05:15] <_ry> but looks good
+[05:15] <_ry> going to make dinner then i'll merge the rest - i'll rebase the name changes myself
+[05:15] <felixge> _ry: NICE
+[05:16] <felixge> _ry: thanks :)
+[05:22] <aaronblohowiak> if you have an uncaught throw() in a httpServer thingy, does it try again?
+[05:23] <_ry> aaronblohowiak: that's a bug at the moment
+[05:23] <_ry> to be fixed tomorrow
+[05:23] <aaronblohowiak> ACTION feels the warm glow of sanity returning
+[05:23] <_ry> right now its silently swollowed 
+[05:23] <_ry> but ti doens't try again
+[05:23] <_ry> i'm telling you, favicon
+[05:26] <mape> The ole favicon
+[05:38] <aaronblohowiak> ACTION is the biggest idiot in the world. "string" != ["string"]
+[05:43] <mjr_> aaronblohowiak: you can try / catch in http parser callbacks, and actually catch the exception.
+[05:45] <aaronblohowiak> mjr_: ^.^
+[05:45] aconbere has joined the channel
+[05:46] <aconbere> I'm trying to use mkdir and it doesn't seem to set the access mode correctly (or at least my assumptions about how it should work are wrong)
+[05:47] <aconbere> fs.mkdirSync("my/path", 777) => 
+[05:47] <aconbere> dr----x--t
+[05:47] <aconbere> hmmmm
+[05:47] <aconbere> that's not 777 :)
+[05:47] <_ry> aconbere: 0777
+[05:47] <aconbere> _ry: thanks
+[05:47] <aconbere> I thought it was probably something like that :P
+[05:47] <_ry> apparently es5 has removed octal literals
+[05:47] <_ry> which seems totally insane
+[05:49] <aconbere> haha
+[05:49] <aconbere> well you know... get it wrong the first time, just remove it the second?
+[05:52] JimBastard has joined the channel
+[05:52] <JimBastard> http://www.usenix.org/events/hotos03/tech/full_papers/vonbehren/vonbehren_html/index.html
+[05:53] linuxsable has joined the channel
+[05:56] <mjr_> JimBastard: I wish they'd compare software that people actually use.
+[05:56] <JimBastard> actual use?
+[05:56] <JimBastard> this is Academia!
+[05:56] <mjr_> oh right, sorry
+[05:56] <JimBastard> they don't expect results!
+[05:57] <JimBastard> anything worth theorizing over is rarely worth doing
+[05:57] <mjr_> Is that the same Brewer of the "CAP Theorem"?
+[05:57] <JimBastard> i think maybe its Jim Brewer, im not sure though
+[05:58] <Tim_Smart> They probably did that research to justify their own use of threads
+[05:58] <JimBastard> Tim_Smart +1
+[05:58] <_ry> is this not the radest thing ever: http://vt100.net/docs/vt100-tm/cover.png
+[05:58] <_ry> man i hope the node book looks like that
+[05:58] <JimBastard> node book?
+[05:58] dgathright has joined the channel
+[05:58] <JimBastard> i can haz?
+[05:59] <xer0x> Fun paper JimBastard
+[05:59] <mape> Super secret project
+[05:59] <JimBastard> super duper
+[05:59] <Tim_Smart> Pfft we can do better than that tbh
+[05:59] <JimBastard> <3 super secret node projects
+[05:59] <JimBastard> they are the best kind
+[05:59] <_ry> http://vt100.net/dec/vt220/glyphs
+[05:59] <_ry> man what a great website
+[05:59] charlesjolley has joined the channel
+[05:59] <JimBastard> _ry did you find the matrix?
+[06:00] <_ry> i want to write vt100 directly!
+[06:01] micheil has joined the channel
+[06:01] <mape> hehe
+[06:01] <_ry> ACTION is going to write a modern libtermcap 
+[06:01] <_ry> just support the virtual terminals
+[06:02] <mjr_> I wrote a bunch of vt220 code back in college to make a PrimeOS terminal multiplexor like screen.
+[06:02] <mjr_> There are some awesome escape sequences that I can't believe they put in there.
+[06:03] <mjr_> things like, "wait a few seconds, then send me back this string"
+[06:03] <mjr_> which has no possible ways to abuse it
+[06:08] darkf has joined the channel
+[06:09] Aria has joined the channel
+[06:11] temp01 has joined the channel
+[06:15] kixxauth has joined the channel
+[06:22] steadicat has joined the channel
+[06:25] <Aria> I am onto the last test case for the html5 parser!
+[06:25] <Aria> 464 out of 465 pass!
+[06:26] <mape> Nice!
+[06:26] <Aria> Yeah!
+[06:26] <Aria> (and the last test case is a) really ugly and b) not commonly encountered in the wild)
+[06:26] <mape> Did you talk to tmpvar about getting it working with jsdom?
+[06:27] creationix has joined the channel
+[06:29] <Aria> I didn't yet.
+[06:29] <Aria> And removing the debug code makes it 1/5 faster.
+[06:30] <mape> Aria: You should, can see a lot of excitement there
+[06:30] <Aria> Oh, I will. 
+[06:31] mscdex has joined the channel
+[06:32] <Aria> Man, this makes me happy.
+[06:32] <mape> hehe
+[06:33] <Phazm> jsdom + html5 parser makes me happy :)
+[06:34] SamuraiJack has joined the channel
+[06:34] <mikeal> + jquery makes me happy
+[06:34] <mikeal> cause i don't wanna write a scrapper without jquery
+[06:34] <Phazm> indeed
+[06:34] stevendavie has joined the channel
+[06:34] <Phazm> jquery already works with jsdom, but from what I understand the html parser slows things down considerably
+[06:35] <Aria> Heh. Yeah?
+[06:35] <Aria> This parser should help. It's fast!
+[06:35] <Phazm> I'm actually implementing it right now
+[06:35] <Phazm> how forgiving is it, Aria?
+[06:35] <Aria> In theory, as forgiving as a browser.
+[06:36] <Aria> You should SEE some of the evil testcases I've debugged here.
+[06:36] pandark_ has joined the channel
+[06:36] <Phazm> :-D
+[06:36] <Phazm> that makes me very happy indeed
+[06:36] <mape> slowing it down != speed just that it doesn't work in moste cases?
+[06:37] <Phazm> mape: tmpvar said that the parser slowed things down -- you said that it wasn't very forgiving, iirc
+[06:38] <mape> Ah k
+[06:38] _cheerios has joined the channel
+[06:38] <mape> Well slow things down.. What does speed help if it doesn't work? :P
+[06:39] <Phazm> it does work... just not well ;)
+[06:39] <Phazm> the test works, using just: window.jQuery(document.body).append("<div class='testing'>Hello World, It works!</div>"); and sys.puts(window.jQuery(".testing").text());
+[06:40] <mape> Phazm: Well yeah, but have you found any "in the wild" page that works?
+[06:40] <mape> Only more or less perfect html seems to work
+[06:41] <Phazm> haven't implemented yet, but theoretically, all of MY pages would work -- I make it a point to use only semantic, valid XHTML
+[06:41] wilmoore has joined the channel
+[06:41] <mape> Well yeah
+[06:41] <mape> But why would you scrape your own sites?
+[06:41] <Phazm> lol, I wouldn't, just saying ;)
+[06:41] <mape> It usually the crappy ones without an API/RSS you need 
+[06:42] <isaacs_home> you'd "scrape" your own sites to feed the html into a dom, and run your javascript on it.
+[06:42] <isaacs_home> there's a lot of people who would love to be able to do that.
+[06:42] <isaacs_home> it'd sure make my life easier.  selenium is cool and all, but kind of a pita
+[06:43] <Aria> This is among my goals.
+[06:43] <isaacs_home> i should gather up all the random http fetching stuff i've written and just ape curl's command line api.
+[06:44] <isaacs_home> i'm kinda hoping that mentioning it on the mailing list will inspire someone else to do it for me, though
+[06:45] jedschmidt has joined the channel
+[06:48] tpryme has joined the channel
+[06:49] <aaronblohowiak> _ry:  would you accept a patch that adds an else{} block to while(){} that gets executed if the initial statement evaluates to false?
+[06:50] <aaronblohowiak> haha, j/k. might be time to zzzz
+[06:50] derbumi has joined the channel
+[06:57] stalled has joined the channel
+[07:12] sh1mmer has joined the channel
+[07:14] smtlaissezfaire has joined the channel
+[07:14] derbumi has joined the channel
+[07:16] devinus has joined the channel
+[07:24] ineation has joined the channel
+[07:34] kris928 has joined the channel
+[07:41] kjeldahl has joined the channel
+[07:44] <aaronblohowiak> am i reading the docs correctly: http.createServer(fn, o); is the same as var s = http.Server(o); s.addListener('request', fn); ?
+[07:49] <_ry> aaronblohowiak: yes
+[07:50] <aaronblohowiak> _ry: ty! also, i see that sys.inherits is not in the node api docs. is it a private api?
+[07:50] <_ry> aaronblohowiak: *shrug*
+[07:52] <mscdex> aaronblohowiak: it's not private now, you just let everyone know about it!
+[07:52] <mscdex> :P
+[07:53] <aaronblohowiak> hahaha.  ah, i just read the source.  this is just like crockfords Object.create. neat.
+[07:54] rsms has joined the channel
+[07:55] <micheil> _ry: I'm just testing on latest code, but I was getting an error in the http tests
+[07:56] <micheil> spotify|rsms: aww.. could've told me youw
+[07:56] <micheil> ack
+[07:56] <micheil> * you were about
+[07:57] <micheil> _ry: Path: simple/test-http-exceptions; AssertionError: 0 === 4
+[07:57] <micheil> within the timer callback
+[07:57] spotify|rsms has joined the channel
+[07:58] <Tim_Smart> Any decent asset managers for node.js?
+[07:59] <micheil> _ry: full log: http://www.pastie.org/965084
+[07:59] <micheil> Tim_Smart: asset managers?
+[07:59] <_ry> micheil: yes, i know
+[07:59] <micheil> okay
+[07:59] <Tim_Smart> micheil: css, javascript concating and compression etc
+[08:00] <micheil> Tim_Smart: that'd require some form of templating.
+[08:00] <micheil> Tim_Smart: it's something I'd expect in either express or (Fab)
+[08:00] <Tim_Smart> OK right. Something similar to Jammit I guess
+[08:01] <aaronblohowiak> closure complier is just a jar, iirc
+[08:02] <Tim_Smart> I might make a simple asset packager library then
+[08:03] <Tim_Smart> With options for CSS compression and such would be cool
+[08:05] <aaronblohowiak> Tim_Smart: i have two files that 1) listens for a file change on all files in a directory and 2) shells out to run a "build" command when that happens
+[08:05] <aaronblohowiak> Tim_Smart: http://github.com/aaronblohowiak/toylanguage.com/blob/master/developer_utilities/rebuild_css.js -- shelling out, setting up monitors
+[08:05] <aaronblohowiak> http://github.com/aaronblohowiak/toylanguage.com/blob/master/developer_utilities/executeOnDirectoryFilesChange.js -- executes a given function whenever a file in the given directory changes
+[08:05] micheil_ has joined the channel
+[08:06] <Tim_Smart> aaronblohowiak: I'll be targeting similar behaviour as this http://documentcloud.github.com/jammit/
+[08:08] <CIA-74> node: 03Felix Geisendörfer 07master * red5f116 10/ lib/net.js : Use Utf8Stream for net Streams with utf8 encoding - http://bit.ly/ciSfS4
+[08:08] <CIA-74> node: 03Felix Geisendörfer 07master * rf987ecf 10/ lib/http.js : Use Utf8Stream for http Streams with utf8 encoding - http://bit.ly/bzuqSs
+[08:08] <aaronblohowiak> Tim_Smart: i use Jammit by day ;)  rock on.  thought the links might be helpful to get started, not as a solution =)
+[08:10] <_ry> fs.ReadStream just needs to be updated
+[08:13] <micheil> _ry: does utf8_stream exist?
+[08:15] javajunky has joined the channel
+[08:15] <Tim_Smart> aaronblohowiak: For sure. I'll see how I get on.
+[08:17] <Tim_Smart> _ry: Any updates on http://code.google.com/p/v8/source/browse/branches/bleeding_edge/src/liveedit.h?spec=svn3892&r=3892#33
+[08:17] <mscdex> argh, i hate hard to debug syntaxerrors
+[08:19] SvenDowideit_ has joined the channel
+[08:26] <mscdex> yay! jslint to the rescue
+[08:28] saikat` has joined the channel
+[08:33] N` has joined the channel
+[08:34] SvenDowideit has joined the channel
+[08:39] gwoo has joined the channel
+[08:39] <Tim_Smart> aaronblohowiak: I might wait for jashkenas to come online, to discuss the asset packager. (the author of Jammit). Would be cool to get his opinion.
+[08:39] xla has joined the channel
+[08:40] <aaronblohowiak> aaronblohowiak: sweet!
+[08:40] <Tim_Smart> Talking to yourself huh? :p
+[08:42] <mscdex> well, it is late ;-)
+[08:42] jedschmidt has joined the channel
+[08:43] SvenDowideit has joined the channel
+[08:45] <mscdex> hrm
+[08:45] <mscdex> i'm getting strange behavior from node :S
+[08:45] <Ned_> well, I get it from npm :p
+[08:45] <mscdex> i try running my test script and all it outputs is "node.js:176:9"
+[08:45] <mscdex> which points to "process.loop();"
+[08:46] <mscdex> on v0.1.95
+[08:46] <Ned_> yes
+[08:46] <Ned_> I found an error like that before
+[08:46] <Ned_> it turned out to be an error one earlier in the call-stack
+[08:46] <Ned_> it was quite bizzare
+[08:47] SvenDowideit_ has joined the channel
+[08:47] <mscdex> and if i try adding a listener for uncaughtException and output the passed in exception, nothing is outputted to the screen :S
+[08:47] TomY has joined the channel
+[08:51] <mscdex> whoa, weird
+[08:52] SvenDowideit_ has joined the channel
+[08:53] Tim_Smart has joined the channel
+[08:53] <mscdex> all i'm doing is creating a tcp connection and it's firing the connect and error listeners nonstop
+[08:54] <mscdex> the exception is: RangeError: Maximum call stack size exceeded
+[08:54] <mscdex> :S
+[08:54] <mscdex> oh wait haha i think i might see the problem
+[08:56] <mscdex> my module was emitting the same event names as the ones the module was listening on for the tcp connection
+[08:57] SvenDowideit_ has joined the channel
+[08:57] <mscdex> i guess that's why namespaced events are used :P
+[09:03] caolanm has joined the channel
+[09:03] <caolanm> Has anyone else using the commonjs module version of json-template noticed its broken in node v0.1.95 ?
+[09:04] <caolanm> Its odd because it doesn't contain any node-specific code
+[09:04] <caolanm> I wonder if its because of changes to v8?
+[09:06] aho has joined the channel
+[09:09] cij has joined the channel
+[09:12] SvenDowideit_ has joined the channel
+[09:12] linusthiel has joined the channel
+[09:12] <linusthiel> Hi
+[09:13] <linusthiel> Thank you for very nice software
+[09:13] <linusthiel> I am experiencing a problem when I try to use express, and I figured somebody here might be able to help
+[09:15] <linusthiel> I try to use express without kiwi, and I have express in lib/support/express in my project directory
+[09:15] <linusthiel> I have done require.paths.unshift(__dirname + '/lib/support/express/lib')
+[09:15] markwubben has joined the channel
+[09:16] <linusthiel> and then require('express')
+[09:16] <linusthiel> And I get Error: Cannot find module 'ext'"
+[09:18] <caolanm> linusthiel: I assume it wants this module: http://github.com/visionmedia/ext.js
+[09:18] <javajunky> hmmm 
+[09:18] <javajunky> have you done a submoule init / update inside the express folder
+[09:19] <mscdex> i wish github would automatically include submodules when you download a tarball/zip
+[09:20] <linusthiel> THank you guys
+[09:20] <javajunky> the submodule thing right ?
+[09:20] <linusthiel> I had forgot the submodule update in express folder
+[09:20] <javajunky> it always is ;) .. use kiwi <g>
+[09:20] <linusthiel> Is there any way to have that done recursively?
+[09:20] <javajunky> I don't believe so 
+[09:20] maushu has joined the channel
+[09:21] bajeczka has joined the channel
+[09:22] botanicus has joined the channel
+[09:22] SvenDowideit_ has joined the channel
+[09:23] <linusthiel> Ok thanks for the help. I would use kiwi but I don't really enjoy the feeling of having a dependency on the package manager in the source
+[09:24] SvenDowideit has joined the channel
+[09:24] <javajunky> you should only need that dependency at the top-most level, no where else…alternatively get better with Git ;)
+[09:25] <javajunky> (by which I mean you have a dependency on git <g> )
+[09:27] SvenDowi- has joined the channel
+[09:31] <linusthiel> That's true...
+[09:33] SvenDowideit has joined the channel
+[09:35] <caolanm> ACTION suddenly realises the problems with json-template are because readFile now returns a buffer not a string!
+[09:35] <caolanm> that ones tripped me up twice now ;)
+[09:35] <mscdex> yep, same here
+[09:35] <mscdex> except with a tcp connection
+[09:35] <mscdex> :P
+[09:36] <caolanm> glad its not just me :D
+[09:39] linuxsable has joined the channel
+[09:39] rra has joined the channel
+[09:40] <rra> hi there
+[09:40] <mscdex> hola
+[09:40] <rra> when I try to run the helloworld node.js example, I get an error like this: Error: Cannot find module 'utf8_stream'
+[09:40] <rra> I'm running snow leopard
+[09:41] <rra> looks like node.js is missing something, but can't find anything on google
+[09:41] <mscdex> try running v0.1.95 instead of head?
+[09:41] spotify|rsms has joined the channel
+[09:41] <rra> mscdex: I'll try
+[09:41] <mscdex> that utf8_stream stuff was just added hours ago, and may not be all there for some reason
+[09:45] SvenDowideit has joined the channel
+[09:47] SvenDowi- has joined the channel
+[09:48] <rra> v0.1.95 works, mscdex. thanks ;)
+[09:48] <mscdex> no problemo
+[09:51] <mape> caolanm: .toString() ? :)
+[09:55] SvenDowideit_ has joined the channel
+[09:58] hellp has joined the channel
+[10:00] SvenDowideit_ has joined the channel
+[10:06] jazzychad has joined the channel
+[10:06] taf2 has joined the channel
+[10:10] <javajunky> anyone know anything about http://www.jscrambler.com/ ? 
+[10:12] <konobi> why bother?
+[10:14] <mscdex> woot! basic asterisk events be workin
+[10:14] <javajunky> not sure tbh, I was wondering if it was a node based service (purely as I got a random out of the blue beta invite) 
+[10:14] <javajunky> mscdex, as in the pbx? 
+[10:14] <mscdex> yeah
+[10:14] <javajunky> sweet
+[10:14] <mscdex> i'm writing a node module for it
+[10:14] <mscdex> :P
+[10:15] <mscdex> realtime event monitoring and sending of commands
+[10:17] SvenDowideit has joined the channel
+[10:22] christkv has joined the channel
+[10:23] christkv has joined the channel
+[10:26] sechrist has joined the channel
+[10:27] <maushu> Everyone! Obfuscate your codes!
+[10:27] <sechrist> so I'm trying to get GD to work, seems like the test.js with it is super outdated
+[10:27] <sechrist> gd.openPng no longer exists?
+[10:27] <mscdex> obfuscation != security :P
+[10:27] <maushu> ACTION obfuscates mscdex.
+[10:28] <mscdex> :S
+[10:28] <sechrist> I git clone'd node-gd on github, did the node-waf configure build
+[10:28] <sechrist> then node-waf install
+[10:28] <sechrist> library looks set up -- I verified with an strace
+[10:28] <maushu> Oh, how nice. JScrambler is from Portugal.
+[10:28] <sechrist> but gd.openPng no existo, and I can't find it in the code
+[10:28] <sechrist> wonderful
+[10:29] <javajunky> mscdex: don't shoot the messenger ;) Was just interested to see if anyone was using it, I doubt its a question of security through obscurity, more likely a question of IP protection :) .. 
+[10:30] <sechrist> well yeah packing code should be a build step for any production web app, obfuscating JS is sort of pointless
+[10:37] <Ned_> micheil: ?
+[10:38] <Ned_> ah ha
+[10:38] <Ned_> ACTION discovers an issue
+[10:39] <Ned_> 'WebSocketServer.broadcast is not yet implemented.'
+[10:44] <sechrist> yep I can't get node-gd to work
+[10:45] <sechrist> none of my callbacks are firing -- it's opening the source png but I can't tell if it's doing anything else
+[10:45] javajunky has left the channel
+[10:45] javajunky has joined the channel
+[10:45] ithinkihaveacat has joined the channel
+[10:46] Gruni|Touch has joined the channel
+[10:48] creationix has joined the channel
+[10:49] andrewhampton has joined the channel
+[10:51] johan-s has joined the channel
+[10:53] spotify|rsms has joined the channel
+[10:54] <Ned_> micheil: so err, I have a few issues with websockets, not quite sure the best way to get them to you :p
+[10:54] <Ned_> given you're up to 1.0.52, but npm versino is 1.0.4
+[11:00] ssteinerX has joined the channel
+[11:01] rsms has joined the channel
+[11:01] <mscdex> sechrist: it doesn't look like node-gd emits any events
+[11:01] leifkb has joined the channel
+[11:02] konobi has joined the channel
+[11:02] chuck has joined the channel
+[11:03] mikejs has joined the channel
+[11:03] _ry has joined the channel
+[11:10] <maushu> I just noticed, we are still at v0.1
+[11:10] <maushu> What kind of madness is this.
+[11:11] <mscdex> this is node.js!
+[11:11] <maushu> Exactly.
+[11:11] <mscdex> just kidding, this is billy mays here for zorbeez!
+[11:11] <maushu> Then we reach v0.1.99 and we are like "woah! v0.2!" and _ry is like "kekekeke" and makes a v0.1.100 and we are like "OH NOES!".
+[11:12] <mscdex> triple digit ftw
+[11:12] <mscdex> then there can be a 0.1.666
+[11:12] <mscdex> and 0.1.337
+[11:12] <mscdex> :D
+[11:12] <javajunky> don't forget letters..
+[11:12] malkomalko has joined the channel
+[11:13] <maushu> And then we reach v0.1.999
+[11:14] <mscdex> 0.2
+[11:14] <mscdex> 0.2rc1
+[11:14] <mscdex> hehe
+[11:15] <sechrist> hmm
+[11:15] <maushu> And we are like "weer not stopid, we kno' you r going to v0.1.1000" and _ry is like "I promise to never reach four digits." and we are like "Yay! v0.2!"
+[11:15] <sechrist> node gd works but async callbacks arent
+[11:16] <sechrist> what is this, PHP?!
+[11:16] <maushu> And then ry releases v0.1.00A.
+[11:16] <maushu> sechrist: No, this is node.js!
+[11:17] <maushu> Have I mentioned that I'm bored? I hate my job.
+[11:17] <sechrist> well I've been having hard issues getting tag's gd module working
+[11:17] <sechrist> I have it working but the callbacks are not executing
+[11:17] <sechrist> means my code has to be synchronous, wtf!
+[11:17] <sechrist> http://wiki.github.com/taggon/node-gd/usage
+[11:18] <mscdex> sechrist: the binding doesn't emit any events
+[11:18] <sechrist> wait so the current git rev is broken?
+[11:19] <sechrist> that's.. not cool
+[11:20] <mscdex> i don't see the binding having ever emitted any events, no matter what version or on head
+[11:20] <mscdex> heh
+[11:20] <sechrist> but the usage there clearly shows callbacks
+[11:20] <sechrist> wtfmate
+[11:20] <mscdex> probably didn't get around to implementing them in the binding
+[11:21] <sechrist> the graphicsmagic and imagemagik  implementations are all command wrappers too
+[11:21] <sechrist> I need to be able to create an image object from a http download inside node :\
+[11:21] <mscdex> write a new gd binding :P
+[11:21] <sechrist> looks like I might have to implement it myself
+[11:22] <mscdex> or use the existing code and implement it -- yeah
+[11:22] <mscdex> fork fork fork :D
+[11:22] <sechrist> i've never used git
+[11:22] <sechrist> this shall be interesting
+[11:22] <mscdex> ah
+[11:23] <mscdex> i use gitextensions on windows to do my git'ing :P
+[11:23] <sechrist> i'm a machead
+[11:23] <sechrist> "Some functions such as openPng(), openGif() and saveJpeg() support asynchronous I/O. "
+[11:23] <sechrist> interesting -- I couldn't get those to work either
+[11:23] <sechrist> strace showed it opened the image, read it
+[11:23] <sechrist> no fire
+[11:24] <mscdex> yeah, if you open up gd_bindings.cc, do a search for: Emit(
+[11:24] <mscdex> you'll find 0 results ;-)
+[11:26] <sechrist> ah well I needed to implement createPngFromBuffer anyway
+[11:26] <sechrist> because it's all file based right now
+[11:28] <sechrist> mscdex: did the emit api change or something within the last month? nobody else has really bitched about this
+[11:28] <sechrist> I would assume many people need to use image manipulation inside node..
+[11:28] <mscdex> no
+[11:28] <mscdex> you're the first i've seen mention node-gd
+[11:28] <mscdex> heh
+[11:28] <sechrist> crazy
+[11:29] <sechrist> yeah I need to generate thumbs in a batch
+[11:29] <sechrist> it's not that absurd
+[11:35] wilmoore has joined the channel
+[11:45] fernmicro has joined the channel
+[11:46] ineation has joined the channel
+[11:57] thoolihan has joined the channel
+[11:59] sechrist has joined the channel
+[11:59] felixge has joined the channel
+[11:59] felixge has joined the channel
+[12:01] felixge_ has joined the channel
+[12:01] felixge_ has joined the channel
+[12:03] trochala has joined the channel
+[12:03] trochala has joined the channel
+[12:04] rsms has joined the channel
+[12:05] olegp has joined the channel
+[12:09] <pkrumins> i am running node through valgrind and i don't like what i see. does v8 garbage collector free memory on exit? or does it just quit?
+[12:10] <pkrumins> after running a simple app `still reachable: 702,912 bytes in 87 blocks`
+[12:10] <pkrumins> 702kb leaked.
+[12:13] tpryme has joined the channel
+[12:14] rra has joined the channel
+[12:17] <sechrist> pkrumins: most sane operating systems will free the memory if a process exists
+[12:17] <derRichard> pkrumins: freeing memory on exit makes never sense.
+[12:17] <sechrist> exits*
+[12:21] creationix has joined the channel
+[12:21] <pkrumins> gonna run the code repeatedly
+[12:21] <pkrumins> without quitting and see how that behaves
+[12:23] rra_ has joined the channel
+[12:23] <pkrumins> pretty sweet!
+[12:23] <pkrumins> memory doesn't seem to increase
+[12:24] <pkrumins> NO WAIT
+[12:24] <derRichard> note, node triggers the gc only when it is idle...
+[12:24] <pkrumins> oic.
+[12:27] <sechrist> yeah but idle could be between events, if you're async I would assume there's a good bit of idle time waiting on i/o
+[12:31] <sechrist> is node-httpclient the best curl replacement right now?
+[12:32] cij has joined the channel
+[12:39] hassox has joined the channel
+[12:42] stalled has joined the channel
+[12:48] <sechrist> what are the credentials that go into httpclient setSecure?
+[12:49] <sechrist> the old examples I see are just "x506_PEM" but i'm getting an exception -- it wants a credentials type. is that part of node-crypto?
+[12:49] ineation has left the channel
+[12:50] kixxauth has joined the channel
+[12:52] <sechrist> x509 rather**
+[12:57] ditesh|cassini has joined the channel
+[12:58] mitkok has joined the channel
+[13:00] cedricv has joined the channel
+[13:05] <micheil> Ned_: umm..
+[13:06] <micheil> Ned_: are you pulling in the latest version?
+[13:06] <micheil> 1.0.52 has it.
+[13:07] <sechrist> client.setSecure("X509_PEM",posix.readFileSync("VeriSign.pem"),0,0,0);
+[13:07] <sechrist>   this.secureStream = new SecureStream(this.credentials.context, this.server ?
+[13:07] <sechrist>   Error: First argument must be a crypto module Credentials
+[13:07] <sechrist> :\
+[13:08] jherdman has joined the channel
+[13:08] <sechrist> VeriSign.pem is the root cert
+[13:09] <mape> They added root certs to node
+[13:09] <mape> Not to long ago
+[13:10] <sechrist> I tried client.setSecure("X509_PEM");
+[13:10] <sechrist> same problem
+[13:11] <mape> and empty?
+[13:11] <sechrist> nooo lemme try that
+[13:11] spotify|rsms has joined the channel
+[13:11] rsms has joined the channel
+[13:12] <sechrist> stack trace, hmm
+[13:13] smtlaissezfaire has joined the channel
+[13:14] <sechrist> Cannot call method 'flush' of undefined
+[13:20] kriszyp has joined the channel
+[13:31] ncb000gt has joined the channel
+[13:34] blowery_zzz has joined the channel
+[13:35] sadjester has joined the channel
+[13:36] <N`> hi
+[13:37] <N`> one of my colleague don't agree on which strategy to use for async testing
+[13:37] <N`> http://dev.af83.com/testing-strategies-asynchronous-environment-using-nodejs/2010/05/18
+[13:38] <N`> does someone have an opinion about that?
+[13:38] kennon has joined the channel
+[13:38] <kennon> Check this out: http://caspian.angryturnip.com:8001/
+[13:38] <kennon> apparently not working in some browsers, webkit, firefox and chrome seem to work tho
+[13:39] gamerx has joined the channel
+[13:39] <gamerx> hi, i get this error, im guessing its fairly common? axconfig: port 1 not active
+[13:39] ashb has joined the channel
+[13:41] <gamerx> anyone know the fix for it?
+[13:41] <kennon> sechrist: hehe
+[13:41] <sechrist> neat
+[13:41] <sechrist> I've seen this done with ape
+[13:41] <kennon> ape?
+[13:41] <sechrist> yes, ape
+[13:41] <kennon> whats that?
+[13:42] <sechrist> http://www.ape-project.org/
+[13:42] <N`> gamerx: which version of node.js?
+[13:42] <kennon> sechrist: interesting. i just modified the canonical node.js chat demo from the website and stripped out the presence notification stuff
+[13:42] <gamerx> uhhhhh
+[13:43] <gamerx> latest?
+[13:43] <kennon> sechrist: but pretty fun for just a couple of hours hacking.
+[13:43] <sechrist> kennon: well sure, but there's latency and syncing issues with every implementation of this
+[13:43] <gamerx> sudo aptitude install node
+[13:43] <sechrist> I can promise you
+[13:43] <kennon> sechrist: of course.
+[13:43] <sechrist> apt probably has old
+[13:44] <gamerx> hmm, i tried git'ing it ,but has Error 1 when i do make test
+[13:44] <kennon> gamerx: if you're on a debianish linux distro, its super easy to install node. i just did it on lenny, just download the tarfile and then ./configure; make; make install
+[13:44] <sechrist> kennon: http://www.ape-project.org/demos/8/pixelbox.html
+[13:44] pjb3 has joined the channel
+[13:45] <N`> gamerx: oh, aptitude install node does not install node.js but another software called node
+[13:45] <N`> "Amateur Packet Radio Node program"
+[13:45] <gamerx> ahhhh. ill try doing it from the tar again, but im sure ill be back ;)
+[13:45] <sechrist> kennon: damn that's smooth
+[13:45] <sechrist> I need to look into ape a bit more
+[13:46] <gamerx> wait, does that mean i dont open it with "node file.js"?
+[13:46] <N`> gamerx: http://packages.debian.org/sid/nodejs
+[13:47] <kennon> gamerx: i'm all for sticking with apt, etc, but for newer software you're often better off just using the released tarballs. i generally track apt for older, stable, system software kind of things and then track the source for a small handful of stuff i can keep my eye on and that are changing alot
+[13:48] <sechrist> I think ape's site is the coolest demonstration of a technology ever
+[13:48] <gamerx> kennon, thats a good idea, but i just dont have the time ;)
+[13:48] <sechrist> their main page is a demo
+[13:48] <gamerx> ape's site is DEFINATELY the coolest demo..
+[13:49] <gamerx> Error: Dependency is not satisfiable: libssl0.9.8 (>= 0.9.8m-1)
+[13:50] <gamerx> hmm, maybe ill try the tarball again
+[13:50] elliottcable has joined the channel
+[13:54] N has joined the channel
+[13:57] <sechrist> does node have anything var_dumpish built in?
+[13:57] <sechrist> I have a function I found with google, but surely there's something like it in trunk
+[13:57] <gamerx> heyy, i get this when i do make test: http://paste.ubuntu.com/435543/
+[13:58] <gamerx> pastebin is down atm, so meh..
+[14:00] gf3 has joined the channel
+[14:01] <sechrist> install curl
+[14:01] <gamerx> hmm
+[14:01] <gamerx> ok
+[14:02] mjijackson has joined the channel
+[14:02] <sechrist> Error: Command failed: /bin/sh: curl: not found
+[14:02] <sechrist> ACTION waves obvious flag
+[14:02] <gamerx> ACTION *facepalm*
+[14:02] robrighter has joined the channel
+[14:03] <gamerx> thats just for the first one, the rest of the errors still come up
+[14:04] <gamerx> Error: node.js not compiled with openssl crypto support, what does that mean?
+[14:04] <ncb000gt> it's saying there are issues with openssl
+[14:05] <ncb000gt> gamerx: you said you used the tarball?
+[14:05] <gamerx> yes, yes i did
+[14:05] <ncb000gt> did you specify to use that version?
+[14:06] <gamerx> untar, cd xxxxx, ./configure, make, make test
+[14:06] <gamerx> ver 0.1.95
+[14:06] <ncb000gt> hmm
+[14:06] <gamerx> sudo make, sudo make test*
+[14:06] mediacoder has joined the channel
+[14:06] <ncb000gt> may have to specify the openssl files in ./configure
+[14:07] <gamerx> how would i go about doing that?
+[14:07] <ncb000gt> I'm checking now
+[14:07] <ncb000gt> :)
+[14:07] <gamerx> haha, your a legend ;)
+[14:07] <ncb000gt> depends on the config scripts
+[14:08] <gamerx> ACTION *blank stare*
+[14:08] <gamerx> uhh, quick google
+[14:08] <gamerx> Checking for openssl                     : not found
+[14:08] <gamerx> Checking for function SSL_library_init   : not found
+[14:08] <gamerx> Checking for header openssl/crypto.h     : not found
+[14:08] <gamerx> you're missing
+[14:08] <gamerx> libssl-dev (>= 0.9.8) 
+[14:09] <ncb000gt> heh dur, yea
+[14:09] <gamerx> hang on ill try
+[14:09] <ncb000gt> libssl-dev from the apt repos is necessary if you're using apt
+[14:09] <ncb000gt> but if you have the source you'll have everything you need
+[14:10] creationix has joined the channel
+[14:10] <ncb000gt> might be time to modify the configure steps in the wscript to allow you to specify things like "--with-ssl=/my/path/to/ssl"
+[14:10] <ncb000gt> or something similar
+[14:11] <ncb000gt> doesn't appear you can
+[14:11] <ncb000gt> your stuff has to be in ['/usr/lib', '/usr/local/lib', '/opt/local/lib', '/usr/sfw/lib']
+[14:12] <gamerx> should i have to restart after installing openssl?
+[14:12] <ncb000gt> no
+[14:12] <derRichard> no
+[14:12] n8o has joined the channel
+[14:13] <derRichard> install openssl plus headers and done
+[14:13] <gamerx> ahaha, thats moft definately a no
+[14:13] <derRichard> make sure you hae openssl >= 0.9.8
+[14:13] <derRichard> *have
+[14:13] <gamerx> uhh
+[14:14] <gamerx> synaptic?
+[14:14] <ncb000gt> in the CLI type openssl
+[14:14] <ncb000gt> and then in it's cli type version
+[14:15] <ncb000gt> or just openssl version
+[14:15] <ncb000gt> :)
+[14:15] <derRichard> is this the new linux newbie channel? ;-)
+[14:16] <ncb000gt> derRichard: would you rather it be the windows channel?
+[14:16] <derRichard> no, a nodejs channel is okay
+[14:16] <gamerx> yay, make test worked ;)
+[14:16] <ncb000gt> gamerx: good deal
+[14:16] <gamerx> now for make install. DUH DUH DUH!!!
+[14:16] <ncb000gt> enjoy :)
+[14:16] <ncb000gt> lol
+[14:17] <gamerx> lold: 'install' finished successfully (0.331s)
+[14:17] <gamerx> now how shoul di run it again?
+[14:17] <ncb000gt> derRichard: helping people get the platform running is invaluable, regardless of whether you have to help with OS type questions.
+[14:17] <gamerx> i can use ./node, but can i make it just node .......js
+[14:18] <ncb000gt> gamerx: make install will put it in your path
+[14:18] <ncb000gt> so you can use node
+[14:18] <ncb000gt> no need for ./
+[14:18] <gamerx> node ..js still dnt work
+[14:18] <ncb000gt> to run a script you'd use "node <file.js>
+[14:18] <ncb000gt> where file can be any JS file
+[14:19] <gamerx> ahh, well aint i a dum-ass ;)
+[14:19] <ncb000gt> lol
+[14:19] <gamerx> also, dumb question, but i can delete the folder i made the install from?
+[14:19] <ncb000gt> gamerx: should be able to
+[14:19] <ncb000gt> there is a tool called nvm that will manage node versions for you
+[14:20] <ncb000gt> nvm install v0.1.95
+[14:20] <ncb000gt> nvm use v0.1.95
+[14:20] <ncb000gt> and then you can use that version
+[14:20] <ncb000gt> it's pretty swanky
+[14:21] <gamerx> sounds gud, ill look into it
+[14:21] <gamerx> cheers
+[14:26] tsyd2_ has joined the channel
+[14:27] mikeal has joined the channel
+[14:28] dshaw has joined the channel
+[14:28] Ori_P has joined the channel
+[14:31] stepheneb has joined the channel
+[14:33] quirkey has joined the channel
+[14:34] tlynn has joined the channel
+[14:36] ajpi has joined the channel
+[14:37] tobeytailor has joined the channel
+[14:38] sadjester has joined the channel
+[14:42] steadicat has joined the channel
+[14:42] Yuffster has joined the channel
+[14:42] <nefD> (late reply) not to make things more difficult, but you can also clone the github repository for node, and use that for pulling down new updates and configure/make/make installing 'ing them
+[14:44] <felixge_> "The thing that has always disturbed me about O_DIRECT is that the whole interface is just stupid, and was probably designed by a deranged monkey on some serious mind-controlling substances." -- Linus
+[14:44] <felixge_> man pages are fun :)
+[14:46] <ncb000gt> nefD: yep, true enough
+[14:47] <ncb000gt> felixge_: ahh linus.... "if you disagree with me you are stupid and ugly"
+[14:47] <felixge_> ncb000gt: ;)
+[14:47] <felixge_> yeah
+[14:47] <felixge_> he is a charmer
+[14:47] <ncb000gt> haha
+[14:47] <ncb000gt> that's ok, i'll take his brains over his charm
+[14:48] <MattJ> That's why I agree with him
+[14:52] steez has joined the channel
+[14:57] stepheneb has joined the channel
+[15:00] mattly has joined the channel
+[15:03] DracoBlue has joined the channel
+[15:07] kriszyp_ has joined the channel
+[15:07] <sechrist> The cyber security community is stupid, they've based an entire economy on software bugs -- linus
+[15:07] <MattJ> Yeah, one day the bugs will all run out
+[15:08] <MattJ> and we'll have a global bug recession
+[15:08] <sechrist> when people die
+[15:08] <sechrist> or if somebody solves the blocking problem
+[15:08] <sechrist> (the latter will never happen)
+[15:09] <MattJ> Hrmph
+[15:09] <MattJ> Annoying: - is when sites offer Javascript libraries for download as gzipped .js files, pretending that's how small they are
+[15:09] <sechrist> that sounds like a lazy way to get around mime type
+[15:09] <sechrist> so the js doesn't open in your browser as txt
+[15:10] <MattJ> Maybe
+[15:11] <sechrist> Are there any IDE plugins for node code completion yet?
+[15:11] <sechrist> ie: it loads the requires real time and does analysis
+[15:11] dgathright has joined the channel
+[15:12] <ncb000gt> sechrist: i'm unaware of any
+[15:12] <ncb000gt> though I suspect someone has started working on one
+[15:12] <sechrist> well since implementation changes so damn fast in this community
+[15:12] <sechrist> it would be really nice
+[15:12] <polyrhythmic> it can't be too hard to create any... is there any node code commented in JavaDoc?
+[15:13] <polyrhythmic> Komodo can learn from JavaDoc-style documented code
+[15:13] <sechrist> interesting
+[15:13] <ncb000gt> polyrhythmic: not likely, there are docs tho, but it'd have to understand more than just javadoc
+[15:13] <ncb000gt> it's a place to start though
+[15:14] <polyrhythmic> I've been thinking about it lately because Komodo doesn't know HTML5 yet
+[15:14] <ncb000gt> gotcha
+[15:16] brianmario has joined the channel
+[15:16] kevwil has joined the channel
+[15:18] tmpvar has joined the channel
+[15:21] <mjijackson> good morning node
+[15:22] <bradleymeck> morning
+[15:22] <sechrist> wtf is vsize in process.memoryUsage()
+[15:22] <polyrhythmic> what format are the node docs in now?  I know they were being worked on for the API doc site
+[15:22] <sechrist> bits?
+[15:23] <ncb000gt> mjijackson: morning
+[15:23] <ncb000gt> polyrhythmic: nfc
+[15:23] <ncb000gt> sechrist: nfc
+[15:23] <ncb000gt> :)
+[15:24] sudoer has joined the channel
+[15:24] <ncb000gt> what's the output of it?
+[15:24] <sechrist> { rss: 13225984
+[15:24] <sechrist> , vsize: 672124928
+[15:24] <sechrist> , heapTotal: 6206208
+[15:24] <sechrist> , heapUsed: 3578624
+[15:24] <sechrist> }
+[15:24] <sechrist> it's such a terribly huge number
+[15:25] DracoBlue has left the channel
+[15:27] <mjijackson> been mucking around in Vim syntax files the past few days. for all my love for Vim, i do NOT love Vim code...
+[15:28] dgathright has joined the channel
+[15:29] stepheneb has joined the channel
+[15:30] <sechrist> can I invoke the gc?
+[15:30] <ncb000gt> sechrist: it's pulling from psinfo, i think that's bits
+[15:30] <ncb000gt> but i could be wrong
+[15:30] <ncb000gt> sechrist: i don't believe so
+[15:30] <ncb000gt> bbiab
+[15:31] cce_ has joined the channel
+[15:31] <sechrist> well then it looks like node-gd has a memory leak or something
+[15:31] colincampbell has joined the channel
+[15:32] colincampbell has joined the channel
+[15:32] colincampbell has left the channel
+[15:33] joshthecoder_ has joined the channel
+[15:34] chewbranca_ has joined the channel
+[15:34] mikeal1 has joined the channel
+[15:34] SubStack has joined the channel
+[15:34] philippbosch has joined the channel
+[15:37] tlrobinson has joined the channel
+[15:38] joshthecoder has joined the channel
+[15:38] adelcambre has joined the channel
+[15:38] samsonjs has joined the channel
+[15:38] Ori_P has joined the channel
+[15:38] bradleymeck has joined the channel
+[15:39] kevwil has joined the channel
+[15:39] mikeal has joined the channel
+[15:41] ivan has joined the channel
+[15:41] mikeal1 has joined the channel
+[15:41] stalled has joined the channel
+[15:43] endor has joined the channel
+[15:43] bpot has joined the channel
+[15:46] nefD has joined the channel
+[15:47] ceej has joined the channel
+[15:50] jherdman has joined the channel
+[15:52] _ry has joined the channel
+[15:52] mikejs has joined the channel
+[15:53] cij has joined the channel
+[15:55] nsm has joined the channel
+[15:56] <Phazm> _ry: you around?
+[15:58] <sechrist> how can I do a test to see if the gc will actually clear out this memory
+[15:58] <sechrist> before I start hunting for a moby dick memory leak
+[15:58] chuck has joined the channel
+[15:58] chuck has joined the channel
+[15:59] <Ori_P> ping _ry 
+[16:02] richcollins has joined the channel
+[16:04] jspiros has joined the channel
+[16:07] phoenixsol has joined the channel
+[16:09] <phoenixsol> Hi. I just installed v0.1.95-21-gf987ecf, and I'm getting "Error: Cannot find module 'utf8_stream'".
+[16:09] wilmoore has joined the channel
+[16:12] _ry has joined the channel
+[16:17] <_ry> Phazm: hy
+[16:18] <Phazm> hey _ry - got that ETIMEDOUT error last night :-/
+[16:18] <Phazm> wasn't caused by the event listener
+[16:18] mertimor has joined the channel
+[16:19] <Phazm> caught*
+[16:20] <nefD> hrm.. looking around for a decent online file storage service (paid is fine) that will (a) run within win and linux, as well as a linux command line, and (b) allow me to selective retrieve or sync particular files, rather than an entire backup.. any suggestions?
+[16:20] <mape> nefD: Dropbox is nice, but not selective syncing
+[16:21] <ivan> ssh and sftp and rsync
+[16:21] <nefD> mape:  Yeah, ive been using mape, and the pricing is nice for what I would need (10$ for 50 gigs), but im not sure that they have a CLI component available, and they also dont appear to allow selective retrieval
+[16:21] <mape> Hey, you have been using me? :S
+[16:21] <nefD> hrm.. i hadn't though of checking for ftp support
+[16:22] <nefD> er, not mape
+[16:22] <mape> They have cli
+[16:22] <nefD> dropbox
+[16:22] <nefD> >_<
+[16:22] <nefD> oof- (need my coffee), i take that back, I did read about dropboxes CLI stuff, but theres still no selective retrieval
+[16:22] <mape> symlink the files needed into the dropbox?
+[16:23] rramsden has joined the channel
+[16:23] indiefan has joined the channel
+[16:24] <nefD> I think I read in the CLI faq for dropbox that synlinks aren't supported
+[16:24] <nefD> s/synlinks/symlinks
+[16:24] <mape> Hmm k
+[16:31] _ry has joined the channel
+[16:31] jedschmidt has joined the channel
+[16:31] <felixge_> phoenixsol: downgrade to e232f09d38194844305b4038a68b8a70717704e4
+[16:31] <felixge_> phoenixsol: ryan mis-merged a patch of mine :|
+[16:31] <felixge_> _ry: http://github.com/ry/node/commit/f987ecf45be6f5c7c18d5cebd38be0b411648140
+[16:31] <_ry> felixge_: ?
+[16:31] tobeytailor has left the channel
+[16:31] <felixge_> _ry: still refers to utf8_stream
+[16:32] <felixge_> instead of utf8decoder
+[16:32] <_ry> oh..
+[16:32] <phoenixsol> felixge: I installed the latest tag; thanks.
+[16:32] <CIA-74> node: 03Ryan Dahl 07master * r2663c69 10/ lib/http.js : Fix utf8stream references - http://bit.ly/croRZd
+[16:32] <felixge_> _ry: wow, that was fast ;)
+[16:33] derbumi has joined the channel
+[16:33] <phoenixsol> uber-fast.
+[16:33] <felixge_> _ry: btw., shouldn't the module be named utf8_decoder? Seems inconsistent 
+[16:33] <phoenixsol> like everything else 'around here' ;)
+[16:33] <_ry> felixge_: shrug
+[16:33] <_ry> dislike underscores
+[16:34] <felixge_> _ry: well, you use them for child_process
+[16:34] <_ry> yeah
+[16:34] <_ry> its awful
+[16:34] mikejs has joined the channel
+[16:34] <_ry> so
+[16:34] <_ry> i want to write readline in js
+[16:34] <mjijackson> but querystring is just one word
+[16:35] <mjijackson> as is freelist
+[16:35] <_ry> vt100 is known
+[16:35] <_ry> let's just write it
+[16:35] <_ry> we can bind termios tcsetattr
+[16:35] <_ry> to get the tty into raw mode
+[16:35] <_ry> then we'll just use streams to write vt100 control codes
+[16:35] <felixge_> _ry: what would this get us? better repl?
+[16:35] mitkok has joined the channel
+[16:35] <_ry> yes
+[16:36] <Phazm> _ry: just to be sure, response.addListener('error', function (err) { ... } should be within the request.addListener('response', function (response) { ... }, and not before/after, right?
+[16:36] <felixge_> _ry: is vt100 used by all terminals?
+[16:36] <_ry> Phazm: i dont think there are any error events on response right now
+[16:36] <_ry> Phazm: listen on the client
+[16:37] ajpiano has joined the channel
+[16:37] <Phazm> ahhh
+[16:37] <_ry> felixge_: basically
+[16:37] <_ry> felixge_: i think there used to be a fair number of terminal protocols
+[16:37] <bradleymeck> in most posix systems vt100 is conformed to some standard, partial implementation is common of such
+[16:37] <_ry> these days, i think it's pretty limited
+[16:40] <bradleymeck> yub, just made a node-terminal module to try to put all my terminal related junk in there actually
+[16:40] ryan_ has joined the channel
+[16:41] <ryan_> my host is crashing, or being DoSed or something...
+[16:41] WALoeIII has joined the channel
+[16:42] creationix1 has joined the channel
+[16:45] <_ry2> bradleymeck: node-terminal?
+[16:46] <_ry> bradleymeck: would tcsetattr() binding improve things?
+[16:46] <bradleymeck> just on github, just does simple colors/font stuff, lil positioning using ctrl codes til i get better acquainted with binding to node
+[16:46] <_ry> i want to do everything in js
+[16:46] <bradleymeck> yea, but ill put those in with a bunch of other junk in the next week or so myself i hope
+[16:46] <_ry> just need to the ability to set the tty into raw mode
+[16:47] isaacs has joined the channel
+[16:47] <Phazm> is it bad practice/inefficient to have ~12 require()'s (and intend to add more) for my script? I saw something mentioned that one should use 'packages' and not individual modules, but i haven't seen anything about packages in the nodejs docs
+[16:47] <bradleymeck> feel free to add it, just going to need a fair amount of other stuff too in order to get something more friendly
+[16:48] wilmoore_ has joined the channel
+[16:51] <felixge_> Phazm: as long as your require()'s are on top of your file and not on an active code path - it's np
+[16:52] <Phazm> thanks for the clarification felixge_ 
+[16:55] <jan____> http://twitter.com/janl/status/14238449342
+[16:56] <isaacs> hey, rubyists: is there a rake or gem command for adding a maintainer to a package?
+[16:56] <isaacs> hey, perlers: s/rake or gem/cpan/
+[16:59] <mitkok> isaacs: gem help owner
+[16:59] magcius has joined the channel
+[17:00] <isaacs> mitkok: thanks
+[17:00] <isaacs> mitkok: can there be more than one owner?
+[17:01] <isaacs> mitkok: hm... gem help owner says "WARNING:  Unknown command owner. Try gem help commands"
+[17:02] <mitkok> isaacs: maybe you're using odl version of rubygems ?
+[17:02] <isaacs> it's possiblel
+[17:02] <isaacs> using 1.3.5
+[17:03] <isaacs> weird, you can't install rubygems with rubygems
+[17:03] <mitkok> oh, yeah. 1.3.5 was the version before the merge
+[17:03] <mitkok> so, gem push and gem owner is in >= 1.3.6
+[17:04] tylerstalder has joined the channel
+[17:04] <isaacs> i see
+[17:04] <isaacs> oh, i see, it's   gem update --system
+[17:05] mikeal has joined the channel
+[17:06] <mitkok> You should take a look at http://rubygems.org/, it's pretty simple
+[17:06] <isaacs> i see
+[17:06] <isaacs> seems like rubygems really asks a lot of the user.
+[17:07] <isaacs> as far as dictating workflows and command invocations and such
+[17:07] <isaacs> the cli api is nice, though
+[17:07] andrewhampton1 has joined the channel
+[17:08] kevwil has joined the channel
+[17:08] josh` has joined the channel
+[17:09] <aconbere> hmmm nodejs.org is down for me
+[17:09] <mjijackson> isaacs: i've never felt that way
+[17:10] <mjijackson> isaacs: the only commands 99% of users ever need are "gem install", "gem uninstall" and maybe "gem build", but most don't ever use the last one
+[17:10] <mjijackson> because gems are already built for them
+[17:11] <isaacs> mjijackson: suresure.  i'm speaking more from the pov of the developers creating gems.
+[17:11] <isaacs> also, i've been thoroughly spoiled by yinst
+[17:11] <mjijackson> i see. you're talking about the gemspec files?
+[17:12] <isaacs> also about the " require 'rubygems' " malarky, or having to put --rubygems on the cli when you start your program, etc.
+[17:12] <isaacs> aconbere: not just you.
+[17:12] mattly has joined the channel
+[17:12] <felixge_> nodejs.org seems down?
+[17:12] <isaacs> http://downforeveryoneorjustme.com/nodejs.org
+[17:12] <mjijackson> isaacs: the whole require rubygems went away with ruby 1.9
+[17:13] <isaacs> mjijackson: i forgot that every complaint about ruby was fixed in a recent version.
+[17:13] <isaacs> mjijackson: ;P
+[17:13] <mjijackson> :)
+[17:13] <isaacs> my point is that, it was around for a while, and so it's part of the way that a lot of people think you have to do it.
+[17:13] mjr__ has joined the channel
+[17:14] <isaacs> and having the package manager involved at runtime is profound Doing It Wrong.
+[17:14] <mjijackson> definitely. growing pains i guess.
+[17:14] <mitkok> isaacs: true
+[17:15] <ncb000gt> the site was down because of linode
+[17:15] <isaacs> ah
+[17:15] <ncb000gt> or i guess their upstream provider
+[17:15] <ncb000gt> http://status.linode.com/2010/05/network-issue-in-newark.html
+[17:19] rra has joined the channel
+[17:20] spotify|rsms has joined the channel
+[17:20] rra has joined the channel
+[17:23] <aconbere> isaacs: well I figured :)
+[17:23] <aconbere> isaacs: I'm trying to think of how best to accomplish mkdir -P like behavior
+[17:23] <aconbere> maybe just... splitting on /
+[17:23] <aconbere> and walking up through the list
+[17:23] <isaacs> aconbere: http://github.com/isaacs/npm/blob/master/lib/utils/mkdir-p.js
+[17:24] <aconbere> a little .reduce action
+[17:24] <isaacs> aconbere: that function is nonblocking callback-style, because all of npm is.
+[17:24] <isaacs> aconbere: it ensures that the directory exists and is a dir.
+[17:24] scudco has joined the channel
+[17:26] <aconbere> isaacs: cool, this looks similar to what my approach would have been, but much more thurough
+[17:27] <aconbere> starting to think I should at least put my fs and path additions in github somewhere
+[17:27] <isaacs> aconbere: i've been kind of considering abstracting out a bunch of the fs and path stuff i've had to do for npm
+[17:28] dgathright has joined the channel
+[17:28] <isaacs> aconbere: i've got a few other similar goodies in there.
+[17:28] <aconbere> isaacs: I think we've talked about it before :)
+[17:28] <aconbere> I have a walk and walkSync here which are pretty useful
+[17:28] <isaacs> could be. sounds like me.
+[17:28] <isaacs> oh, right, the fs.tree stuff
+[17:28] <aconbere> and abspath, and relpath
+[17:28] <aconbere> yeah
+[17:28] <isaacs> it'd be nice if fs.tree could take the same args as the command line version.
+[17:29] <isaacs> like max depth, ignoring certain file types, etc.
+[17:29] V11 has joined the channel
+[17:29] <aconbere> hmmm
+[17:29] <V11> ARGH, someone stole my nick again >_<
+[17:29] <hober> what debugger knows how to talk to node when you use --debug?
+[17:35] <V11> v
+[17:35] <isaacs> hober: check out ndb
+[17:35] <V11> o, wrong channel
+[17:38] brapse has joined the channel
+[17:39] <pkrumins> node website is down
+[17:39] <pkrumins> is it down for me or everyone?
+[17:39] <ncb000gt> everyone
+[17:40] <gwoo> pkrumins: _ry posted a note via twitter
+[17:40] <ncb000gt> yep
+[17:40] <pkrumins> oic.
+[17:40] <micheil> yeah
+[17:40] <ncb000gt> http://status.linode.com/2010/05/network-issue-in-newark.html
+[17:40] <micheil> linode is having troubles with their routers or something
+[17:40] foucist has joined the channel
+[17:41] foucist has left the channel
+[17:41] <micheil> pkrumins: if you need the API docs, pull node from git, and then do: `make doc`
+[17:41] <richcollins> Anything in node to help serve static files?
+[17:41] <pkrumins> micheil: aha! 
+[17:41] <pkrumins> exactly what i needed :)
+[17:41] <ncb000gt> richcollins: node-paperboy
+[17:42] <ncb000gt> richcollins: it doesn't deal with the routing at all, but there are other modules to do just that
+[17:42] chuck has joined the channel
+[17:42] <richcollins> Yeah I just want something simple to read the file and set the mime type based on the extension
+[17:43] <hober> isaacs: thanks. trying it out.
+[17:43] <richcollins> ncb000gt: There a mime type map anywhere in node?
+[17:43] <aconbere> hmmm
+[17:43] <ncb000gt> richcollins: not native, but there are a few projects that have  mappings listed
+[17:43] <aconbere> does node bundle it's own documentation?
+[17:43] <richcollins> ncb000gt: k thanks
+[17:44] <micheil> probably good to retweet: http://twitter.com/miksago/status/14240777443
+[17:44] <ncb000gt> there should really be a node-magic module that uses the file signatures
+[17:44] <aconbere> comes in the source anyway
+[17:44] tmpvar has joined the channel
+[17:44] <aconbere> that's good
+[17:44] <tmpvar> yo
+[17:44] <ncb000gt> lo
+[17:44] <mscdex> yo
+[17:45] <isaacs> aconbere: yeah, check the doc folder
+[17:45] <isaacs> aconbere: if you have ronn, you can make doc to get man pages, even.
+[17:46] mikejs has joined the channel
+[17:46] <aconbere> yeah looks solid
+[17:46] _ry has joined the channel
+[17:52] qFox has joined the channel
+[17:55] robinduckett has joined the channel
+[17:55] tonydewan has joined the channel
+[17:56] saikat` has joined the channel
+[17:57] derbumi has joined the channel
+[17:57] robrighter_ has joined the channel
+[17:59] rictic has joined the channel
+[18:00] tilgovi has joined the channel
+[18:00] jspiros has joined the channel
+[18:02] javajunky has joined the channel
+[18:04] cij has joined the channel
+[18:06] chuck has joined the channel
+[18:07] <tilgovi> _ry: if linenoise works I'm so pro putting it in node-repl it's not even funny
+[18:07] robrighter has left the channel
+[18:08] <hober> So I've got node consistently crashing on a call to JSON.parse
+[18:08] <felixge_> _ry: [bug fix]: http://github.com/felixge/node/commit/b8e50f963f1b2ad3a3d3d9fae9417ae0a45f82fb
+[18:09] <felixge_> hober: node crashing?
+[18:09] <richcollins> Is there anything special I need to do when serving static files other than setting the content type and using readFile with the proper encoding?
+[18:09] <felixge_> hober: or JSON.parse throwing an exception?
+[18:09] <richcollins> Chrome shows my gif file as a broken image
+[18:09] <felixge_> richcollins: you may want to check node-paperboy, you want to avoid reading the whole file in memory
+[18:10] <richcollins> felixge_: That is the likely cause of Chrome misdisplaying it?
+[18:10] <richcollins> or that is a performance optimization?
+[18:10] <felixge_> richcollins: no, you are probably doing multiple things wrong :)
+[18:11] <richcollins> felixge_: But avoiding reading the entire file has nothing to do with the broken image, right?
+[18:11] <hober> felixge_: the former; if it were the later, the try {..} catch(e) {..} around it would, well, catch :0
+[18:11] <hober> :) even
+[18:11] <felixge_> hober: well, than you've discovered a feature - process termination on exception ;)
+[18:12] <felixge_> * then
+[18:15] <isaacs> hober: code?
+[18:15] <isaacs> hober: are you sure that the try/catch is actually directly around the JSON.parse?
+[18:15] <mape> Someone banned jlilly?
+[18:16] <isaacs> and not wrapped around some closure that jumps out of the try./catch by the time it actually throws?
+[18:16] <felixge_> hober: misread your response, sry
+[18:17] <hober> isaacs: I'll try to whittle it down to a smaller test-case
+[18:18] kevwil has joined the channel
+[18:18] <Phazm> _ry: so even with the error listener on the client, I just got the ETIMEDOUT bomb again
+[18:18] maushu has joined the channel
+[18:19] <Phazm> maybe... I might be listening to the wrong thing again
+[18:19] aconran has joined the channel
+[18:19] robrighter has joined the channel
+[18:20] robrighter has joined the channel
+[18:21] jlilly has joined the channel
+[18:21] <Phazm> site = http.createClient(80, siteURI);     request = site.request('GET', sitePath, { 'host': siteURI });
+[18:22] <Phazm> Should I have: site.addListener('error', function (err) {...} or request.addListener('error', function (err) { ...}
+[18:23] N` has joined the channel
+[18:23] <pkrumins> hey, anyone knows what `SetInternalFieldCount` is exactly for?
+[18:23] <tmpvar> reference counting would be my guess
+[18:24] towski has joined the channel
+[18:25] <pkrumins> I wonder when I should do that.
+[18:25] <pkrumins> Some c++ modules do that, some don't
+[18:25] konobi has joined the channel
+[18:25] <tmpvar> whenever you alloc memory and want v8 to manage it for ya :)
+[18:25] <pkrumins> for example Buffer doesn't do it, but node-postgres does
+[18:26] <pkrumins> tmpvar: they do that in the constructor, like
+[18:26] <pkrumins> t->InstanceTemplate()->SetInternalFieldCount(1);
+[18:26] <tmpvar> hrm
+[18:26] <tmpvar> yeah, I'm not sure :/
+[18:26] <pkrumins> yeah.
+[18:26] <mjr__> _ry: I managed to tame pcap on OSX so it is as fast as Linux.
+[18:27] <pkrumins> did some tests with heavy memory allocations, and node returned to normals
+[18:27] <pkrumins> i guess it didnt harm
+[18:27] <mjr__> _ry: I need to allocate a Buffer in C++ to send to a JS callback.  Is there an example of that you can point me to?
+[18:27] <ncb000gt> pkrumins: SetInternalFieldCount is used to create space for the class pointer
+[18:28] <rramsden> anyone know a good method for doing this http://pastie.org/966129 I'm trying to wait for several requests to finish, then write a response to the client when they finish fetching the requests
+[18:28] <ncb000gt> pkrumins: http://bespin.cz/~ondras/html/classv8_1_1ObjectTemplate.html#b63916ac584a76bca8ba541f86ce9fce
+[18:29] <ncb000gt> from those docs: "Sets the number of internal fields for objects generated from this template."
+[18:29] <richcollins> felixge_: I see that your solution uses streaming.  I'm just interested in a very simple proof of concept solution that uses response.write with the contents of a file
+[18:29] <richcollins> Are there considerations other than encoding that I'm overlooking?
+[18:29] <felixge_> richcollins: as long as you read the data in 'binary' it should work
+[18:29] <richcollins> hrm
+[18:29] <mikeal> mjr_: are you working on node bindings for pcap?
+[18:29] <isaacs> mjr_: i think node_file.cc does that a bunch.
+[18:30] <isaacs> oh, no, actually node_file.cc just uses buffers you give it
+[18:31] <mjr__> mikeal: yeah, I almos have pcap working in node
+[18:31] <pkrumins> mjr__: I tried to do that unsuccessfully
+[18:31] <mikeal> oh man, i'm gonna write some awesome shit with that
+[18:31] <pkrumins> mjr__: so I just returned a binary string for now
+[18:31] <mikeal> realtime webapp that shows me my local traffic for debuggin
+[18:32] <richcollins> looks like the number of bytes is different after the download
+[18:32] <mjr__> pkrumins: yeah, its gotta use Buffers in order to decode the protocol stack
+[18:32] <pkrumins> mjr__: I made Buffer's constructors and destructor public, but each time its destructor would get called in my C++ code, node would crash.
+[18:33] jbrantly has joined the channel
+[18:33] <pkrumins> mjr__: i guess you can hack around that by returning a binary string?
+[18:33] <mjr__> Yeah, but then I'd have a binary string, which sucks to work with in JS.  :)
+[18:33] <mjr__> I want to decode the protocol in JS, using direct access to each byte.
+[18:34] <richcollins> felixge_: OK so if I print the length of the string before I send it using write, it is correct.  But when I download it using Chrome, there are bytes missing :-/
+[18:34] <pkrumins> mjr__: oic.
+[18:34] HansInEffect has joined the channel
+[18:34] <felixge_> richcollins: hard to tell without code
+[18:34] <pkrumins> mjr__: well once you have binary string, you can put it in a buffer in JS
+[18:34] <pkrumins> mjr__: (for now)
+[18:34] <pkrumins> prototype with lame shit, and improve it later, when node gets the capacity
+[18:35] <ncb000gt> mikeal: that type of webapp would be hawt
+[18:35] <ncb000gt> :)
+[18:36] <HansInEffect> Does anyone know how to parse form data submitted with method="post"  using the edge version of node.js?
+[18:38] <richcollins> felixge_: https://gist.github.com/87ed9fc9ba837b38a7f2
+[18:38] <felixge_> richcollins: lgtm, not sure
+[18:39] <richcollins> File is the correct size but the bytes are different
+[18:41] <Phazm> tmpvar: have you spoken with Aria re: HTML5 parser for jsdom yet?
+[18:42] mertimor has joined the channel
+[18:42] <richcollins> hrm all of the "00" octets are replaced with "20" in the downloaded version
+[18:42] <richcollins> maybe a node bug?
+[18:44] kixxauth has joined the channel
+[18:45] <mscdex> HansInEffect: what about querystring?
+[18:46] <richcollins> Looks like the async version doesn't work either
+[18:46] <HansInEffect> mscdex: Will that work for forms submitted with post?
+[18:46] <mscdex> i don't see why not
+[18:47] chrismcg has joined the channel
+[18:47] <mscdex> a post body is generally just a query string
+[18:48] TobiasFar has joined the channel
+[18:48] bradleymeck has joined the channel
+[18:48] <richcollins> Would someone mind confirming this node bug? https://gist.github.com/87ed9fc9ba837b38a7f2
+[18:50] <mscdex> richcollins: the gif shows up fine for me
+[18:50] <pkrumins> Btw, I wrote node-jpeg today - http://bit.ly/9JESTB - uses just libjpeg to encode a RGB buffer to a jpeg image.
+[18:51] gwoo has joined the channel
+[18:54] <felixge_> pkrumins: I saw that, looks fun :
+[18:54] <felixge_> :)
+[18:54] <Phazm> pkrumins: what is the intended real-world use for that?
+[18:55] <richcollins> mscdex: weird it looks like a Chrome bug
+[18:55] <mscdex> i'm using chromium
+[18:55] <mscdex> 6.0.397.0
+[18:55] <felixge_> _ry: let me know when you get a chance to merge that fs.write bug fix
+[18:55] <bradleymeck> richcollins, i confirm it on .1.9.3
+[18:55] <richcollins> hrm no it happens to me in Safari as well
+[18:56] <richcollins> but not with curl
+[18:56] <felixge_> _ry: than I can realize my new multipart parser / form lib
+[18:56] <bradleymeck> using wget
+[18:56] <mscdex> i'm using 0.1.95
+[18:56] <felixge_> *then
+[18:58] <richcollins> bradleymeck: Thanks I'll try wget
+[18:58] <richcollins> then upgrade
+[19:00] pandark_ has joined the channel
+[19:02] jan____ has joined the channel
+[19:03] <mape> isaacs: yt?
+[19:03] kevwil has joined the channel
+[19:04] jan____ has joined the channel
+[19:08] <isaacs> mape: yo
+[19:08] <mape> hey, http://npm.mape.me/
+[19:08] <mape> changed around some stuff
+[19:09] <mape> not sure if it is any better
+[19:09] pedrobelo has joined the channel
+[19:09] <ncb000gt> mape: that looks great
+[19:10] <isaacs> mape: coming along
+[19:10] <isaacs> i like the bug link.
+[19:10] <isaacs> maybe a tiny bit too disgusting, but cool.
+[19:10] <mape> The site?
+[19:10] <mape> :P
+[19:10] <pkrumins> Phazm: encode vnc sessions and send to browser.
+[19:10] <isaacs> nono, the bug
+[19:10] <mape> hehe
+[19:10] <Phazm> ahh, thanks pkrumins 
+[19:10] <pkrumins> Phazm: they return rgba buffer.
+[19:10] <isaacs> it'd be good if there was a "stable" and "latest" download button for each
+[19:11] <pkrumins> :)
+[19:11] <kkaefer> hmm weird...
+[19:11] <ncb000gt> mape: bug link text should be "Encountered" :)
+[19:11] <mape> Hmm yeah
+[19:11] <kkaefer> for function parameters, is there a way to distinguish "undefined" from no parameter?
+[19:11] <mape> Fixed
+[19:11] <isaacs> kkaefer: check arguments.length
+[19:12] <ncb000gt> also, download button sizes should probably be the same for consistency purposes
+[19:12] <kkaefer> that could do the trick...
+[19:12] <ncb000gt> layout flow and such
+[19:12] <isaacs> mape: still see :"encounted"
+[19:12] <kkaefer> x = []; x.push(); --> 0
+[19:12] <mape> ncb000gt: yeah, would be if they are all stable/latest
+[19:12] <kkaefer> x = []; x.push(undefined); -->1
+[19:12] <mape> ncb000gt: Damit! To long :/
+[19:12] <ncb000gt> lol!~
+[19:12] <isaacs> kkaefer: yeah, and after, x is [undefined], rather than []
+[19:12] <kkaefer> isaacs: yeah
+[19:13] <kkaefer> still think that should have been handled differently :/
+[19:13] <isaacs> kkaefer: then how would you push "undefined" into an array?
+[19:13] <isaacs> kkaefer: undefined means something in js
+[19:13] creationix has joined the channel
+[19:13] <mscdex> pkrumins: i wonder if it's possible to only send the modified parts of the vnc image instead of an entire jpeg each time
+[19:14] <kkaefer> I know, but still
+[19:14] <mscdex> pkrumins: and use a canvas client-side or something
+[19:14] <ncb000gt> mape: I assume the "tags" at the top are to filter what is shown?
+[19:14] <ncb000gt> They aren't filtering
+[19:14] <ncb000gt> :)
+[19:14] <mape> ncb000gt: Yeah just dummy layout/what to do, kinda deal now
+[19:14] <isaacs> mape: i'd avoid relying on tags too much for now.
+[19:14] <ncb000gt> mape: gotcha! still, i like it
+[19:15] <isaacs> mape: maybe even just remove those, or move that down to the individual package metadata
+[19:15] <mape> isaacs: yeah just legacy stuff there, removing
+[19:15] <isaacs> what's up with the github data?  where is that coming from?
+[19:15] <isaacs> npm doesn't actually have watchers, so i wonder if it sends the wrong message.
+[19:15] <mape> isaacs: Github API
+[19:16] <ncb000gt> mape: it might be good to have a modal or something else on the side for the "how do i npm" and "i wanna add" rather than linking right to github
+[19:16] andrewhampton has joined the channel
+[19:16] andrewhampton has left the channel
+[19:16] <mape> Yeah
+[19:16] <ncb000gt> but on the "something" put a link to the github text
+[19:16] <pkrumins> mscdex: it is possible.
+[19:16] <pkrumins> mscdex: it returns rects of changes
+[19:17] <pkrumins> mscdex: like if the change is 1x1 pix, then it is returned.
+[19:17] <pkrumins> mscdex: can just stack images with absolute positioning at client side, already done.
+[19:17] <ncb000gt> mape: also, when hovering over the projects that don't have a desc, put some std text that says such "no project description...loser" or something so that it doesn't seem broken
+[19:17] <isaacs> mape: the less data you rely on outside of the registry, the more easy it'll be to make this a custom view in the couchapp
+[19:17] <mape> isaacs: Oh the github is just dummy..
+[19:17] <isaacs> mape: right
+[19:18] <mape> ncb000gt: Hmm yeah..
+[19:18] aho has joined the channel
+[19:18] <ncb000gt> mape: when i first hovered over projects and didn't see text I thought it was broken and just assumed "beta" :)
+[19:18] <ncb000gt> so I figured I'd mention it
+[19:18] <richcollins> mscdex thanks upgrading fixed it
+[19:18] <isaacs> mape: also, if you find that you need more/different info in the main list, just let me know, and i'll put that in the /all list
+[19:19] <mape> Hmm yeah, I guess one can optimize and add all that when stuff is more or less settled
+[19:21] <HansInEffect> Does anyone know how to retrieve POST variables from a node.js request?
+[19:22] <HansInEffect> require('url').parse(req.url, true).query does not seem to work for POST variables
+[19:23] mjijackson has joined the channel
+[19:23] <mscdex> HansInEffect: querystring.parse
+[19:24] <creationix> HansInEffect: you need to get the post body first
+[19:24] <creationix> rew.url is for GET parameters
+[19:24] <richcollins> Crap it isn't fixed in readFileSync yet
+[19:24] <HansInEffect> creationix: Sorry for the dumb question but how do I get the post body?
+[19:24] sh1mmer has joined the channel
+[19:24] <creationix> HansInEffect: if you're using raw node, then you'll need to listen to the "data" and the "end" event and build it yourself
+[19:25] <creationix> node streams the post body
+[19:25] <mscdex> yeah
+[19:25] <HansInEffect> creationix: Good to know. thanks for the info
+[19:25] <mscdex> then once you have the entire body, just do require('querystring').parse(body)
+[19:26] jan____ has joined the channel
+[19:26] <creationix> I really should write up that howtonode article about getting post data, this question comes up a lot
+[19:26] <HansInEffect> creationix: Yeah, it's the only thing I couldn't find in the documentation
+[19:27] <creationix> maybe someone should just put a short example in the api docs, probably in the http section
+[19:28] kriszyp has joined the channel
+[19:29] jan____ has joined the channel
+[19:32] <mjr__> HansInEffect: you could do something like this:  http://gist.github.com/405428
+[19:32] <mjr__> Which I've used and seems to work, although I never read the url form encoded spec to see if that's how you parse everything.
+[19:33] <creationix> mjr__: doesn't the querystring library parse it right (unless it's multipart of course)
+[19:33] <mjr__> It might.  I think I had some problem with it though, which is why I just split it out manually.
+[19:34] <creationix> well, the manual case will work for most input
+[19:34] <creationix> I'm pretty sure it will work for all valid input
+[19:35] <creationix> since "&" and "=" aren't allowed in values or keys
+[19:37] PyroPeter has joined the channel
+[19:39] hone has left the channel
+[19:41] nefD has joined the channel
+[19:42] jan____ has joined the channel
+[19:45] <isaacs> creationix: actually = is allowed in values
+[19:46] <isaacs> foo=bar=baz is { "foo" : "bar=baz" }
+[19:46] <creationix> isaacs: ahh, good to know
+[19:46] <mjr_> wow, that's kind of crazy
+[19:46] <mjr_> what does foo=bar=baz=bin make?
+[19:46] <mjr_> { "foo": "bar=baz=bin" } ?
+[19:46] <isaacs> mjr_: yeah
+[19:47] <mjr_> OK, I guess that's less crazy.
+[19:47] <isaacs> mjr_: also, you probably want it decoded.
+[19:47] <isaacs> mjr_: since foo=%20bar%20 really "means" { foo : " bar " }
+[19:47] dshaw has joined the channel
+[19:48] <isaacs> mjr_: escape is incorrect, and decodeURIComponent throws on invalid utf
+[19:48] <mjr_> does node's querystring parser do all of that?
+[19:49] richcollins has joined the channel
+[19:49] olegp has joined the channel
+[19:50] <Ned_> micheil: I was getting from npm
+[19:50] <Ned_> I can't get 1.0.52 from npm :-(
+[19:54] <isaacs> Ned_: this works for me: npm install websocket-server@1.0.52
+[19:54] <Ned_> gah ...
+[19:54] <mscdex> gah!
+[19:54] <mscdex> :P
+[19:54] <Ned_> ACTION was suing wrong syntax :-(
+[19:55] <mscdex> legal action?
+[19:55] <mscdex> :P
+[19:56] <Ned_> heh
+[19:56] <Ned_> it's early ...
+[19:56] <Ned_> ACTION needs caffiene
+[19:56] <mscdex> ACTION needs weekend
+[19:56] <Ned_> heh
+[19:57] <Ned_> that's a wee way away yet ...
+[19:57] <Ned_> right, I have 1.0.52
+[19:57] <Ned_> isaacs: I did some more debugging on my publish issues
+[19:57] <Ned_> basically, it gets up to sending the tgz
+[19:57] <isaacs> Ned_: yeah, that's what i'm finding, too.  and i see no attachment in couch.
+[19:57] <mscdex> check under the cushions
+[19:57] <mscdex> ;-)
+[19:57] <Ned_> well, I basically send all the data almost instantly
+[19:57] <isaacs> interesting
+[19:57] <Ned_> (I had tcpdump running)
+[19:58] cloudhead has joined the channel
+[19:58] <Ned_> then it just sits there doing no data in either direction for 30 seconds or so
+[19:58] <isaacs> interesting, that's what's expected.
+[19:58] <Ned_> then 3 packets
+[19:58] <Ned_> and dies
+[19:58] <isaacs> ew
+[19:58] <Ned_> none of the callbacks from the req are fired :-(
+[19:58] <Ned_> that makes me a Saaaaaad panda
+[19:58] <isaacs> i wonder if there's something busted in the http client or something?  can you try creating a new package?  add a file so that the tarball is a different size?
+[19:59] <Ned_> well, I could just do another version bump
+[19:59] <isaacs> sure
+[19:59] <Ned_> I've added a few more fetures
+[19:59] <isaacs> try that, then
+[19:59] <Ned_> I'll give that a whirl afte rbreakfast :-)
+[19:59] <isaacs> kk
+[19:59] <isaacs> Ned_: if it still fails, email me the tarball, and i'll see if i can publish it from here.  maybe there's some odd edge case you've found.
+[20:00] <Ned_> ok
+[20:01] kevwil has joined the channel
+[20:02] <Ned_> isaacs: just a thought
+[20:02] <isaacs> ?
+[20:02] <Ned_> npm activate <package> <space> <version>
+[20:02] <Ned_> npm install <package> "@" <version>
+[20:02] <isaacs> Ned_: yes, tagging and activation are weird.
+[20:03] <Ned_> heh
+[20:03] <isaacs> Ned_: the reason for that is that npm has to be able to install lots of different sorts of things, not just a name/version pair.
+[20:03] <Ned_> oh, right ...
+[20:03] <isaacs> Ned_: ie, npm install path/to/whatev,  npm install package.tgz, npm install http://...
+[20:03] <isaacs> etc.
+[20:03] <Ned_> right
+[20:03] <Ned_> fair enough
+[20:03] <Ned_> ACTION shall go breakfast ...
+[20:03] <Ned_> and then try kicking it all some more ;-)
+[20:03] <isaacs> but it'd be better to make tag and activate use the @ syntax
+[20:06] dgathright has joined the channel
+[20:07] perdix has joined the channel
+[20:08] jlilly has joined the channel
+[20:10] <isaacs> _ry mde: You should get the rights to this cover art for the nodejs book: http://z.about.com/d/classicgames/1/0/2/D/-/-/BasicProgramming.jpg
+[20:10] JimBastard has joined the channel
+[20:10] jherdman has joined the channel
+[20:11] <isaacs> cuz that dude is totally not blocking on IO.  lotta open channels there.
+[20:11] <mape> didn't he already settle on http://vt100.net/docs/vt100-ug/ ?
+[20:11] <blowery> early recycle logo on his chest too
+[20:11] <isaacs> feh.  less awesome.
+[20:14] elliotcm has joined the channel
+[20:16] pragdave has joined the channel
+[20:16] voodootikigod has joined the channel
+[20:16] <mjr_> wow, that VCS BASIC cover is fantastic.
+[20:16] <javajunky> sweet, now express gets to store its sessions in cookies, a-la rails..also ughhh *why* would people want to do that 'scalability' no doubt ;) 
+[20:17] <mjr_> There are more lights on that man's console than there are addressable locations in memory on that machine.
+[20:19] <KungFuHamster> took me a minute to notice the arrows on his chest
+[20:19] <isaacs> mjr_: that's why it's so awesome!
+[20:19] <KungFuHamster> they're totally out of place
+[20:19] jherdman has joined the channel
+[20:19] <isaacs> KungFuHamster: those arrows are for sci-fi-ness
+[20:19] wilmoore has joined the channel
+[20:19] <mjr_> I agree.  I'd like a poster of that.
+[20:19] <isaacs> they're so scifi
+[20:19] markwubben has joined the channel
+[20:19] <KungFuHamster> and there's a second dude in the lower right corner
+[20:19] <isaacs> yeah, in a hologram!
+[20:20] <isaacs> holograms!!
+[20:20] <tmpvar> syfy?
+[20:20] <KungFuHamster> I'm sure you can see him better in the non-special edition
+[20:20] <isaacs> EVERY EDITION IS SPECIALL!!!!!!
+[20:20] <isaacs> it's like starwars all up in that piece
+[20:20] <KungFuHamster> http://www.vintagecomputing.com/wp-content/images/costumes08/basic_large.jpg
+[20:20] <KungFuHamster> he has arrows too zomg
+[20:21] <mjr_> Those guys look like they could step straight off their set of Buck Rodgers, pick up a tambourine and start singing a freedom anthem.
+[20:21] <KungFuHamster> haha I was just going to say, he totally has a Buck Rogers vibe going on
+[20:22] ncb000gt has left the channel
+[20:22] <felixge_> _ry: ping?
+[20:23] BryanWB has joined the channel
+[20:23] <mjr_> no _ry today, it seems.
+[20:24] <mscdex> how about this one? http://i48.tinypic.com/ier23l.jpg
+[20:24] <mscdex> ;-)
+[20:24] Dennus has joined the channel
+[20:24] <tmpvar> lol
+[20:25] <mjr_> mscdex: they'll make a poster about that for JavaScript hacking in a few years.
+[20:26] <KungFuHamster> ^ that's how I picture chess
+[20:27] <tmpvar> you guys know where that language comparison chart is? x language users think of y language 
+[20:28] perdix has joined the channel
+[20:29] <KungFuHamster> oh my god... the guy that played Cousin Itt is the same dude that played Twiki?
+[20:30] <mjr_> To build on your surprise with my surprise: you are still researching Buck Rogers?
+[20:30] <KungFuHamster> heh
+[20:30] <KungFuHamster> I was looking at pictures of Erin Gray in different colored jumpsuits
+[20:30] <KungFuHamster> try it
+[20:30] <mjr_> I can see that.
+[20:31] <KungFuHamster> when Buck Rogers came on the air, I was entering that awkward phase of a young man that lasts from 11 to 55
+[20:31] <mjr_> Yeah, I'm still getting used to that myself.  It got easier when I had kids.
+[20:32] <KungFuHamster> actually I was a little younger than that.. but Erin Gray made me feel kinda funny in my pants even at 9 years old
+[20:33] kennon has joined the channel
+[20:33] <KungFuHamster> so anyway.. how bout that javascript, eh?
+[20:33] <mjr_> I prefer it to the leading competing language.
+[20:33] <elliotcm> Speaking of which, perhaps you guys could help me with something.
+[20:34] <elliotcm> I'm having trouble understanding the force of enthusiasm for node.
+[20:34] voodootikigod has joined the channel
+[20:34] <elliotcm> What's so good, in your minds?
+[20:34] <KungFuHamster> it doesn't hurt my brain like python
+[20:34] <mjr_> The "so good" IMO is that you get to use JavaScript to do evented IO, and JS makes that very natural.
+[20:34] <mjr_> Or at least, more natural.
+[20:34] <KungFuHamster> I can't take a language seriously that uses whitespace for flow control
+[20:35] <elliotcm> I see.  That makes some sense.
+[20:35] <elliotcm> Also it's quite speedy, I hear.
+[20:36] <mscdex> as long as you're not blocking ;-)
+[20:36] HansInEffect has joined the channel
+[20:36] <elliotcm> I was a little puzzled by the Sinatra clone, though.
+[20:37] <mjr_> Another feature I see is that node takes away functionality so that you end up writing fast programs be default.
+[20:37] kriszyp has joined the channel
+[20:37] <elliotcm> How's that?
+[20:38] <mjr_> well, you don't get to control the event loop, and mostly you aren't allowed to do anything blocking.
+[20:40] <javajunky> elliotcm: on behalf of the sinatra clone (express) I guess its to provide a good / familiar starting point for people coming from other communities *cough*rails*cough* 
+[20:42] <elliotcm> Sure.  However that sort of thing always worries me, purely from the sense that it encourages people to continue thinking in similar lines to technologies that already exist.
+[20:43] <mde> elliotcm: I'm working on a sort of Rails-alike called Geddy, for Node. It makes sense to reuse the good ideas for making Web-dev easy, no matter where they come from.
+[20:43] <elliotcm> Perhaps I'm looking for a shining light that isn't there, perhaps express is sinatra but faster, perhaps node is the old perl eventmachine but in a more suitable language 
+[20:43] <elliotcm> Okay but why recreate Rails?
+[20:43] <mde> I'm not re-creating Rails, but it makes sense to re-use the good ideas from Rails, Merb, Django, whatever. 
+[20:44] <mde> If you've ever written and managed complicated Webapps without a decent framework, you begin to understand why people build them.
+[20:45] <elliotcm> My question is not why use web frameworks, my question is why build a node web framework.  It's not a loaded one, I'm generally interested in the reasoning.
+[20:45] <elliotcm> *genuinely
+[20:45] <mde> Oh, for me, two reasons.
+[20:46] <mde> One is that it's wicked fast.
+[20:46] <mde> The other is that it's JavaScript.
+[20:46] <mde> So, those two things, combined with some of the nice affordances that something like Rails/Merb/Django gives you is just incredibly full of win.
+[20:46] <elliotcm> What makes JS da bomb for you?
+[20:47] <mde> For me, personally, it's my 'native language.' :)
+[20:47] <elliotcm> Ah.  You see, for me it's my 'native language for making things move about on webpages'.
+[20:47] <mscdex> i like it because it's flexible
+[20:48] <mde> I've done a lot of stuff now in Ruby and Python as well, but I prefer JS.
+[20:48] cij has joined the channel
+[20:48] <mde> mscdex: Yes, I like it because it's simpler and more flexible.
+[20:50] <mscdex> and once jsdom is complete (and also if there is html5 integration/support) and working perfectly, then you can share code between client and server
+[20:50] <mde> elliotcm: There are some other minor advantages, like not having that context-switch going back and forth between client and server, and some possibilities for sharing code between the two.
+[20:50] <mde> Right. :) 
+[20:50] <mscdex> hehe
+[20:50] <mde> The geddy-model stuff and its validations already works well between the browser and Node.
+[20:51] <javajunky> elliotcm: you hear a lot about the lack of 'context' switching, thats the most common argument I guess
+[20:51] <elliotcm> And your clients are usually executed under what, a browser?
+[20:51] <elliotcm> Commandline?
+[20:52] <mde> elliotcm: Well, I'm building a webapp dev framework, so the browser. 
+[20:52] Dennus has joined the channel
+[20:52] <javajunky> express *is* faster than sinatra I believe : http://tjholowaychuk.com/post/543953703/express-vs-sinatra-benchmarks
+[20:53] <javajunky> but the geddy stuff looks interesting too 
+[20:53] <elliotcm> javajunky: I don't doubt it, if node is as fast as claimed.
+[20:53] <javajunky> elliotcm: if you want to see 'paradigm shifting' web frameworks then take a look at fab
+[20:53] <javajunky> fab is *very* node-y through and through
+[20:53] <mde> javajunky: I have a blog post waiting to go for the Yammer engineering blog where I benchmarked Sinatra vs. Geddy, and yeah, it's faster. 
+[20:53] <javajunky> Sinatra's faster than Geddy ?
+[20:53] <mde> Geddy is faster -- likely anything built on Node will be generally faster.
+[20:53] <javajunky> ah ;)
+[20:54] <mde> Sorry, yeah. :)
+[20:54] <mde> I did two tests, one with Postgres and one with Memcache.
+[20:54] <mde> The difference is larger with Postgres, because of the non-blocking I/O.
+[20:54] <javajunky> yeah I like what you're doing with geddy, still think there's a place for both geddy and express, but geddy's the only framework thats even competing (as a web framework) … I really liked bomber but it appeared to stall almost immediately.
+[20:54] <elliotcm> I don't think I'd ever convert to writing web apps in JS as a standard, but I can see using it as chrome for an event driven app.
+[20:55] <JimBastard> mjijackson: ping
+[20:55] <mde> javajunky: Yes, I started off looking at Bomber, hoping I could just use it.
+[20:55] <javajunky> elliotcm: what's your particular poison ?   scala, erlang, python, ruby ?
+[20:55] <elliotcm> Ruby, these days.
+[20:55] <javajunky> mde: snap … then I looked around and express was getting the most action so I started committing to that :)
+[20:55] <mjijackson> JimBastard: pong
+[20:55] <mde> But it was hopelessly out of date.
+[20:55] <mde> Right, I didn't want a Sinatra-alike. :)
+[20:55] bmizerany has joined the channel
+[20:56] <JimBastard> hey mjijackson , im trying to find the docs for using Mint. im suppose to write the documention as comments in the code right?
+[20:56] <javajunky> mde: its a shame it was what I was looking for (which is where you're pretty much going with geddy)  … 
+[20:56] <mde> Even in the Ruby community, the two things seem to occupy very different spaces.
+[20:56] <elliotcm> Which two things?
+[20:57] <mde> Rails and Sinatra.
+[20:57] <elliotcm> Oh, yes.
+[20:57] <mde> I think there is room for both approaches.
+[20:57] <elliotcm> Well, it's a requirement stack, non?
+[20:57] <elliotcm> Rack for absolute basics web APIs
+[20:57] <mjijackson> JimBastard: yeah. i really need to dedicate a bit more time to Mint, getting it up to speed with better docs. just write your doc comments on their own line and you should be fine.
+[20:57] <mde> Right, it very much depends on what type of app you're building.
+[20:57] <elliotcm> Sinatra for when you need a bit more use, Rails when you need a lot.
+[20:57] <mjijackson> comments that are placed at the end of a line with code are considered part of the code.
+[20:58] <JimBastard> mjijackson: should i look at the docco docs? can you gist a quick example?
+[20:58] <mjijackson> JimBastard: the main mint.js file itself uses mint-style docs. http://github.com/mjijackson/mint/blob/master/lib/mint.js
+[20:59] bengl has joined the channel
+[20:59] <mde> elliotcm: That's exactly it, yeah. :)
+[20:59] <JimBastard> perfect thanks mjijackson, im going to try it out. just gotta write all my docs first >.<
+[21:00] <mjijackson> JimBastard: to generate the docs for mint, use `mint -o doc lib/*.js` from the project root. that will generate a sample file in 'doc' that you can take a look at.
+[21:02] charlesjolley has joined the channel
+[21:03] <elliotcm> HAML and SASS implementations?  Interesting.
+[21:03] sveisvei has joined the channel
+[21:05] cij_ has joined the channel
+[21:08] Dennus has joined the channel
+[21:08] <elliotcm> So from looking at the API, node has a built-in TCP server library.  Doth it have a TCP client?
+[21:09] <Ned_> elliotcm: sure
+[21:09] <tmpvar> yaas
+[21:10] <elliotcm> Not the HTTP one?
+[21:10] admc has joined the channel
+[21:10] <Ned_> elliotcm: huh?
+[21:10] <Ned_> elliotcm: net.Stream
+[21:11] <richcollins> Ah you have to set the encoding when you response.write
+[21:11] <elliotcm> Ah, thanks.
+[21:11] <Ned_> elliotcm: the net module provides createConnection()
+[21:11] <richcollins> It would be a lot easier to save the encoding state on the string
+[21:11] <Ned_> net.createConnection(port, host='127.0.0.1')
+[21:11] <richcollins> instead of having to pass encodings around everywhere
+[21:12] <elliotcm> Ned_: Cool, thanks.
+[21:12] <Ned_> richcollins: but it's when you pass it that the encoding is important (and variable)
+[21:12] <elliotcm> Found the doc section now.
+[21:12] <Ned_> elliotcm: :-)
+[21:12] darkf has joined the channel
+[21:12] <javajunky> elliotcm: 2 haml implementations in fact ;)
+[21:12] <richcollins> Ned_: If the encoding were set when I read from the file, I wouldn't have to set it again in response.write
+[21:13] <richcollins> f = new File;  f.encoding = 'binary'; response.write(f.contents())
+[21:13] <elliotcm> javajunky: and better written than both the Ruby ones, at least the JS one I'm looking at is.
+[21:13] <javajunky> elliotcm: ;) are we winning you over yet ;)
+[21:13] <Ned_> richcollins: but what if the file is a different encoding to the connected client ?
+[21:14] <javajunky> elliotcm: is that creationix' or visionmedia's ?
+[21:14] <elliotcm> Visionmedia.
+[21:14] <richcollins> Ned_: response.write(f.contents().setEncoding('utf8'))
+[21:14] <javajunky> yeah thats the late-comer (it ships with express for the record ;))
+[21:14] <richcollins> Ned_: That case is extremely rare
+[21:14] <javajunky> creationix' was first, tj improved the performance and aimed for fuller compliance with the ruby one, but the stricter approach of tj's often bites me ;) 
+[21:15] <Ned_> richcollins: yes, it would be nice if everything defaulted to utf-8 :-)
+[21:15] <richcollins> ?
+[21:15] <richcollins> The point is that you shouldn't have to pass around the encoding as a separate parameter
+[21:15] <Ned_> sure
+[21:15] <Ned_> I agree with that
+[21:15] <richcollins> it should be stored with the other data that it is used with
+[21:15] <mscdex> utf = ultra tricky format
+[21:15] <Ned_> I thought you were saying you shouldn't have to set it on the socket either
+[21:15] <elliotcm> As for winning me over, I still doubt I'd replace my Ruby toolkit for heavily web stuff.  I'm sure I'd use node over Ruby for sockety stuff but then again I rarely/never write sockety stuff these days.
+[21:16] <Ned_> mscdex: it beats the alternative
+[21:16] <Ned_> :p
+[21:16] <elliotcm> And whether I'd use Node over Erlang, well, who knows.
+[21:16] <richcollins> Ned_: No, I'm saying that the socket should ask the Sequence (string) what encoding to use when sending it back
+[21:16] <maushu> MY BANANAS! THEY'RE FLYING!
+[21:16] <mscdex> room-temperature bananas
+[21:16] <Ned_> richcollins: but what if the string is utf-8, but the client on the far end wants something else ?
+[21:17] <Ned_> each "source" of data needs an encoding, and each "sink" of data needs an encoding
+[21:17] <richcollins> True.  The response should probably have an encoding slot then
+[21:18] <Ned_> anyway, encoding is always a PITA ...
+[21:18] <Ned_> :p
+[21:18] Aria has joined the channel
+[21:18] <richcollins> actually, the string should just have its encoding changed
+[21:19] <javajunky> elliotcm: I think thats fair, the web frameworks certainly aren't quite ready for the mass market yet (although express has http://demo.hummingbirdstats.com/, http://clickdummy.net/  as known public instances … plus I'm running a personal site on it which with little thought can take whatever load I throw at it with minimal degredation … the interesting stuff is when you combine node with the newer html stack, so the built in support for web sockets, be
+[21:20] <richcollins> f.contents().setEncoding(anEncoding).transformEncodingTo(anotherEncoding))
+[21:20] <elliotcm> You cut off at "web sockets, be"
+[21:21] <richcollins> Ned_: What is the effect of the encoding parameter anyway?
+[21:21] <richcollins> Ned_: The socket doesn't just write whatever bytes the string contains?
+[21:21] <Ned_> richcollins: that depends how smart things are 
+[21:21] <richcollins> Is it needed for some sort of string operations?
+[21:21] <Ned_> I'm not sure with nodejs
+[21:22] <Ned_> but in Perl, if you set an encoding on an output handle
+[21:22] <Ned_> it'll actually rewrite the bytes to retain the right characters
+[21:22] <Ned_> if say the internal string is utf-8 and the output is latin1
+[21:22] <richcollins> Ned_: I like Io's approach.  It converts everything to a fixed width encoding for string opertions
+[21:22] <richcollins> and you just change the encoding before you write it out somewhere
+[21:22] <Ned_> richcollins: yeah, that's lower-level internals than I care about :-)
+[21:22] <Ned_> in Perl, strings are just utf8
+[21:22] <richcollins> Ned_: Thats the point
+[21:22] <richcollins> you don't have to care
+[21:23] <Ned_> and things like length($string) return number of characters (not number of bytes)
+[21:23] <Ned_> I generally don't want to think about "bytes"
+[21:23] HansInEffect has left the channel
+[21:23] <richcollins> Ned_: That is the point of converting everything to fixed width
+[21:23] <richcollins> I'm describing the implementation, not the interface
+[21:23] <Ned_> that's pretty ineffecient though
+[21:23] <Ned_> the fixed with must be what ... 4 bytes per character ?
+[21:24] <richcollins> Ned_: After the transformation, I would imagine that string ops are faster
+[21:24] <Ned_> so if you have 1KB of ASCII text loaded in memory, that's using 4KB of RAM ?
+[21:24] <richcollins> Ned_: No, it uses the smallest fixed width
+[21:24] <richcollins> which is 1byte per character for ascii
+[21:24] <Ned_> heh, but if there's a single "smart quote" or something
+[21:24] <richcollins> it would be more inefficient for utf8
+[21:24] <Ned_> then suddely your memory usage doubles ?
+[21:24] <Ned_> :p
+[21:24] <Ned_> it seems a little weird to me ...
+[21:25] <Ned_> but then I'm a big utf-8 advocate :-)
+[21:25] <Ned_> crap ... and I really need to do some work :-9
+[21:25] <Ned_> :-(
+[21:25] <richcollins> Ned_: I think it was done in teh name of simplcity of implementation
+[21:25] <Ned_> right
+[21:27] ewdafa_ has joined the channel
+[21:33] kevwil has joined the channel
+[21:38] charlesjolley has joined the channel
+[21:39] jedschmidt has joined the channel
+[21:41] rictic has joined the channel
+[21:43] <felixge_> _ry: ping?
+[21:44] <felixge_> isaacs: http://github.com/felixge/node-formidable
+[21:44] <isaacs> felixge_: net
+[21:44] <isaacs> neat
+[21:44] <felixge_> isaacs: just waiting for ryan to merge a bug fix for fs.write(), but otherwise this is working :)
+[21:44] joshr has joined the channel
+[21:44] <isaacs> nice
+[21:44] bmizerany has joined the channel
+[21:45] <isaacs> felixge_: any thought to going the other direction?
+[21:45] <isaacs> like, take an object and some file handles, and post it somewhere?
+[21:45] <felixge_> isaacs: well, I also want to do formidable.OutgoingForm, if that is what you mean?
+[21:45] <isaacs> yeah
+[21:45] <mikeal> this looks nice
+[21:45] <felixge_> isaacs: yeah, I want to do that
+[21:45] <isaacs> ACTION wants to build a web browser in nodejs
+[21:45] <mikeal> mde: you may wanna check this out 
+[21:45] <mikeal> http://github.com/felixge/node-formidable
+[21:45] ac94 has joined the channel
+[21:45] <felixge_> isaacs: I'm just going a little crazy with testing which causes things to go a little slow :)
+[21:46] steez has joined the channel
+[21:46] <isaacs> felixge_: you should slap a package.json on that bad boy
+[21:46] <felixge_> isaacs: let me do that!
+[21:46] <felixge_> isaacs: :)
+[21:46] <mde> mikeal: Yeah, was checking it out. :)
+[21:47] Ori_P has joined the channel
+[21:49] <mde> Looks very nice, yeah.
+[21:52] <felixge_> isaacs: if you'd ever be interested in hacking the multipart_parser.js itself to allow nested messages, that'd be tight :)
+[21:52] <isaacs> felixge_: yeah, sure.
+[21:52] <isaacs> felixge_: other stuff on the roadmap for me, but parsers are fun :)
+[21:53] <felixge_> isaacs: is there an index file for this: http://github.com/isaacs/npm/tree/master/doc/ ?
+[21:53] <felixge_> isaacs: trying to find the package.json docs
+[21:53] <felixge_> I guess it's http://github.com/isaacs/npm/blob/master/doc/json.md
+[21:53] <isaacs> yeah
+[21:54] <isaacs> install npm, and then do "man npm-developer"
+[21:54] <isaacs> er, developers
+[21:54] <isaacs> http://github.com/isaacs/npm/blob/master/doc/developers.md#readme
+[21:57] cedricv has joined the channel
+[21:58] linuxsable has joined the channel
+[21:59] rra has joined the channel
+[22:00] <felixge_> isaacs: if I just do npm, I get an error
+[22:00] <isaacs> felixge_: yeah, you have to give it a command.
+[22:00] <isaacs> felixge_: man npm
+[22:00] <isaacs> felixge_: that's friendlier in the next release.  "make install" in the source to use the code you're looking at.
+[22:03] <felixge_> isaacs: https://gist.github.com/cf758880f5f516a4d76d
+[22:03] <felixge_> :|
+[22:04] creationix has joined the channel
+[22:04] <isaacs> felixge_: you have node built with https?
+[22:04] <felixge_> isaacs: yes
+[22:04] <isaacs> and you created a user account?
+[22:04] <felixge_> isaacs: trying it again, I get: Error: forbidden cannot modify existing version
+[22:04] <felixge_> isaacs: yes
+[22:05] <isaacs> weird...
+[22:05] <felixge_> isaacs: how do I know if my entire package got published?
+[22:05] <felixge_> isaacs: might be a node bug
+[22:05] <isaacs> felixge_: it didn't.  http://registry.npmjs.org/formidable
+[22:05] <isaacs> the attachment isn't there.
+[22:05] <isaacs> i'll delete and you can try again
+[22:05] girlchan has joined the channel
+[22:05] <felixge_> isaacs: k, thx
+[22:06] <isaacs> k, try again
+[22:07] <girlchan> Anyone know how to have node reload files in development mode, similar to shotgun w/ ruby?
+[22:07] <felixge_> girlchan: search the mailing list for 'dj'
+[22:08] <felixge_> somebody wrote something like that
+[22:08] <girlchan> felixge_: Thanks man.
+[22:08] <felixge_> isaacs: new fail: https://gist.github.com/cf758880f5f516a4d76d
+[22:09] <isaacs> felixge_: awesome.
+[22:09] <felixge_> isaacs: would npm try to package files that are git ignored?
+[22:09] <isaacs> felixge_: yes.
+[22:09] <isaacs> felixge_: but you can fetch a tarball from github or do "git archive" and publish teh tarball instead of the folder.
+[22:10] <isaacs> felixge_: npm publish ./package.tgz
+[22:10] <felixge_> isaacs: ok, this explains the issue :)(
+[22:10] <felixge_> :)
+[22:10] <isaacs> got a lot of big files in there?
+[22:10] <felixge_> isaacs: yeah, big file uploads I tested with :D
+[22:10] <felixge_> :)
+[22:10] <isaacs> ah, i see
+[22:10] <isaacs> yeah, that'll do it
+[22:10] <felixge_> isaacs: trying again
+[22:11] <isaacs> felixge_: it's gonna fail.  lemme delete it.
+[22:11] <isaacs> felixge_: REALLY gotta get rollback working
+[22:11] <felixge_> isaacs: :)
+[22:11] <felixge_> isaacs: I'm very glad you're doing this
+[22:11] <isaacs> ok, deleted.  go for it
+[22:11] <felixge_> isaacs: node is gonna kick as bigtime with a nice eco system
+[22:12] <felixge_> I have to write way too much code myself these days :(
+[22:12] <felixge_> I hate code! :)
+[22:12] <isaacs> code is the enemy!
+[22:12] <isaacs> node has a lot of cool projects that are pieces of a very interesting puzzle.
+[22:12] <felixge_> isaacs: it's kinda hanging at "npm tarball /Users/felix/.node_libraries/.npm/.cache/formidable/0.1.0/package.tgz" right now
+[22:12] <felixge_> isaacs: is that normal?
+[22:13] <isaacs> felixge_: that's where it's uploading the tarball
+[22:13] <isaacs> felixge_: so yeah
+[22:13] <felixge_> isaacs: ah cool
+[22:13] <felixge_> isaacs: I think it worked
+[22:13] <isaacs> felixge_: wanna replicate the registry in europe?
+[22:13] <felixge_> isaacs: I'm not in europe right now
+[22:13] <felixge_> :)
+[22:13] <felixge_> nor do I have any servers in europe
+[22:13] <isaacs> felixge_: orly?  where you at?
+[22:13] <felixge_> isaacs: Atlanta
+[22:13] <felixge_> this week
+[22:13] <isaacs> oh, neat
+[22:13] <felixge_> flying back home next week
+[22:14] <felixge_> isaacs: so did it work?
+[22:15] <isaacs> felixge_: hm... the attachment isn't there, it seems like.
+[22:15] <felixge_> isaacs: 
+[22:15] <felixge_> isaacs: hm
+[22:16] <isaacs> felixge_: can you email me the tarball?
+[22:16] <felixge_> isaacs: you can download from here: http://github.com/felixge/node-formidable
+[22:16] <isaacs> felixge_: just master?
+[22:16] <felixge_> y
+[22:16] <felixge_> isaacs: y
+[22:18] <isaacs> felixge_: this'll be less breaky soon.
+[22:18] <isaacs> felixge_: what's AWESOME is that this is the same as Ned_'s bug.
+[22:19] <isaacs> and that's been a huge pita to track down.  your package'll be published tonight.  for now, just sit tight.
+[22:19] <isaacs> basically, it's timing out as it's trying to upload the tarball, probably becasue npm sends it all in one write() rather than streaming it up in smaller chunks.
+[22:20] <felixge_> isaacs: would make sense
+[22:20] <isaacs> i've got the tarball cached, so don't worry about making any changes to your master branch.
+[22:21] <felixge_> isaacs: ok, cool
+[22:24] <felixge_> isaacs: in my own programs, can I require a specific version of a package?
+[22:24] <felixge_> isaacs: like require('formidable@0.1.0') ?
+[22:25] <isaacs> felixge_: it's require("formidable-0.1.0")
+[22:25] <isaacs> felixge_: but i might move everything to the @ format, since it's more explicit
+[22:25] <felixge_> isaacs: what's the default, the latest version?
+[22:25] foucist has joined the channel
+[22:26] <isaacs> felixge_: also, you can do dependencies:{"formidable":"0.2.0"} and then just do require("formidable") to get the version you wanted.  all explained in man npm-json
+[22:26] <isaacs> felixge_: the default is the active version, whichever one you activated.  see npm-activate(1)
+[22:26] <felixge_> isaacs: that assumes my project is tracked in npm
+[22:26] <felixge_> isaacs: would I do that for a huge project like transloadit?
+[22:26] <isaacs> felixge_: you don't have to use the publishing stuff with npm.
+[22:26] <isaacs> felixge_: you could just npm link .
+[22:27] <isaacs> felixge_: or create your own registry that replicates the public reg, and write into that.
+[22:27] <felixge_> isaacs: how would I deploy?
+[22:27] foucist has left the channel
+[22:27] <felixge_> isaacs: is that just a couchdb?
+[22:27] <felixge_> isaacs: or is there more to it?
+[22:27] <isaacs> felixge_: yikes, hold on a sec
+[22:27] <girlchan> Ooch, anyone happen to know of an example project using express?
+[22:27] <isaacs> felixge_: the reg is a couchapp, yes
+[22:28] <isaacs> felixge_: deployment with something like "npm install --host foo.com" is planned, but not avialable yet.
+[22:28] <felixge_> isaacs: ok
+[22:28] <felixge_> isaacs: good to know
+[22:28] <isaacs> felixge_: for now, if there's npm on the host, i guess you could do "ssh foo.com 'npm install bar'"
+[22:29] <felixge_> isaacs: well, I guess I wouldn't bother with running my own registry
+[22:29] <felixge_> isaacs: but I might use npm in our server installation script
+[22:29] <felixge_> isaacs: to install the dependencies needed by transloadit
+[22:29] <isaacs> felixge_: neat :)
+[22:29] <isaacs> felixge_: that's excatly my intended use case.
+[22:29] <felixge_> (given it works : )
+[22:29] <isaacs> hehe, that's a high bar :)
+[22:29] <isaacs> you prolly wanna wait for at least version 0.2.0
+[22:32] <felixge_> isaacs: k :)
+[22:33] <isaacs> felixge_: then again, you're using node, so i guess you're ok with crazy bleeding-edge code
+[22:33] saikat` has joined the channel
+[22:33] <felixge_> isaacs: heh
+[22:34] gf3 has joined the channel
+[22:35] <felixge_> where did ry disappear to?
+[22:35] <_ry> i'm here
+[22:36] girlchan has left the channel
+[22:36] <felixge_> _ry: waiting for your merging powers: http://github.com/felixge/node/commit/b8e50f963f1b2ad3a3d3d9fae9417ae0a45f82fb :)
+[22:37] <_ry> felixge_: i want to get rid of the docs to the string versions
+[22:37] <_ry> for fs.read and fs.write people should only use buffer
+[22:38] <felixge_> _ry: ok, want a commit for that?
+[22:38] <_ry> (i'll maintain a legacy interface for a long time though)
+[22:38] <felixge_> _ry: or do it in the same commit?
+[22:38] <_ry> in that same commit if you can
+[22:38] <felixge_> _ry: on it
+[22:38] <_ry> um
+[22:38] <_ry> yeah 
+[22:38] <creationix> Is is possible to start several REPL sessions all with different scopes?
+[22:39] <creationix> or are they always global scope
+[22:39] <_ry> felixge_: what about writeSync?
+[22:39] <felixge_> _ry: I don't use that :)
+[22:39] <felixge_> _ry: does it support buffers yet?
+[22:39] <_ry> yes
+[22:39] <isaacs> _ry: creationix: i made a slight change to node_evals and a significant change to node-repl to make that easier.
+[22:40] derbumi has joined the channel
+[22:40] <isaacs> _ry: herby seemed to be ok with the change
+[22:40] <isaacs> _ry: http://github.com/isaacs/node/commit/8d7d2669d92f89b8b42ade97bae64e4a03fe1436
+[22:40] <creationix> so, how do I use it?
+[22:43] <creationix> hmm, I see a special scope property on the repl object, I assume I can't replace it with a new object
+[22:43] <creationix> only add properties to it
+[22:46] hassox has joined the channel
+[22:50] <isaacs> creationix: actually, in my commits, they still all share the same scope.
+[22:50] bradleymeck has joined the channel
+[22:50] <isaacs> but they don't run in the global scope
+[22:50] bradleymeck has left the channel
+[22:50] <isaacs> and replacing the scope obj should work as expected, i'd think.  never tried it, though
+[22:51] <creationix> ok, now I'm having trouble connecting to the repl socket
+[22:51] <creationix> socat on OSX doesn't seem to understand READLINE
+[22:51] <creationix> I'm using socat from homebrew
+[22:51] <creationix> I can't seem to telnet either
+[22:52] micheil has joined the channel
+[22:52] <_ry> isaacs: okay
+[22:52] mikeal has joined the channel
+[22:53] <creationix> has anyone successfully connected to a repl socket on osx?
+[22:55] freshtonic has joined the channel
+[22:56] charlesjolley has joined the channel
+[22:56] kennon has joined the channel
+[22:58] rra has joined the channel
+[22:59] rra has joined the channel
+[23:00] rra has joined the channel
+[23:01] felixge has joined the channel
+[23:01] felixge has joined the channel
+[23:02] <mjr_> creationix: yeah, I do it pretty often
+[23:02] <mjr_> does it not work?
+[23:04] <pedrobelo> is there a way I can control the encoding of a child process stdout? stdout.addListener('data' is giving me ascii I think
+[23:04] <pedrobelo> node 0.1.95
+[23:08] ajpiano has joined the channel
+[23:08] <_ry> pedrobelo: stdout.setEncoding('utf8')
+[23:09] Tim_Smart has joined the channel
+[23:09] <pedrobelo> _ry: oooh doh. I was trying on the process. thanks sir
+[23:27] <maushu> ...we can set the encoding of stdout? Madness.
+[23:27] tlrobinson_ has joined the channel
+[23:29] <_ry> maushu: madness or awesomeness?
+[23:29] <maushu> Madness is awesomeness so that question is moot.
+[23:29] JimBastard has joined the channel
+[23:32] <_ry> maushu: node script.js < binaryfile
+[23:32] <maushu> O_o
+[23:32] <maushu> WHAT HAVE YOU DONE?!
+[23:32] <_ry> node script.js < binaryfile > otherbinaryfile
+[23:33] <maushu> Stop! This madness cannot go on!
+[23:34] <maushu> chmod +x script.js
+[23:36] <maushu> Anyways, anyone here using node.js in linode?
+[23:38] <phoenixsol> _ry: respect.
+[23:38] <_ry> maushu: i am
+[23:38] <maushu> >_>
+[23:38] <mde> I am.
+[23:38] <maushu> ACTION runs nodejs.org on whoishostingthis.com
+[23:40] <maushu> "nodejs.org Is Hosted by Linode" :o
+[23:41] <maushu> My landing page at graphnode.com is fully powered by node.js, no silly webservers in front of it.
+[23:42] <maushu> I need to check the file sender code though, readFile is bad idea for big files me thinks.
+[23:42] <phoenixsol> no silly webservers. so, no point in using (nginx or whatever) for static content?
+[23:43] <phoenixsol> I like the idea...
+[23:43] <_ry> phoenixsol: i think there is a point 
+[23:43] <_ry> if only for security
+[23:43] <phoenixsol> k thx.
+[23:43] <_ry> node can push static buffers out very well though
+[23:43] <maushu> The point is that Im not using silly servers.
+[23:43] <_ry> eventually we won't need that
+[23:43] <maushu> Besides, I want to manage virtual hosting myself.
+[23:43] <_ry> but now - graphnode is probably hackable:)
+[23:44] <_ry> you running that as root?
+[23:44] <maushu> _ry, not really, it's really, really simple.
+[23:44] cij_ has joined the channel
+[23:44] <maushu> Unless the hack is in the webserver.
+[23:44] <_ry> maushu: you don't know about my back door?
+[23:44] <maushu> WAT.
+[23:44] <_ry> :)
+[23:45] <maushu> ACTION doesn't like _ry smile and decides to check the node.js code in the git repository.
+[23:45] <mikeal> i need a beer
+[23:45] <tmpvar> same.
+[23:46] <phoenixsol> mikeal: +1
+[23:46] <phoenixsol> merlot's not cutting it ;)
+[23:46] <mikeal> we should have a SSJS drinkup tomorrow
+[23:46] <mjr_> mikeal: we are drinking in SF at 5 if you want to join us
+[23:46] <phoenixsol> that'd be nice.
+[23:46] <phoenixsol> ACTION looks for a plane ticket.
+[23:47] <mikeal> tonight?
+[23:47] <mikeal> or tomorrow?
+[23:47] <mjr_> yeah, at 5PM-ish
+[23:47] <mjr_> tonight
+[23:47] <mikeal> damn
+[23:47] <mjr_> what, you need more than 15 mins notice?
+[23:47] <mikeal> i'm like in the middle of making dinner
+[23:47] <phoenixsol> ACTION slumps in despair.
+[23:48] <phoenixsol> I guess I'll just watch a movie. nitey nite.
+[23:48] <MattJ> 'night
+[23:51] saikat` has joined the channel
+[23:56] <isaacs> i wonder if this large file uploading problem is an nginx problem
+[23:56] sh1mmer has joined the channel
+[23:56] <_ry> isaacs: what node version?
+[23:56] <isaacs> _ry: not node.  talking about hte registry couchapp.
+[23:57] <isaacs> it seems like there's a cutoff where nginx or couch just drops the upload connection.
+[23:57] <isaacs> (node is teh client here)

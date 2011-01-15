@@ -1,0 +1,1341 @@
+[00:00] creationix has joined the channel
+[00:00] <isaacs> so, problem with that is that we all break ModuleIdentifiers#2
+[00:01] <kriskowal> yeh, that needs to be fixed in the next rev of the spec
+[00:01] <kriskowal> let's assume we've fixed that.
+[00:01] <isaacs> but the test could be something like this:
+[00:02] <isaacs> a.js: exports.moduleId = module.id;   b.js: var a = require("./a");  assert(a === require(a.moduleId));
+[00:02] <isaacs> at least, the test for module.id
+[00:03] <kriskowal> that's a start
+[00:03] <isaacs> again, i don't exactly see why it matters what module.id looks like.
+[00:04] <isaacs> is there an actual use case where having a module identifier starting with a / is a bad idea? or where module.id needs to be something that doesn't start with a /?  because i've got a few use cases where having module.id NOT start with / causes all kinds of problems.
+[00:04] <kriskowal> yeah, i know what you're talking about
+[00:06] <kriskowal> the big deal is that we're both trying to prevent the same module from being loaded twice.
+[00:06] <isaacs> right... and this does that...
+[00:06] bpot has joined the channel
+[00:06] <kriskowal> by different aliases.  i consider the top-level identifier canonical, and you the file name.  we're both right depending on how you look at it.
+[00:07] <isaacs> well, since require.paths is changeable, that's not a safe assumption.
+[00:07] <isaacs> and your suggestion would be to lock it down, i'm sure
+[00:07] <kriskowal> my solution prevents two implementations of the same specification from being loaded even if they exist in multiple modules, in the face of the assumption that require.paths is consistent
+[00:07] <kriskowal> multiple paths, i mean
+[00:07] <kriskowal> which is important for narwhal; not as much in node since it's not designed for multiple engines.
+[00:08] <isaacs> oh, you see, that's exactly the use case I need to *enable*
+[00:09] <isaacs> i can't trust that require("foo") alwasy refers to the same thing, and if there are multiple foo.js files, and hte path has changed, then i need to ensure that you'll get a new foo module, since you might actually depend on a different version that the last guy who pulled it in.
+[00:09] <kriskowal> fiddling with require.paths after you've loaded any significant modules can only lead to pain
+[00:09] <isaacs> kriskowal: not if you do what i did.
+[00:09] <isaacs> kriskowal: check it out.  it works.  it's stable.
+[00:09] <isaacs> better yet, it's simple
+[00:09] <kriskowal> i'm dead certain that with use of relative identifiers, i would be able to load a module that's not supposed to be.
+[00:10] <isaacs> i will buy you a beer if you can do that.
+[00:10] <kriskowal> by subverting the version that would have been discovered by searching require.paths with a top-level
+[00:10] <isaacs> kriskowal: no, srsly.
+[00:10] <isaacs> do that.
+[00:10] <isaacs> show me the code, and i'll buy you a beer.  we've got 135 witnesses ;)
+[00:10] <kriskowal> explain how you prevent that.
+[00:11] <kriskowal> do you scan require.paths to verify equivalence?
+[00:11] jasonw22 has joined the channel
+[00:12] <isaacs> http://github.com/isaacs/node/blob/module-refactor/lib/module.js#L70-119
+[00:12] <kriskowal> if you're doing something like that, you could easily normalize the path to an id and have the same guarantee
+[00:12] <isaacs> kriskowal: yeah
+[00:12] <kriskowal> while internally using the path as the cache key
+[00:12] <kriskowal> but providing the id as top-level
+[00:12] <kriskowal> no compromise
+[00:12] jed has joined the channel
+[00:13] <isaacs> i use both the cache and the from-the-root id as cache keys, but i only return the stem cache-hit if the paths list is just a single location (that is, in the case of / or . requires)
+[00:13] <isaacs> er, both the *filename
+[00:13] <isaacs> oh, no, i don't scan require.paths to see if it's changed.
+[00:14] <isaacs> i just only cache based on the filename if there's mor ethan one search target.
+[00:19] <kriskowal> at this point, i'm convinced that it is possible to guarantee correctness regardless of the shape of module.id
+[00:19] <isaacs> um... yay?
+[00:19] <kriskowal> yeah, not necessarily.
+[00:20] <kriskowal> good enough for you; i'll withdraw from the argument since we've broken it down to a subjective decision for the purpose of module searching.
+[00:20] <isaacs> what's un-yay about that?
+[00:20] <kriskowal> i would *like* a stronger guarantee about the value of module.id across engines, but in the context of node, i have not got a compelling argument
+[00:21] <isaacs> i think the spec should specifically not guarantee the shape of module.id, only its behavior.
+[00:21] <isaacs> which it does.
+[00:21] <kriskowal> it does if you read it closely, but there are other problems if you read it closely, so it's irrelevant
+[00:22] <kriskowal> it's ambiguous at worst
+[00:22] <isaacs> in any event, this was a funner bit of code analysis fisticuffs than i've had in a while.  thanks, kris
+[00:22] <kriskowal> i have gained some insights as well, thanks.
+[00:23] <mjr_> _ry: sometimes when I do make test, simple/test-http exhibits the same error I get on my http proxy, but not all the time
+[00:24] <mjr_> https://gist.github.com/d3fdc389075bea59da61
+[00:24] <mjr_> There's some sort of timing issue in there.
+[00:25] CodeOfficer has joined the channel
+[00:26] <mjr_> _ry: also, the fix for node-repl that you pointed me to earlier (missing default prompt) is here: http://github.com/mranney/node/commit/c13aede7f2c8ecdf2962edeb957c74eae03d7534
+[00:28] mrjjwright has joined the channel
+[00:29] creationix has joined the channel
+[00:31] sveisvei has joined the channel
+[00:38] fizx has joined the channel
+[00:45] mravaux_ has joined the channel
+[00:59] tlrobinson_ has joined the channel
+[01:06] justinlilly has joined the channel
+[01:10] ditesh|cassini has joined the channel
+[01:16] tlrobinson_ has joined the channel
+[01:16] derferman has joined the channel
+[01:28] ditesh|cassini has joined the channel
+[01:34] charlesjolley_ has joined the channel
+[01:53] tk has joined the channel
+[01:59] joshbuddy has joined the channel
+[01:59] joshbuddy has joined the channel
+[02:05] mcarter has joined the channel
+[02:42] nsm has joined the channel
+[02:44] <mrjjwright> kriskowal: trying to upgrade restler to latest node and getting an error at the line require("uri") which pulls in the narwhal uri lib.  
+[02:44] <deanlandolt> mrjjwright: IIRC narwhal's uri was deprecated
+[02:44] <mrjjwright> oh ok
+[02:44] <mrjjwright> what should be used instead
+[02:45] <mrjjwright> anybody know
+[02:45] <deanlandolt> what fork are you using?
+[02:45] <mrjjwright> the buitin url lib from node?
+[02:45] <deanlandolt> in kriskowal's master he's been moving things into the narwhal/ namespace
+[02:46] <mrjjwright> i think I just use the built-in url lib from node, this probably wasn't out or stable when dan wrote restler
+[02:46] mfeiri_ has joined the channel
+[02:46] <isaacs> mrjjwright: what's it using uri for?
+[02:46] <deanlandolt> err, wait, i think i'm confused...i don't think it's deprecated, but it's certainly not in kriskowal's master where it used to be
+[02:46] <isaacs> mrjjwright: i mean, what is it doing with it?
+[02:46] <mrjjwright> i am not using narwhal, just updating restler to node 0.1.90
+[02:46] <isaacs> deanlandolt: he means the lib/uri.js that used to be in node
+[02:47] <mrjjwright> to parse urls
+[02:47] <isaacs> deanlandolt: and was a port of narwhal's lib uri
+[02:47] <mrjjwright> oh right, ok
+[02:47] <deanlandolt> mrjjwright: hmm...he said he's pulling in the narwhal uri lib
+[02:47] <deanlandolt> err ** isaacs
+[02:47] <mrjjwright> no not the narwhal  uri lib, isaacs is right, i was confused
+[02:48] <deanlandolt> okay, nvm :)
+[02:48] <isaacs> deanlandolt: right, it was "the narwhal uri lib" because it was pulled from narwhal into nodejs
+[02:48] <isaacs> ACTION ported narwhal's uri lib, got frustrated with its  bugs, and rewrote it as lib/url.js
+[02:48] <deanlandolt> heh, well that makes sense
+[02:48] <mrjjwright> it's the old node port and it's not being used for much except to parse the url, I think everything should be in node's "url" now.
+[02:48] <deanlandolt> cool
+[02:48] <mrjjwright> do you think isaacs?
+[02:48] <isaacs> mrjjwright: "parse" is such a... vague word.
+[02:49] <isaacs> mrjjwright: if you just s/uri/url/g you'll probably have to also rename whichever fields it's using
+[02:49] <isaacs> url models teh parsed data object after the location object inthe browser.
+[02:49] <isaacs> arguably not a great convention, but that's why we have setTimeout and setInterval, etc.
+[02:50] <isaacs> it's *A* convention, and node uses it in a bunch of other places.
+[02:50] <mrjjwright> k
+[02:51] <isaacs> mrjjwright: so, like, if it's using parsed.authority, you'll change that to (i think?) parsed.host
+[02:51] <isaacs> etc.
+[02:52] <mrjjwright> isaacs: is there any parsing domain within node you don't know something about?
+[02:52] <isaacs> hehe
+[02:53] <isaacs> parsers are fun :)
+[02:53] JimBastard_ has joined the channel
+[02:53] <JimBastard_> is there a good js markdown module for node yet?
+[02:53] <isaacs> and it seems like the internet is just FULL of random crazy ways to encode data.
+[02:53] <JimBastard_> im looking at http://github.com/visionmedia/markdown.js but that seems to be in C? im confused
+[02:54] <deanlandolt> JimBastard_: showdown's packaged as a commonjs module...
+[02:54] <JimBastard_> i went a little crazy this weekend and wrote a book, need to parse that shit into html
+[02:55] dandean has joined the channel
+[02:55] <JimBastard_> http://github.com/kriskowal/markdown ?
+[02:55] <deanlandolt> http://github.com/gmosx/markdown/blob/master/lib/markdown.js
+[02:55] <deanlandolt> err, the kriskowal would work too
+[02:56] <deanlandolt> but yeah, i don't think they should be calling it markdown...gruber's a dbag w/ his license and explicitly says you can't do that
+[02:56] <kriskowal> yeh, JimBastard_ let me know if it doesn't work out for you.
+[02:56] <JimBastard_> looks like the same code
+[02:56] <JimBastard_> awesome thanks kriskowal 
+[02:56] <isaacs> JimBastard: it's not so much that it's in C as that it doesn't actually include what it uses...
+[02:56] <JimBastard_> im adding a markdown protocol for hook.io
+[02:56] <JimBastard_> trying now
+[02:56] <kriskowal> there's a bin/markdown in that package, which isn't applicable to node, alas
+[02:57] <kriskowal> it might if you massage it.
+[02:57] <isaacs> you know, if you added a version to the package.json, then i'll bet npm could install that thing and even make the bin work.
+[02:58] <isaacs> oh, nope, nvm
+[02:58] <isaacs> system.stdin.read()
+[02:58] <JimBastard_> im using gitsubmodules for my package management right now
+[02:59] <JimBastard_> then the hook.io protocols import from the /lib/ folder
+[02:59] <JimBastard_> so its not the most elegant, but it works
+[03:00] <kriskowal> yeh.  i have not yet achieved harmony with that.  i have started to put together a narwhal compatibility layer though.
+[03:01] <kriskowal> pretty exciting to converge, isaacs.  my last gist was on raw node, using parts shared with the narwhal+node stuff
+[03:02] <isaacs> neat
+[03:02] <JimBastard_> you guys gonna be at jsconf?
+[03:02] <kriskowal> i might be able to bridge the gap with a .node thingie
+[03:02] <kriskowal> i will be.
+[03:03] <JimBastard_> huzaah! ill be at the scurvyconf party
+[03:03] <deanlandolt> kriskowal: was the faustian bargain you mentioned the commonjs panel discussion?
+[03:03] <kriskowal> part of it
+[03:03] <kriskowal> i also offered my firstborn's soul
+[03:03] <deanlandolt> cool...i saw that and made sure my track b pintura talk was right after it :)
+[03:04] <kriskowal> looking forward to it
+[03:07] isaacs has joined the channel
+[03:08] fizx has joined the channel
+[03:23] tobyvs has joined the channel
+[03:25] <JimBastard_> aight kriskowal its all hooked up as a hook.io protocol now. im gonna pipe in my MD files and see how they render
+[03:30] tmpvar has joined the channel
+[03:40] <JimBastard_> man node-persist is really starting to act up as i add more stuff 
+[03:47] <tmpvar> lol
+[03:47] <tmpvar> i thought you were doing docs
+[03:50] kenneth_reitz has joined the channel
+[03:51] PyroPete1 has joined the channel
+[03:53] <JimBastard_> whats the fs command for appending to a file?
+[03:53] <JimBastard_> i added two more protocols tmpvar 
+[03:54] <JimBastard_> running the doc generator on startup causes node-persitence to bug on race con
+[03:54] <JimBastard_> waiting for felix to release dirty >.<
+[03:54] <tmpvar> ahh
+[03:54] <tmpvar> hehe
+[03:54] <JimBastard_> do you know how to append to a file>
+[03:59] <tmpvar> JimBastard, not offhand
+[04:07] joshbuddy has joined the channel
+[04:08] <JimBastard_> anyone else using http://github.com/creationix/step ?
+[04:08] tlrobinson_ has joined the channel
+[04:15] kenneth_reitz has joined the channel
+[04:26] aho has joined the channel
+[04:26] malkomalko has joined the channel
+[04:31] hassox has joined the channel
+[04:41] binary42 has joined the channel
+[04:44] rtomayko has joined the channel
+[04:50] fizx has joined the channel
+[04:51] okito has joined the channel
+[04:57] <JimBastard_> ugh whats the best approach for reading files in a loop
+[04:57] <JimBastard_> im having some control flow issues
+[04:58] gfxmonk has joined the channel
+[05:12] isaacs has joined the channel
+[05:20] brapse has joined the channel
+[05:33] keeto has joined the channel
+[05:36] xla has joined the channel
+[05:52] charlesjolley has joined the channel
+[05:56] dgathright has joined the channel
+[06:18] derferman has joined the channel
+[06:20] nsm has joined the channel
+[06:28] JimBastard_ has joined the channel
+[06:34] <micheil> _ry: are the man docs for node read much, or do you think most people reference the website api docs?
+[06:35] kriskowal has joined the channel
+[06:35] <micheil> (eg, would it make sense to move the documentation towards being mainly web based, and then make the manpage just describe the bin/node commandline options?)
+[06:36] <micheil> meaning that we wouldn't need to worry about how we compile both
+[06:36] <micheil> it'd also allow as to take the web docs further, as for as breaking it into say, multiple pages for the different modules and such
+[06:36] fizx has joined the channel
+[06:37] fizx has joined the channel
+[06:40] piranha has joined the channel
+[06:50] tisba has joined the channel
+[06:52] keeto_ has joined the channel
+[06:52] markwubben has joined the channel
+[06:53] alexandere has joined the channel
+[06:59] felixge has joined the channel
+[07:12] <kriskowal> isaacs, i presume that not searching require.paths for relative ids is deliberate.
+[07:17] zimbatm has joined the channel
+[07:21] <JimBastard_> kriskowal: your markdown lib seems to be behaving
+[07:21] <kriskowal> oh, good.
+[07:21] <JimBastard_> :p
+[07:21] <kriskowal> i wouldn't know what to do if it didn't, honestly
+[07:21] <kriskowal> it's a port
+[07:21] <JimBastard_> do you have any idea how to generate anchors in markdown?
+[07:21] <kriskowal> hm.  you prolly can use html
+[07:21] <JimBastard_> inline html then?
+[07:22] <kriskowal> i presume there's nothing special
+[07:22] <kriskowal> if the language i wrote in perl 10 years ago had taken off, it would have been J>name :P
+[07:23] <kriskowal> i should prolly write a swil engine in js :/
+[07:23] <JimBastard_> yeah that works awesome
+[07:24] <JimBastard_> continuous documentation for the win
+[07:24] <kriskowal> yeh.  i'm also working on a doc system
+[07:24] <kriskowal> as is ashb.  seems like it's what everyone's up to these days.
+[07:25] <micheil> docs system, where?
+[07:25] <kriskowal> http://github.com/kriskowal/whatsupdoc
+[07:26] <kriskowal> it's alpha.  generates a JSON tree from jsdoc/markdownish for all installed packages.
+[07:26] <kriskowal> working on a formatter
+[07:27] <kriskowal> when all is said and done, it'll work on narwhal, node, and narwhal+node
+[07:27] teemow has joined the channel
+[07:32] kjeldahl has joined the channel
+[07:34] brapse has joined the channel
+[07:34] <CIA-77> node: 03Matt Ranney 07master * rb744104 10/ (lib/repl.js test/simple/test-repl.js): 
+[07:34] <CIA-77> node: REPL can be run from multiple different streams.
+[07:34] <CIA-77> node: e.g. from UNIX sockets with socat. - http://bit.ly/9xkwOi
+[07:35] <mape> Hmm I read somewhere node.js was faster then java.. Anyone know what article/text that was? (trying to get the boss to look at using node)
+[07:35] <_ry> micheil: i want to keep the man page 
+[07:37] <_ry> mjr_: you should write some docs for the repl :)
+[07:44] <micheil> _ry: as the full documentation?
+[07:49] <kriskowal> isaacs: clone this http://gist.github.com/363360 and run it
+[07:51] <kriskowal> one nice attribute of narwhal's loader is that we can overlay each directory in require.paths onto a single directory for browsers or performance and be guaranteed equivalent behavior.
+[07:51] <kriskowal> it works because we resolve relative identifiers on the top-id of the requiring module, not the path of the requiring module.
+[07:53] <kriskowal> constructing a unified overlay of modules from each of require.paths is one technique that could also be used in node to bundle modules for couchdb views; in which case you'd need to resolve on top-ids too to guarantee consistent behavior
+[07:53] <kriskowal> same for module transports.
+[08:01] mfeiri_ has joined the channel
+[08:02] mravaux has joined the channel
+[08:03] <micheil> _ry: the Freelist thing in net.js is freaking epic.
+[08:03] romainhuet has joined the channel
+[08:03] <micheil> _ry: that should really be made into a separate module
+[08:03] felixge has joined the channel
+[08:04] felixge has joined the channel
+[08:04] kjeldahl has joined the channel
+[08:04] <micheil> so that we can use it in the apps that we build, because it is really useful
+[08:06] <micheil> _ry: I think it'd be better if the modules within the net module were broken up a little, eg, have a FreeList.js, Stream.js etc.
+[08:09] B1scuitsLap has joined the channel
+[08:29] <micheil> woah. wtf did sys.log come from?
+[08:31] BiscuitsLap has joined the channel
+[08:34] javajunky has joined the channel
+[08:35] N` has joined the channel
+[08:38] xla has joined the channel
+[08:41] <mape> Been there a while?
+[08:53] tbassetto has joined the channel
+[08:56] teemow has left the channel
+[08:57] hellp has joined the channel
+[09:00] botanicus has joined the channel
+[09:01] <micheil> hmm.. is 8 bytes == eight utf-8 encoded characters?
+[09:01] Gruni has joined the channel
+[09:02] <piranha> micheil: not always
+[09:02] <micheil> :/
+[09:03] <piranha> utf-8 is encoding with variable character length
+[09:03] <piranha> so if it's latin alphabet, then yep, 8 chars will take 8 byte
+[09:03] <piranha> *bytes
+[09:03] <piranha> but if it's cyrillic, then 8 chars will take 16 bytes
+[09:05] <javajunky> might take 16 bytes ;) 
+[09:06] <javajunky> micheil: if you're interested, I ported a chunk of Javascript code an age ago for encoding and decode utf8 streams: http://ciaranj.blogspot.com/2007/11/utf8-characters-encoding-in-javascript.html
+[09:07] TomY has joined the channel
+[09:07] <micheil> javajunky: node has that.
+[09:07] <micheil> it's in the C++ api
+[09:07] <javajunky> micheil: yah I know, but I figured you might be a Js guy and that might help your understanding ;)
+[09:07] <piranha> javajunky: I'd say with cyrillic you can be sure it will take 16 bytes :)
+[09:08] <javajunky> piranha: yeah on reflection I'd say you're right and I'm wrong ;)
+[09:08] <javajunky> (Stupid reflexes)
+[09:08] <piranha> :)
+[09:10] <micheil> actually, just received information that it'll be 8 bytes in UTF8 from the ascii character range
+[09:12] <micheil> anyone know about getting a byte array in node?
+[09:18] statim has left the channel
+[09:35] charlesjolley has joined the channel
+[09:40] <javajunky> so bascially its an ascii stream not a utf-8 stream ? 
+[09:42] <javajunky> (but to answer your question, this file http://github.com/ciaranj/flickrnode/blob/master/lib/md5.js  does that sort of manipulation, so might be some usage there) 
+[09:44] <micheil> javajunky: it's a stream of utf8 characters, although, it can only be the ascii characters in it
+[09:44] derbumi has joined the channel
+[09:45] <javajunky> micheil: apologise for my stupidity, but that surely means its also a stream of 'ascii characters' .. the fact its utf8 is largely irrelevant (unless there's a byte order marker at the start (which is optional/pointless in utf8 anyway) )
+[09:46] <micheil> javajunky: it's as per the WebSocket protocol.
+[09:46] <javajunky> ah, k, so there will be ffff and 0000 in there (which also aren't part of utf8 just to mess with you) 
+[09:46] <micheil> so, it's a UTF8 stream, however, for this particular segment, it's only the ascii characters.
+[09:46] <micheil> but it doesn't matter, I used a temp buffer
+[09:52] derbumi_ has joined the channel
+[10:01] derbumi_ has joined the channel
+[10:06] psynaptic has joined the channel
+[10:15] kjeldahl has joined the channel
+[10:22] chakrit has joined the channel
+[10:22] chakrit has left the channel
+[10:23] sveisvei has joined the channel
+[10:24] hellp has joined the channel
+[10:34] derbumi has joined the channel
+[10:35] alexandere has joined the channel
+[10:42] keeto_ has joined the channel
+[10:52] xla has joined the channel
+[10:56] maritz has joined the channel
+[11:02] ssteinerX has joined the channel
+[11:16] mrjjwright has joined the channel
+[11:23] <derferman> I am currently using JSON.parse to parse data sent via my client. However, if the data isn't valid JSON, JSON.parse throws an error and brings down node
+[11:23] <derferman> how can I get around that?
+[11:23] <derferman> Does the JSON parser have error checking?
+[11:23] <jbrantly> try/catch?
+[11:24] <ashb> s/\?//
+[11:25] <derferman> d'oh, forgot that javascript has try / catch
+[11:30] derbumi has joined the channel
+[11:37] andrewhampton has joined the channel
+[12:06] <javajunky> derferman, jSON.parse is strict (according to EC5 ) 
+[12:15] confounds has joined the channel
+[12:26] trochala has joined the channel
+[12:30] trochala has joined the channel
+[12:41] toabi has joined the channel
+[12:43] <javajunky> anyone know if there's a node.js base6 decode call available to me in a lib ? .. (I've got base64 decode functions, but wondering if there's something provided by node/v8 ?
+[12:51] <jbrantly> there's atob(), not sure if its supported by v8
+[12:58] teemow has joined the channel
+[13:02] <micheil> is there a way to retreive the localhost and localport that a server is listening on?
+[13:05] dnolen has joined the channel
+[13:06] <javajunky> yeah pretty sure you can get that fromt he socket object (sys.p it to see whats available) ?
+[13:07] <micheil> nup
+[13:07] <micheil> net.Server.prototype.address
+[13:16] jherdman has joined the channel
+[13:22] <micheil> _ry: you about?
+[13:22] <micheil> _ry: I'm getting errors in two tests running on HEAD
+[13:23] cainus_ has joined the channel
+[13:23] <micheil> _ry: OS X/10.6, errors: test-http-head-request, test-mkdir-rmdir
+[13:23] <micheil> _ry: and I'll have a patch for you soon on the net.js file
+[13:23] <micheil> _ry: turns out the callbacks are called back within current scope
+[13:34] <micheil> actually. doesn't do what I wanted.
+[13:34] <micheil> nvm
+[13:34] <micheil> errors still present though
+[13:40] keeto has joined the channel
+[13:41] davidsklar has joined the channel
+[13:51] gf3 has joined the channel
+[13:58] JAAulde has joined the channel
+[14:07] <micheil> damn.. _ry ever tried making a net.Stream and then telnetting it and pressing ctrl+c (killing)
+[14:07] <micheil> it creates a stack overflow
+[14:12] alex-desktop has joined the channel
+[14:18] gwoo has joined the channel
+[14:20] softdrink has joined the channel
+[14:21] quirkey has joined the channel
+[14:24] cloudhead has joined the channel
+[14:34] creationix has joined the channel
+[14:50] TheEnd2012 has joined the channel
+[14:52] piranha_ has joined the channel
+[14:55] alexiskander has joined the channel
+[14:58] <_ry> micheil: ping
+[14:58] <micheil> pong
+[14:58] <KungFuHamster> SYN
+[14:59] <micheil> never mind that ctrl+c one.
+[14:59] <_ry> I can't repeat your ^c
+[14:59] <_ry> why did you think that?
+[14:59] <_ry> someone else reported that too
+[14:59] <micheil> yeah, turned out I'd accidentally called the method I was invoking the same as the net.Stream.ondata method I was overriding
+[14:59] Yuffster has joined the channel
+[14:59] <micheil> it was clearly my bad, too much recursion style error
+[15:00] <micheil> although, it did report that it was a stack overflow.
+[15:00] <_ry> hm
+[15:00] <_ry> maybe i should make ondata more hidden
+[15:00] <micheil> ACTION is deliberately overriding it.
+[15:00] <_ry> ;)
+[15:00] <creationix> _ry, I see you patched the dns module to not break with stuff in Object.prototype
+[15:00] <_ry> creationix: yeah, thanks for figuring that out
+[15:00] <creationix> while debugging the issue saturday I noticed several un-protected for..in loops as well
+[15:01] <micheil> _ry: I suppose I could also use addListener("data") because that does the exact same, but oh well
+[15:01] <creationix> those will break as will if not patched
+[15:01] <_ry> creationix: oh, where at?
+[15:01] charlesjolley has joined the channel
+[15:01] <micheil> I did see someone having an Object.forEach, which used the patch style
+[15:01] <creationix> mixed throughout, I think about 6 different places
+[15:02] <creationix> the problem is that a protected for..in loop is slow
+[15:02] <creationix> even slower than a hand implemented Object.forEach
+[15:02] <creationix> the fastest of course if an inlned Object.keys and then a regular c-style for loop over that
+[15:02] <creationix> but that's really messy
+[15:06] <creationix> hmm, can't copy paste the textmate search results
+[15:06] <creationix> http://static.creationix.com/forin.png
+[15:06] <creationix> here's an image
+[15:06] <_ry> creationix: well - I wouldn't mind patching those with hasOwnProperty()
+[15:06] <micheil> http://github.com/creationix/conductor/blob/master/lib/conductor.js#L29-39
+[15:06] <micheil> was what I was thinking
+[15:07] <creationix> yep, but _ry already said no to including that ;)
+[15:07] <micheil> although, that could be refactored
+[15:07] <micheil> creationix: oh, yeah, you're doing websockets wrong.
+[15:07] <_ry> micheil: i know that test-http-head-request is broken
+[15:07] <micheil> okay
+[15:08] <micheil> the other one that I had broken is fixed after a fresh checkout
+[15:08] <_ry> it's kind of a big problem and i'm just leaving that there to remind me
+[15:08] <creationix> micheil, I'm not surprized, I implemented it in about an hour, what's wrong with it
+[15:08] <micheil> creationix: lots.
+[15:09] <micheil> eg, incorrectly parsing / handling the initial headers
+[15:09] <creationix> but it works
+[15:09] <micheil> it'll work for some clients, but it's not spec compatible
+[15:09] <micheil> ACTION is writing a full websocket implementation to the spec right now
+[15:09] <creationix> ahh, go for it
+[15:09] <creationix> I like my minimal one that works for my cases
+[15:10] steadicat has joined the channel
+[15:11] <creationix> _ry, since you don't want to include Object.prototype.forEach with node, what about a local definition that's used to replace all these slow for..in loops
+[15:12] <creationix> it will make the code cleaner and faster than it's currently
+[15:12] <_ry> creationix: i don't think you cna make it faster
+[15:12] <creationix> then for..in, sure I can
+[15:13] <micheil> yeah, for ... in is slow.
+[15:13] <creationix> I benhmarked it, I was really surprized how slow for..in is especially once you add the hasOwnProperty check
+[15:13] <micheil> about 200ms difference / 10000
+[15:13] <micheil> i think
+[15:13] nsm has joined the channel
+[15:14] blackdog` has joined the channel
+[15:14] <creationix> it's because for..in has to look up the prototype chain for all enumerable properties
+[15:14] <creationix> Object.keys only checks the local object
+[15:14] <blackdog`> hi there, how do i do multipart in 0.1.90?
+[15:15] <creationix> hmm, I wonder how Object.keys(obj).forEach performs
+[15:15] <creationix> didn't bench that one
+[15:15] <N`> blackdog`: http://github.com/isaacs/multipart-js
+[15:15] <blackdog`> thanks
+[15:16] <creationix> ACTION does more benchmarking
+[15:16] sveisvei has joined the channel
+[15:17] <blackdog`> N`: will this be the official way of doing it?
+[15:18] <micheil> probably
+[15:18] <blackdog`> or rather, is Ryan not providing multipart in the base dist?
+[15:18] <micheil> _ry: ^^
+[15:19] felixge has joined the channel
+[15:19] felixge has joined the channel
+[15:19] <creationix> https://gist.github.com/bdd159b4f8f7c900d939
+[15:19] <creationix> I think isaacs' code is based on the one pulled from node
+[15:19] <N`> blackdog`: yes, multipart is no longer in node.js and isaacs has taken the code that was in node.js and made a lib from it
+[15:20] <blackdog`> ok, thanks
+[15:20] <creationix> is that the one that felixge is using too (or will use when he updates transload.it)
+[15:20] <creationix> _ry, see the gist for bench results
+[15:20] <felixge> creationix: I tried doing that earlier today, still working on it
+[15:21] <felixge> ryan unfortunately nuked the callbacks for fileStream.write() which makes things more diffcult
+[15:21] <felixge> plus, the new multipart module does not handle request objects directly anymore
+[15:21] <felixge> ACTION pain
+[15:22] <creationix> felixge, ouch, I'm sorry to hear that
+[15:24] <_ry> creationix: interesting
+[15:24] <_ry> felixge: well, they're not nuked yet
+[15:25] <creationix> so doing a forEach on the keys isn't that much slower than the raw inlined for over the keys
+[15:25] <creationix> I think that's a good compromise for node
+[15:26] <_ry> felixge: it should be pump(part, file)
+[15:26] <creationix> don't need an external helper function
+[15:26] <_ry> felixge: which, i admit, is probably rife with errors. but you should aim for that interface.
+[15:27] <creationix> do we have an official pump function yet?
+[15:27] <_ry> no
+[15:27] <creationix> or at least a defacto working example
+[15:27] <_ry> there is one here
+[15:27] <_ry> http://wiki.github.com/ry/node/streams
+[15:27] <creationix> oh yeah, how did I miss that one
+[15:28] <_ry> one problem is that i'm just not sure where to put it :)
+[15:28] <felixge> _ry: I don't think part complies to the stream api
+[15:28] <_ry> felixge: not yet, maybe, but it ought to
+[15:28] <felixge> ACTION hopes he won't end up writing his own multipart lib again
+[15:28] <felixge> _ry: I'll talk to isaacs
+[15:28] joshbuddy has joined the channel
+[15:28] <felixge> ACTION can't wait for 0.2.0 :)
+[15:29] <_ry> 0.2.0 is going to look very much like what it is now
+[15:29] <_ry> it's basically bug fixes from here on out
+[15:29] weepy has joined the channel
+[15:29] <weepy> hi im trying to convert some websocket code to 0.1.9
+[15:30] <creationix> ok, _ry, if it's ok I'll replace the for..in loops with a forEach over the keys and submit a patch
+[15:30] <creationix> I looked at implementing process.stdout as a sync stream, but it was a little over my head
+[15:30] <_ry> creationix: there are some places where i use cntinue
+[15:31] <weepy> I'm thinking socket.write('\u0000' + data + '\uffff', times); isn't working because of the move to Buffer 
+[15:31] <_ry> creationix: stderr you mean
+[15:31] <weepy> but I'm not really sure
+[15:31] <creationix> _ry, yes, sorry
+[15:31] <creationix> ok, then I'll make inline for loops over the keys then
+[15:31] <felixge> _ry: right, I mostly mean the time where node will finally have a stable ecosystem of libraries again and I don't have to write everything myself anymore :)
+[15:31] <creationix> that will keep the current semantics and be the fastest possible too
+[15:31] <creationix> just a little more code
+[15:32] <_ry> creationix: okay
+[15:32] <_ry> creationix: run 'make test-all' to test it
+[15:32] <creationix> of course, thanks
+[15:32] <_ry> creationix: no, thank you :)
+[15:33] <micheil> weepy: when do you need websockets by?
+[15:33] <creationix> weepy, it's a simple fix, just send the framing bytes as binary with seperate calls to write, or build a buffer and write using that
+[15:34] <micheil> weepy: I'm busy implementing a spec compliant version against HEAD, so, if you don't need it for a while, yeah
+[15:35] <micheil> it doesn't do much yet, but will: http://github.com/miksago/node-websocket-server
+[15:36] <creationix> weepy, also If you want something quick, mine is working today, it's just a little rough on the edges.  I'll fix issues as they arise in real code
+[15:40] brapse has joined the channel
+[15:45] fictorial has joined the channel
+[15:46] <mape> Is there any reason to use delete varName; or does the gc do it automagic after a while?
+[15:46] fictorial has joined the channel
+[15:46] <mape> (noticed it used in micheils code)
+[15:47] <_ry> i've heard it sends v8 into the slow case
+[15:47] <_ry> i.e. should be avoided
+[15:48] <mape> Ok
+[15:49] <creationix> hmm, found one for..in loop that returns on the first iteration, it must be checking to see if an object is empty or not
+[15:49] <micheil> _ry: should it?
+[15:49] <creationix> I'll have to benchmark to see if object.keys is still faster in that case
+[15:49] <micheil> _ry: news to me. I was using it purely to destory the buffers
+[15:51] <inimino> it's delete on objects that sends V8 into a slow path, I think
+[15:51] <inimino> on object properties, I mean
+[15:51] rednul has joined the channel
+[15:52] <inimino> delete foo.bar; // makes foo a hash-style object, not a hidden class instance
+[15:52] <inimino> delete foo; // is actually undefined in the language specification
+[15:53] <inimino> foo=undefined; // probably better
+[15:54] <inimino> micheil: ↑
+[15:54] <micheil> okay
+[15:54] <micheil> unless someone sets undefined
+[15:55] <inimino> in which case they get what they deserve :)
+[15:55] <micheil> okay
+[15:55] <micheil> what about unset?
+[15:55] <_ry> micheil: I avoid delete wherever possible
+[15:55] <inimino> unset?
+[15:55] <micheil> okay
+[15:56] <inimino> if you're using an object as a hash, it makes sense to use delete on it
+[15:56] <inimino> especially if you use for-in over it
+[15:56] <micheil> _ry: could you expose FreeList?
+[15:56] <inimino> since delete actually removes the property (rather than just making its value undefined) and there's no other way to do that
+[15:56] <_ry> micheil: where would we put it?
+[15:57] <micheil> I dunno
+[15:57] tisba_ has joined the channel
+[15:57] <micheil> make it a separate class
+[15:57] <micheil> it's useful
+[15:57] <micheil> module rather
+[15:57] <micheil> I know it's only small, but it's useful.
+[15:57] <_ry> hm, okay
+[15:57] <_ry> micheil: want to do that?
+[15:58] <micheil> okay.
+[15:58] <_ry> micheil: it's used in http.js too
+[15:58] <_ry> it has its own implementation at the moment
+[15:59] <micheil> yeah
+[15:59] tilgovi has joined the channel
+[15:59] <micheil> I'm still slightly unsure of how to exactly use it, but it looks useful
+[16:01] <micheil> wait. does FreeList even work?
+[16:02] <micheil> _ry: this.list.length should always be defined, no?
+[16:04] <creationix> _ry, in http.js line 270, I see you don't have the hasOwnProperty check till after some other logic
+[16:04] <creationix> are you expecting some data up in the prototype chain?
+[16:04] romainhuet has joined the channel
+[16:05] <inimino> I think we should really just tell people not to extend Object.prototype or use ES5 .defineProperty if they do
+[16:05] <inimino> adding hasOwnProperty tests everywhere is ugly, IMHO
+[16:05] <creationix> inimino, agreed, what I'm doing though it to replace the slow for..in calls with faster for loops over the keys
+[16:06] <creationix> but as a side effect you lose anything in the prototype chain
+[16:06] <inimino> is Object.keys.forEach faster in V8 now?
+[16:06] <creationix> much
+[16:06] <inimino> oh, carry on then :)
+[16:06] <inimino> good to know
+[16:06] <creationix> a for loop over the keys is almost 3 times faster than for..in with hasOwnProperty
+[16:06] <inimino> what about without?
+[16:07] bpot has joined the channel
+[16:07] <creationix> then only just over 2 times faster
+[16:07] <inimino> ok
+[16:08] <creationix> I'm hoping these changes will speed up the code a little, though most these loops are for reading configs and stuff
+[16:08] <creationix> nothing in the critical path
+[16:08] RayMorgan has joined the channel
+[16:08] aryounce has joined the channel
+[16:09] <mjr_> That's really surprising to me that for prop in obj is slower than Object.keys().forEach().
+[16:09] <mjr_> But it's the good kind of surprise, because I much prefer the latter style.
+[16:09] <creationix> it's because Object.keys can ignore the prototype chain
+[16:09] <creationix> it's only a win if you were wanting the base keys and had a hasOwnProperty check anyway
+[16:10] <mjr_> I love using the functional style with keys, forEach, map, etc.  I just assumed that they were all much slower.
+[16:11] <mjr_> _ry: I'll update the docs for the new repl code, sure.
+[16:12] <avidal> hrrrrm
+[16:15] <javajunky> I wonder how many more times someone will ask the same question about the web socket writes ;) 
+[16:15] <avidal> heh
+[16:15] <avidal> am i the only one who doesn't really like camelCase?
+[16:16] confounds has joined the channel
+[16:17] <N`> avidal: I do not like camelCase too
+[16:18] <micheil> _ry: how do I manage to load this new module?
+[16:18] <mjr_> I like that everybody uses camelcase, because then my own code's under_scores are very obviously different, and then library / system names are easy to distinguish. 
+[16:18] <mjr_> So keep it up with the camelcase everybody.
+[16:19] <N`> http://ozmm.org/posts/javascript_style.html is about that
+[16:22] <micheil> got it. needed to add it to the natives
+[16:23] maritz has joined the channel
+[16:25] dgathright has joined the channel
+[16:26] weepy_ has joined the channel
+[16:27] keeto_ has joined the channel
+[16:28] <micheil> _ry: patching your way!
+[16:29] <weepy_> Hi -> does anyone know how I would convert "socket.write('\u0000' + data + '\uffff');" for node 0.1.9 ?
+[16:29] <micheil> umm.. that would work.
+[16:29] <javajunky> *irony* , yes
+[16:29] <javajunky> micheil: would it ? 
+[16:29] <micheil> weepy: when do you need the websocket implementation by?
+[16:30] <javajunky> socket.write('\u0000'+data+'\uffff', 'binary') would ....
+[16:30] <micheil> oh
+[16:30] <micheil> wait.
+[16:30] <micheil> no.
+[16:30] <micheil> socket.write("\u0000", "binary"); socket.write(data, "utf8"); socket.write("\uffff"
+[16:31] <javajunky> socket.write('\u0000','binary');socket.write(data);socket.write(''\uffff', 'binary');  I think would also work…plus there's the buffer approach
+[16:31] <micheil> , "binary");
+[16:31] <micheil> yeah, buffers would also work.
+[16:31] <javajunky> so many web socket server implementations ;) 
+[16:31] <weepy_> heh
+[16:32] <weepy_> sorry - im a bit confused now :)
+[16:32] <micheil> javajunky: I'm working on another to be spec compliant, all others aren't
+[16:33] <micheil> _ry: incoming! https://gist.github.com/dea62ecdaca7da298347
+[16:33] <micheil> _ry: we'll document it later I think.,
+[16:33] <javajunky> I have to admit, socket.io is the one I'd like to see spec compliant, I"m currently using a patched node.ws variant , but socket.io does *so* much it'd be sweet
+[16:33] <micheil> meh.
+[16:33] Gruni has joined the channel
+[16:33] <micheil> I'm wanting specific things out of it, hence the reason I'm writing one
+[16:34] BinaryPie has joined the channel
+[16:34] <javajunky> isn't that everyone's excuse ;)
+[16:34] <micheil> yeah
+[16:34] <micheil> however, I'm wanting it to be just websockets to the spec.
+[16:34] <javajunky> yeah I've been following your tweets on it ;)
+[16:34] <micheil> heh heh
+[16:35] dnolen has joined the channel
+[16:35] <weepy_> FYI: => socket.write('\u0000' + data + '\uffff', 'binary'); <= seemed to work
+[16:36] <micheil> it's not right though
+[16:36] <javajunky> weepy_ yeah it will, but you may struggle to send true utf8 strings down there wire (its what I'm doing *lazily* in my case as I control the data) .. the other approaches are 'better' I believe..
+[16:36] <micheil> data should be in utf8
+[16:36] <inimino> and it's \u00ff that you want to send
+[16:37] <javajunky> inimino is it ? 
+[16:37] <inimino> javajunky: yes, it's a single byte
+[16:37] <javajunky> hmm crap  /me goes off to change some stuff.
+[16:37] <inimino> there's only 8 bits (two hex digits) in a byte
+[16:37] <javajunky> ;) yeah thanks for that
+[16:38] <inimino> binary encoding only uses the low byte anyway
+[16:38] <micheil> 0xFF
+[16:38] steadicat has joined the channel
+[16:38] <javajunky> hmm lesson learned, don't trust other people's code, always go straight to spec :) .. my bad
+[16:40] <micheil> latest spec is available here: http://www.whatwg.org/specs/web-apps/current-work/complete.html?slow-browser=1#network
+[16:40] <micheil> it may crash your browser.
+[16:40] <inimino> try the multipage version?
+[16:40] <javajunky> (I'd gone off and read http://tools.ietf.org/html/draft-hixie-thewebsocketprotocol-75#section-1.7 no idea which is more up to date)
+[16:40] <creationix> I think we all copied the socket.write('\u0000' + data + '\uffff') line from the same example
+[16:40] <javajunky> quite probably :)
+[16:41] <inimino> probably, I've seen someone mention \uffff in just about every Web sockets discussion ;)
+[16:41] <micheil> hmm.. 32bit integers..
+[16:42] <micheil> that is the default integer type in js isn't it?
+[16:44] <inimino> ECMAScript doesn't define any integer type at all
+[16:44] dgathright has joined the channel
+[16:44] indiefan has joined the channel
+[16:44] <inimino> Number values are guaranteed to support all unique integer values up to 2^53
+[16:45] <micheil> hmm..
+[16:45] <inimino> and if an engine uses 32-bit integers as an optimization, you shouldn't be able to detect it or that would be a bug
+[16:45] <micheil> "Let challenge be the concatenation of part1, expressed as a big-endian 32 bit integer, part2, expressed as a big-endian 32 bit integer, and the eight bytes of key3 in the order they were sent on the wire."
+[16:45] <micheil> mean anything to you?
+[16:45] <inimino> hm, not in JavaScript...
+[16:46] <creationix> why would someone do this? for (var i in addition) if (i && addition.hasOwnProperty(i)) {
+[16:46] <inimino> there's no way to tell endianness on Number values
+[16:46] <creationix> can for..in sometimes give falsy keys?
+[16:46] <inimino> creationix: yes, the empty string
+[16:46] <creationix> really, as a key?
+[16:46] <micheil> means something to narwhal. http://github.com/280north/narwhal/blob/master/lib/struct.js#L73
+[16:47] <inimino> js> o={'':42},a=[]; for (p in o) a.push(p); a
+[16:47] <gbot2> inimino: [""]
+[16:47] <inimino> my browser froze
+[16:47] <creationix> ok, I'll preserve the functionality, not sure why they want to single out empty keys when mixing in values though
+[16:48] <inimino> oh yeah, I loaded that spec :/
+[16:48] <inimino> creationix: maybe it's a bug...
+[16:48] <creationix> it's the mergeObjects function in querystring.js
+[16:48] <creationix> looks like a simple deepClone to me
+[16:50] <inimino> probably a bug then
+[16:51] <creationix> ACTION wonders why everyone seems to think that deep clones are always the solution
+[16:51] <micheil> js> (4146546015 >> 16) + ((4146546015 & 0xFFFF) >> 16)
+[16:51] <gbot2> micheil: -2265
+[16:51] <micheil> :/
+[16:52] <inimino> oh, I should have mentioned
+[16:52] <micheil> js> (4146546015 >> 16) + (((0 & 0xFFFF) + (4146546015 & 0xFFFF)) >> 16)
+[16:52] <gbot2> micheil: -2265
+[16:52] <inimino> all the bitwise operators convert operands to 16-bit integers before doing anything else
+[16:53] dandean has joined the channel
+[16:53] <micheil> so.. to get a 32 bit integer..
+[16:54] <RayMorgan> They get truncated to 32 bit integers...
+[16:54] <RayMorgan> https://developer.mozilla.org/En/Core_JavaScript_1.5_Reference/Operators/Bitwise_Operators
+[16:54] <inimino> sorry
+[16:54] <inimino> yes, I meant to say 32
+[16:56] brianmario has joined the channel
+[16:57] robinduckett has joined the channel
+[16:57] <robinduckett> Hello
+[16:57] <robinduckett> Anyone alive?
+[16:58] <atmos> nope
+[16:58] <robinduckett> Good stuff
+[16:58] <inimino> micheil: yeah, the endianness stuff in that file seems dealing with string conversions
+[16:59] <micheil> hmm
+[16:59] <robinduckett> Small question, what shall I do if I'm getting a segmentation fault?
+[16:59] <micheil> so, what would be the best approach?
+[16:59] <creationix> ACTION running make test-all after my large patch, wonders how many failures I'll get
+[16:59] <inimino> micheil: strings are treated as strings of unsigned 16-bit values, so if you are reading 32-bit values out of a string, you have to care about the endianness of the string
+[17:00] <inimino> so read two characters, left shift one by 16 bits and or them
+[17:00] <inimino> where 'read' means charCodeAt()...
+[17:02] <micheil> so.. uh..
+[17:03] <micheil> inimino: lost me big time, sorry
+[17:03] <inimino> micheil: what's your goal?
+[17:03] gwoo has joined the channel
+[17:04] <micheil> uh, to do what the spec says
+[17:04] <inimino> ACTION scrolls up
+[17:04] <micheil> "et challenge be the concatenation of part1, expressed as a big-endian 32 bit integer, part2, expressed as a big-endian 32 bit integer, and the eight bytes of key3 in the order they were sent on the wire."
+[17:04] <inimino> ah...
+[17:04] <inimino> I didn't realize that was from WS
+[17:04] <micheil> yeah
+[17:05] <micheil> it's part of the websocket security model
+[17:05] ssteinerX has joined the channel
+[17:08] <_ry> it's very important that node script | head -1 works
+[17:08] <micheil> hmm?
+[17:09] <micheil> _ry: get the patch?
+[17:09] <inimino> this Sec- stuff is new since I last looked at Web Sockets
+[17:09] <micheil> it is new
+[17:09] <_ry> script.js: while (true) { require('sys').puts('hello') }
+[17:09] <micheil> last few weeks
+[17:09] <_ry> ^-- this ought to be killed by head -1
+[17:10] <_ry> micheil: yes, testing it
+[17:10] <micheil> k
+[17:10] teemow has joined the channel
+[17:12] <creationix> _ry, got my patch done, and it's passing all the tests except for test-http-head-request
+[17:12] <creationix> not sure how that one broke, but I'm debugging it
+[17:12] <_ry> creationix: okay
+[17:12] <_ry> test-http-head-request is a known issue
+[17:12] <creationix> really?
+[17:12] <_ry> yes
+[17:12] <_ry> http://github.com/ry/node/commit/93913dbdb8f621bef46c61d1f8a824a19a57dfa5
+[17:13] <creationix> ahh, makes sense now
+[17:13] <creationix> ok then, sending patch...
+[17:14] <creationix> ry: should I cc the mailing list so others can review it, or just send it direct to you?
+[17:14] <creationix> _ry: ^
+[17:14] <_ry> just paste it here
+[17:16] felixge has joined the channel
+[17:16] felixge has joined the channel
+[17:16] <creationix> _ry: http://gist.github.com/363785
+[17:19] <creationix> I did find a bug in http cat while I was refactoring, it wasn't checking for the case of array style headers when looking for the hostname header to replace
+[17:19] <inimino> micheil: ok, so you need a MD5 implementation
+[17:19] <micheil> yeah
+[17:20] <inimino> micheil: if you find one it will probably take input as a string
+[17:20] <micheil> in which case, I do: part1+""+part2+""+part3
+[17:20] <micheil> and md5 it
+[17:20] <micheil> yeah?
+[17:20] <inimino> no
+[17:20] <micheil> ?
+[17:20] <inimino> part1 and part2 are your 32-bit numbers?
+[17:21] <micheil> yeah
+[17:21] <inimino> so it's...
+[17:21] teemow has joined the channel
+[17:23] Hieu has joined the channel
+[17:23] <inimino> String.fromCharCode(part1>>>16, part1 & 0xFF, part2>>>16, part2&0xFF) + part3
+[17:23] <inimino> micheil: should be something like that
+[17:23] <micheil> okay
+[17:24] <inimino> hm
+[17:24] <micheil> js> String.fromCharCode(829309203>>>16, 829309203 & 0xFF, 259970620>>>16, 259970620&0xFF) + ^n:ds[4U
+[17:24] <gbot2> micheil: Error: SyntaxError: syntax error:  String.fromCharCode(829309203>>>16, 829309203 & 0xFF, 259970620>>>16, 259970620&0xFF) + ^n:ds[4U  ...........................................................................
+[17:25] <micheil> js> String.fromCharCode(829309203>>>16, 829309203 & 0xFF, 259970620>>>16, 259970620 & 0xFF) + ^n:ds[4U
+[17:25] <gbot2> micheil: Error: SyntaxError: syntax error:  String.fromCharCode(829309203>>>16, 829309203 & 0xFF, 259970620>>>16, 259970620 & 0xFF) + ^n:ds[4U  .........................................................................
+[17:25] <inimino> needs more quotes
+[17:25] <micheil> js> String.fromCharCode(829309203>>>16, 829309203 & 0xFF, 259970620>>>16, 259970620 & 0xFF) + "^n:ds[4U"
+[17:25] <gbot2> micheil: "ㅮཾ<^n:ds[4U"
+[17:25] <micheil> :/
+[17:25] <micheil> I don't think that's right.
+[17:25] <inimino> hm
+[17:26] sveisvei has joined the channel
+[17:26] <inimino> it's not right
+[17:26] <micheil> js> String.fromCharCode(0x36, 0x09, 0x65, 0x65, 0x0A, 0xB9, 0x67, 0x33, 0x57, 0x6A, 0x4E, 0x7D, 0x7C, 0x4D, 0x28, 0x36)
+[17:26] <gbot2> micheil: "6	ee\n¹g3WjN}|M(6"
+[17:27] <micheil> ugh.
+[17:27] <micheil> fail. I'm using the wrong data
+[17:27] <_ry> creationix: i wish we had code review :(
+[17:27] <inimino> ok
+[17:28] <creationix> _ry: I know
+[17:28] <inimino> micheil: are you on the right track, anyway?
+[17:28] <creationix> are there problems?
+[17:28] <_ry> creationix: +  for (var socket in activeWatchers) if (activeWatchers.hasOwnProperty(socket)) {
+[17:28] <_ry> can we make this with braces
+[17:28] <_ry> around the for
+[17:28] <_ry> dns.js
+[17:28] <micheil> inimino: I think so
+[17:28] <inimino> ok, I'm going to go get lunch bbl
+[17:29] <creationix> _ry: on two lines or one?
+[17:29] <_ry> creationix: total nit
+[17:29] <_ry> creationix: two
+[17:29] dnolen has joined the channel
+[17:29] <creationix> ok, I prefer two lines also, I had left it on one line so I could see the hasOwnProperty check in my search results
+[17:30] <creationix> but now I think it's the only one left, so it's easy to find
+[17:30] <micheil> js> String
+[17:30] <gbot2> micheil: <function String() { [native code] }>
+[17:30] <micheil> js> String.prototype
+[17:30] <gbot2> micheil: {}
+[17:30] <micheil> js> String.toCharCode("㘉eહ3WjN}|M(6")
+[17:30] <gbot2> micheil: Error: TypeError: String.toCharCode is not a function 
+[17:31] <micheil> js> "㘉eહ3WjN}|M(6".toCharCode()
+[17:31] <gbot2> micheil: Error: TypeError: "ãeàª¹3WjN}|M(6".toCharCode is not a function 
+[17:31] <creationix> _ry: updated the gist
+[17:31] mjr_ has joined the channel
+[17:32] <micheil> js> ""㘉eહ3WjN}|M(6"".charCodeAt()
+[17:32] <gbot2> micheil: Error: SyntaxError: missing ; before statement:  ""ãeàª¹3WjN}|M(6"".charCodeAt()  ..^ 
+[17:32] <micheil> js> "㘉eહ3WjN}|M(6".charCodeAt()
+[17:32] <gbot2> micheil: 227
+[17:32] <micheil> "6ee\n¹g3WjN}|M(6".charCodeAt()
+[17:32] <micheil> js> "6ee\n¹g3WjN}|M(6".charCodeAt()
+[17:32] <gbot2> micheil: 54
+[17:32] <micheil> :/
+[17:35] piranha has joined the channel
+[17:35] Hieu has joined the channel
+[17:35] <micheil> _ry: are there any encoding converts, eg, Encoder.convert(str, from, to)
+[17:35] BiscuitsLap has joined the channel
+[17:35] Hieu has left the channel
+[17:35] xer0x has joined the channel
+[17:36] nsm has joined the channel
+[17:36] javajunky has joined the channel
+[17:38] <micheil> js> String.fromCharCode(0x36, 0x09, 0x65, 0x65, 0x0A, 0xB9, 0x67, 0x33 )
+[17:38] <gbot2> micheil: "6	ee\n¹g3"
+[17:39] <micheil> "906585445".charCodeAt()
+[17:40] <micheil> js> "906585445".charCodeAt()
+[17:40] <gbot2> micheil: 57
+[17:40] <micheil> js> "9".charCodeAt()
+[17:40] <gbot2> micheil: 57
+[17:40] <micheil> js> "906585445".charCodeAt(2)
+[17:40] <gbot2> micheil: 54
+[17:40] <micheil> js> "906585445".charAt()
+[17:40] <gbot2> micheil: "9"
+[17:40] <micheil> hmm..
+[17:40] <_ry> micheil: no
+[17:41] <micheil> hmm?
+[17:41] <micheil> oh, right
+[17:41] <creationix> micheil: why do buffers not work for you?
+[17:42] <creationix> they should be easier than all this string junk
+[17:42] <micheil> uhh
+[17:42] <micheil> "Let challenge be the concatenation of part1, expressed as a big-endian 32 bit integer, part2, expressed as a big-endian 32 bit integer, and the eight bytes of key3 in the order they were sent on the wire."
+[17:42] <micheil> that's why./
+[17:43] <creationix> I saw that, but how do strings work better than buffers
+[17:43] <micheil> because, we're needing to convert things to 32 bit ints.
+[17:44] <creationix> yes, but you need to store those big-endian integers somewhere no?
+[17:45] <creationix> Strings will do crazy unicode stuff on you if you're not careful
+[17:48] <CIA-77> node: 03Tim Caswell 07master * r62d9852 10/ (8 files in 2 dirs): Replace slow and broken for..in loops with faster for loops over the keys. - http://bit.ly/ak7z3M
+[17:48] <micheil> :/
+[17:48] <micheil> I'm not sure
+[17:48] <creationix> micheil, what's the input to your function you're trying to write
+[17:48] <mjr_> Surely it would be straightforward to add methods to Buffer to slice out things like ints in both endian flavors.
+[17:49] CodeOfficer has joined the channel
+[17:49] <creationix> I'm assuming part1 and part2 are just random 32 bit integers that come across the wire as 32 bits of data
+[17:50] <creationix> mjr_: and put them back in
+[17:50] <mjr_> yeah, absolutely
+[17:50] <mjr_> Buffer is great. 
+[17:50] psynaptic has left the channel
+[17:51] <avidal> is that bot from github or something else?
+[17:51] <avidal> cia.vc, checking now!
+[17:51] <avidal> ah, cool
+[17:53] <mjr_> cia.vc is super fast just clicking around on things.
+[17:53] <_ry> creationix: thanks for the patch
+[17:53] <_ry> micheil: still having problems with yours
+[17:53] <creationix> _ry, no problem, hopefully nothing breaks
+[17:54] <micheil> hmm..
+[17:54] <_ry> micheil: http://gist.github.com/363823
+[17:54] <avidal> apparently the blog is very outdated though
+[17:54] <avidal> no mention of it working at all for github for instance
+[17:55] <micheil> _ry: how so?
+[17:56] <_ry> the http changes are breaking things.. 
+[17:56] <micheil> oh
+[17:56] <micheil> yeah, I just implemented for net
+[17:56] <_ry> but i'll check it out later
+[17:56] <_ry> gtg now
+[17:56] <micheil> k
+[17:56] <_ry> late
+[18:09] kriskowal has joined the channel
+[18:11] fizx has joined the channel
+[18:11] fizx has joined the channel
+[18:12] towski has joined the channel
+[18:15] piranha has joined the channel
+[18:16] frodenius has joined the channel
+[18:19] <inimino> micheil: yeah, if you can use Buffer it might be easier, but JavaScript strings won't do any "crazy unicode stuff", they are just sequences of unsigned 32-bit integers
+[18:19] <inimino> erm, 16-bit integers
+[18:22] WALoeIII has joined the channel
+[18:26] Aduros has joined the channel
+[18:30] brianmario_ has joined the channel
+[18:30] aryounce has joined the channel
+[18:31] charlesjolley has joined the channel
+[18:33] creationix has joined the channel
+[18:33] <mjr_> I guess I don't understand JS Strings then, because I often find myself in crazy unicode land while doing binary stuff.
+[18:40] fizx has joined the channel
+[18:41] fizx has joined the channel
+[18:42] <inimino> mjr_: if you just use charCodeAt() and fromCharCode you can treat them just like strings of 16-bit integers and they are completely transparent
+[18:43] <inimino> if you print them or use them with node, or read UTF-8 data from the network or something, then you have to think about encoding issues
+[18:45] <_ry> mjr_: yeah, the logic for http client is very crappy
+[18:46] <_ry> it needs to be refactored at some point
+[18:46] <_ry> (looking at your error now)
+[18:46] <mjr_> do you at least get that Stream already opened thing on your machine?
+[18:46] <_ry> (experiencing it n linux)
+[18:46] <mjr_> oh, good
+[18:46] <mjr_> bad that we have this bug, but good that it's not just me.  :)
+[18:47] botanicus has joined the channel
+[18:53] javajunky has joined the channel
+[18:59] mikeal has joined the channel
+[19:03] aho has joined the channel
+[19:06] malkomalko has joined the channel
+[19:07] N` has joined the channel
+[19:14] <creationix> websockets are popular today http://remysharp.com/2010/02/14/slicehost-nodejs-websockets/
+[19:15] <creationix> hmm, seems to be an old article, wonder why he just tweeted it
+[19:25] ayo has joined the channel
+[19:28] aho has joined the channel
+[19:29] <mape> it's a trap!
+[19:30] piranha has joined the channel
+[19:32] <fictorial> weird thing about that is that slicehost is rackspace
+[19:32] <fictorial> I wouldn't touch either of them
+[19:35] <inimino> I'm happy with slicehost
+[19:35] <inimino> I've been using them since before they were bought
+[19:36] <CIA-77> node: 03Ryan Dahl 07master * r4681e34 10/ lib/net.js : 
+[19:36] <CIA-77> node: Fix a race condition or two in net.js
+[19:36] <CIA-77> node: When making a TCP connection, readyState returns 'opening' while resolving
+[19:36] <CIA-77> node: the host. However between the resolving period and the establishing a
+[19:36] <CIA-77> node: connection period, it would return 'closed'. This fixes it.
+[19:36] <CIA-77> node: This change also ensures that the socket is closed before the 'end' event is
+[19:37] <CIA-77> node: emitted in the case that the socket was previously shutdown. - http://bit.ly/cYYZS7
+[19:37] <_ry> mjr_: fixed it, i think---^
+[19:37] <mjr_> sweet, lemme update and try it out
+[19:37] admc has joined the channel
+[19:38] <mjr_> fictorial: what's your issue with slicehost?  I've been pretty happy with them for the past month.
+[19:39] <fictorial> I don't trust rackspace; poor track record.
+[19:42] Iveaux has joined the channel
+[19:42] <mjr_> _ry: seems to be fixed on my http proxy, and I can't make test-http.js fail either.
+[19:42] <mjr_> But it seems to have broken test-repl.js  !
+[19:43] <mape> is it possible to run websockets crossdomain?
+[19:43] <_ry> mjr_: test-repl was already broken
+[19:43] <_ry> unless you're experiencing something else
+[19:43] <mjr_> It worked for me last night, but stopped working after I just pulled your latest.
+[19:44] <_ry> what's your error?
+[19:44] <mjr_> I'll take a look.
+[19:44] <_ry> http://gist.github.com/363887
+[19:44] <_ry> is it that--^
+[19:44] rictic has joined the channel
+[19:44] aryounce has joined the channel
+[19:44] <mjr_> yeah, where's "invoked" coming from?
+[19:45] <_ry> the problem is with test-repl is that it's making assumptions about message boundries based on when the 'data' event is fired
+[19:45] <mjr_> oh, indeed it does.
+[19:45] <_ry> the stream needs to be buffered and .indexOf('\n') used
+[19:45] <_ry> then slice off a line
+[19:46] <mjr_> Right.
+[19:46] <_ry> https://gist.github.com/a3d0bbbff196af633995 like line 437
+[19:46] <mjr_> But I might still say that "invoked 333" is unexpected.
+[19:47] stephenlb has joined the channel
+[19:48] <JimBastard> which version of node should module creators be targeting. 1.3 or head?
+[19:48] <JimBastard> kinda confused
+[19:48] <_ry> 0.1.90 is nearly API stable
+[19:49] <JimBastard> awesome, ive been building on 1.9
+[19:49] <JimBastard> thanks
+[19:49] <JimBastard> ive been trying to kepp all my projects updated to HEAD
+[19:51] mravaux has joined the channel
+[20:03] <JimBastard> hey creationix 
+[20:03] <JimBastard> i ran into a problem with step last night
+[20:03] <creationix> what's up
+[20:03] <JimBastard> not so much a problem but perhaps a limitation
+[20:04] <JimBastard> so i needed to read all the files of a directory and append the contents to some variable
+[20:04] <JimBastard> using step i'd have to be able to dynamically create the steps
+[20:05] <JimBastard> i got the point where i had an array full of methods in the order i wanted to step them
+[20:05] <JimBastard> but i wasnt sure how to send that to the Step method as parameters
+[20:05] <JimBastard> i wound up building a custom method called readDirectoryFiles
+[20:05] <creationix> for that case you don't need dynamic steps
+[20:05] <inimino> I like the new docs
+[20:05] <JimBastard> how would you recommend doing it?
+[20:05] <creationix> but if you did, just do Step.apply(null, steps)
+[20:05] <creationix> Step is just a function after all
+[20:06] <creationix> so what is your goal, to read the contents of a list of files into a single variable?
+[20:08] <JimBastard> pretty much yeah
+[20:08] <JimBastard> i knew i was being dumb
+[20:08] <JimBastard> .apply of course
+[20:09] towski has joined the channel
+[20:09] <JimBastard> http://github.com/Marak/hook.io/blob/master/hookio/protocols/documentation.js -> readAllFiles
+[20:09] <JimBastard> rough draft from late last night
+[20:10] <JimBastard> just recurses over the list checking if its the last file
+[20:10] Yuffster_ has joined the channel
+[20:12] <creationix> also I added some significant api to Step the other day that's not documented yet
+[20:12] <mikeal> JimBastard: why isn't CrockBot in #couchdb :)
+[20:12] <CrockBot> Douglas Crockford is Chuck Norris' stunt double.    ara_p
+[20:12] <JimBastard> i can fix that
+[20:13] <JimBastard> gimme a sec
+[20:13] maushu has joined the channel
+[20:14] CrockBot has joined the channel
+[20:16] <creationix> JimBastard: I'm writing you an example using step to see what you think
+[20:16] <JimBastard> thanks man
+[20:16] pedro has joined the channel
+[20:16] <JimBastard> i aliased Step to hookIO.Step btw
+[20:17] <JimBastard> the way that hook.io works is that you have access to the hookIO variable everywhere (custom definition and protocols)
+[20:17] <JimBastard> so now people doing custom hook.io stuff can just call on Step
+[20:20] <creationix> cool
+[20:20] mattly has joined the channel
+[20:21] <creationix> why does your readAllFiles take so many arguments
+[20:21] <JimBastard> i know i know
+[20:21] <JimBastard> it was like 4am man
+[20:21] <JimBastard> :p
+[20:21] <JimBastard> ive been up all weekend writing documentation
+[20:21] <JimBastard> hook.io theBook
+[20:22] <JimBastard> readAllFiles could be rewritten to make a lot more sense and be a good helper
+[20:22] <JimBastard> i was thinking maybe readFilesInDirectory or something could be a fs call
+[20:22] <JimBastard> or readDirectory could return file handles
+[20:22] <JimBastard> unless there is already an option to do that? i didnt find it in the docs
+[20:23] <creationix> no, it's too high level for the fs module
+[20:23] <creationix> I do it all the time in my stuff
+[20:23] <JimBastard> would be a decent helper
+[20:23] <JimBastard> hey felixge any status ;-)
+[20:24] <creationix> JimBastard: how about something that takes a path, a regex, and returns an object with filenames matching the regex and their contents?
+[20:25] <JimBastard> huh?
+[20:25] <JimBastard> i want to send in a path and a filter and get back an array of file contents
+[20:25] <JimBastard> are we on the same page?
+[20:26] <JimBastard> i'd rather it be a filter method on an array then a regex?
+[20:26] <creationix> fs.globAndRead(hookIO.PATH + '/docs', /\.md$/, function (err, contents) {...})
+[20:26] <creationix> well a regex is a function
+[20:26] <creationix> just with special implementation
+[20:26] <creationix> you could drop in a function if you needed more capibilities
+[20:26] <JimBastard> well no, by forcing regex as a parameter you can forcing regex
+[20:26] <JimBastard> aye
+[20:26] <JimBastard> exactly
+[20:26] <JimBastard> creationix is fucking smart
+[20:26] <JimBastard> ahaha
+[20:27] <JimBastard> i'm good for now though, the .apply trick for Step should help
+[20:27] <JimBastard> my current method is OK for now, just not pretty or really reusable
+[20:27] <creationix> also, have you seen Step.fn from my latest version
+[20:28] <JimBastard> im using latest version i think
+[20:28] <JimBastard> it would be cool if you put up some more docs on the using the "advanced" features of step
+[20:28] <creationix> I don't think Step.fn is documented in the README, but it has a cool comment
+[20:28] <creationix> I might after I'm done with wheat, it's using step all over the place
+[20:29] <felixge> JimBastard: I want to kill myself
+[20:29] <felixge> JimBastard: I'm thinking Java or ColdFusion, can't decide
+[20:29] <creationix> felixge: wrong answer, try again
+[20:29] <JimBastard> i have 8 years of professional CF experience, sup?
+[20:29] <felixge> creationix: Cobol?
+[20:30] <creationix> now you're talking, I hear that pays well in California
+[20:30] <felixge> whatever is most painful :)
+[20:30] <JimBastard> i would highly suggest .net
+[20:30] <JimBastard> its just the right combination of super powerful and super painful
+[20:30] <JimBastard> so you kinda get results, but you are stuck in ms hell
+[20:30] <creationix> no, .net isn't painful, it lulls you into numbness and turns you into a zombie
+[20:30] sveisvei has joined the channel
+[20:31] <JimBastard> and the win32 api slowly chokes you while you are sleeping
+[20:31] <felixge> alternatively one of you guys could do my accounting, launch that startup, finish dirty & the presentation and work on my mail/email backlog. :)
+[20:31] <JimBastard> :p
+[20:32] <JimBastard> its gonna take me about a day or so to rewrite my query library and install dirty
+[20:32] <JimBastard> so ughh pllleeeeeeeeeeeease
+[20:33] <JimBastard> ill send you internet dollars
+[20:33] <mikeal> _ry: I think you fixed my bug :)
+[20:33] <JimBastard> im not above begging
+[20:33] <_ry> mikeal: sweet
+[20:33] <_ry> mikeal: i was hoping that did it
+[20:34] <mikeal> I'll move on to more testing now so that i can move to 0.1.90 as soon as it's released
+[20:34] <creationix> so we're all going to be dead tired by the time jsconf gets here from preparing for it, isn't that counter productive?
+[20:35] <mape> when is jsconf?
+[20:35] <_ry> this weekend
+[20:35] derbumi has joined the channel
+[20:35] <mikeal> i'm wondering if it's time yet to be bitter about all the people that get to go when I don't :P
+[20:35] <JimBastard> im an animal creationix ill just sleep on the bus
+[20:35] <mattly> man i wish i was going to jsconf after all
+[20:36] <JimBastard> mikeal i dont have a ticket im just crashing the parties
+[20:36] <mattly> it was great last year
+[20:36] brianmario has joined the channel
+[20:36] <mikeal> i can't put the flight and hotel on my corporate card just to crash the parties :)
+[20:36] <deanlandolt> JimBastard: you hanging around for most of it?
+[20:36] <creationix> mikeal: I'm not going either
+[20:36] <mjr_> mikeal: I think it's time to be bitter.  I've already started.
+[20:36] <JimBastard> deanlandolt: maybe......friday for sure. if i win that magic ticket ill stay all weekend for sure
+[20:36] <mikeal> we'll have out own conference mjr_
+[20:36] <felixge> JimBastard: actually, let me get some beer and fucking do it
+[20:36] <mikeal> in Oakland
+[20:36] <JimBastard> i hear the sat night party is dope
+[20:36] <mikeal> fuck you guys
+[20:36] <felixge> tonight is ruined anyway
+[20:36] <felixge> :)
+[20:36] <mjr_> the 'Town
+[20:36] <JimBastard> deal felixge 
+[20:36] <mikeal> it'll be at the Trappist
+[20:37] <mikeal> and it lasts 3 days :)
+[20:37] <creationix> felixge: good luck
+[20:37] <creationix> is anyone in this room from Texas?
+[20:37] <felixge> creationix: I'm not sure I trust your for var in tests, what were the biggest objects you tested? I saw similar performance of Object.keys() / for var in for huge objects (millions of keys)
+[20:37] <mjr_> mikeal: surely couchio will host some sort of thing like that, right?  Two conference rooms: one in the office, one at the Trappist.
+[20:38] <creationix> felixge: my benchmark was 500 keys, I tested it for smaller numbers too
+[20:38] <mikeal> for serious, we will be doing a CouchCamp in the fall
+[20:38] <creationix> most the code I replaced was using less than 10 heys
+[20:38] <creationix> *keys
+[20:38] <mikeal> but we're going to rent a camp spot in the woods
+[20:38] <_ry> creationix: where's your gist?
+[20:39] <creationix> https://gist.github.com/bdd159b4f8f7c900d939
+[20:39] <mjr_> mikeal: sounds great
+[20:39] <creationix> uses issacs/node-bench to run
+[20:39] <mikeal> I think we'll also do another CouchHack that lines up with it
+[20:39] <mikeal> for people working *on* couch rather than *with* couch
+[20:39] <fictorial> heh, where do I start debugging this? IOWatcher.callback (net:329:16)
+[20:39] <fictorial> node.js:814:9
+[20:40] <fictorial> that's the entire output
+[20:40] <mjr_> mikeal: don't know what all these CouchWords mean, but I do like the idea of not feeling left out of jsconf.
+[20:40] <creationix> felixge: that makes sense for objects with large numbers of keys and a shallow prototype chain, the savings you get shows up more when you can feel the cost of the prototype chain
+[20:42] <felixge> creationix: ok, makes sense. Man I wish there was such a thing as iterators of objects
+[20:42] <felixge> so I could start iterating, pause, continue, etc.
+[20:42] <creationix> that would be neat
+[20:44] <deanlandolt> kriszyp's been pushing on the es group with a proposal that does that
+[20:46] <felixge> deanlandolt: he's a good man :)
+[20:49] <creationix> Why did I get this: TypeError: /\.js$/ is not a function
+[20:50] <creationix> ahh, typeof a RegExp is function, but it's not an instance of Function, that's weird
+[20:51] <mjr_> isn't that true of all constructors?
+[20:51] <creationix> JimBastard: this should help https://gist.github.com/9dde3c73d28b445f04bc
+[20:51] <mjr_> typeof Number === 'function' as well
+[20:51] <creationix> no, not the constructor RegExp, but an instance of it
+[20:51] indiefan has joined the channel
+[20:52] <creationix> you can call regular expressions as if they were functions
+[20:52] <creationix> but apparently, you can't pass them as the function callback to Array.prototype.filter
+[20:52] <mjr_> Oh, I didn't know you could invoke regexps.
+[20:53] <mjr_> but sure enough, you can.
+[20:53] <creationix> yep, it's like calling match I think
+[20:53] <fictorial> guys, I have an uncaughtException handler but I cannot get a stack trace inside of it.  Error.captureStackTrace does not seem to be documented.  I looked at the v8 source and well, I have no idea what the parameters are for.
+[20:53] mjijackson has joined the channel
+[20:54] isaacs has joined the channel
+[20:54] <_ry> step is pretty nice
+[20:56] <JimBastard> sup mjijackson 
+[20:56] <mjijackson> Hey JimBastard 
+[20:57] <JimBastard> yeah Step is pretty sweet _ry , makes things simple
+[20:57] <JimBastard> mjijackson its really cool you released mint today, i created a documentation protocol for hook.io just last night
+[20:57] <JimBastard> im already autogenerating docs based on the github markdown files
+[20:57] <JimBastard> so now i just need the other half
+[20:57] <felixge> fictorial: the stack trace should be captured the moment the error is created for normal stuff, you might be hitting a runtime JS error which I think is handled differently?
+[20:57] <mikeal> _ry: I still have this error, Error: Stream.close() called already; cannot write.
+[20:57] <inimino> creationix: it's probably a bad practice to call them (though I've seen someone here do it...) but yeah, they are typeof 'function' (and callable) for historical reasons
+[20:57] <mikeal> when writing
+[20:58] <mikeal> and i *know* that it hasn't been closed
+[20:58] hellp has joined the channel
+[20:58] <mikeal> i have listeners on close, end, and error and none of them have fired
+[20:58] <creationix> inimino: I only do it when I want an api that I can drop in a full function instead of a regexp, like when writing simple lexers.
+[20:59] <inimino> creationix: I think it's the sort of thing that might go away in some future strict mode, which is why I avoid it, but I guess as long as it works...
+[21:00] <creationix> yeah, no biggie, I can change my code if the language changes, If I couldn't handle that kind of change, I'd never use node ;)
+[21:01] <mjijackson> JimBastard: Nice. You're using Mint to do it?
+[21:02] <mjijackson> Or you already had something else set up?
+[21:02] <JimBastard> http://github.com/Marak/hook.io/blob/master/hookio/protocols/documentation.js
+[21:02] <JimBastard> so my docs are its split into multiple MD files in a directory
+[21:03] <JimBastard> i just concat them together and output as html or whatever
+[21:03] <mjijackson> Ah, i see.
+[21:03] <JimBastard> pdf / png /
+[21:03] <creationix> ok, I'd better close this window or I'll never get my work done today, email me if anyone has questions.
+[21:03] creationix has left the channel
+[21:03] <JimBastard> so now i need the code docs so i can place them inside the output
+[21:03] <JimBastard> maybe ala Mustache
+[21:03] <JimBastard> or just dump them into another dir
+[21:04] <mjijackson> JimBastard: I've grown really fond of Mustache lately. So many template languages don't really help you write clean templates.
+[21:04] <JimBastard> mustache is just simple
+[21:04] <JimBastard> and im pretty retarded
+[21:04] <mjijackson> Mustache actually helps you by preventing you from doing any logic.
+[21:04] <JimBastard> so it makes sense to me
+[21:04] <mjijackson> I like code that helps you do the right thing. ;)
+[21:05] <JimBastard> does Mint have a sample output anywhere?
+[21:05] <JimBastard> like maybe can you self document mint and post the html online?
+[21:07] <mjijackson> JimBastard: Yeah. It's on my hard drive. ;) I should have probably created a website for Mint before posting to the mailing list, but I wanted to release early.
+[21:07] <JimBastard> well really
+[21:07] <JimBastard> can you update to 1.9 ?
+[21:07] <deanlandolt> mjijackson: you could just push the generated docs to github :)
+[21:08] <JimBastard> i could go through and do it but im like insanely backlogged like everyone else this week
+[21:08] <mjijackson> Right now the output is very similar to the CoffeeScript docs.
+[21:08] <JimBastard> ive got issues http://github.com/marak/hook.io/issues
+[21:09] <mjijackson> deanlandolt: Will do.
+[21:09] <deanlandolt> mjijackson: oh, nice...looks like atul varma's work from a few years back
+[21:09] <deanlandolt> or, just a year back i guess: http://www.toolness.com/wp/?p=441
+[21:11] <mjijackson> JimBastard, deanlandolt http://github.com/mjijackson/mint/blob/master/doc/api/mint.html
+[21:12] <mjijackson> deanlandolt: Wow. That does look similar. I wonder if that's where jashkenas got the idea?
+[21:15] <mjr_> Man, scripting a test of multiple servers and clients interacting with each other is tricky.
+[21:16] <kriskowal> mjr_ amen.
+[21:16] <kriskowal> s/amen/so say we all/
+[21:16] <mjr_> I keep thinking I've come up with a simple abstraction for it, and then it falls down some other place.
+[21:17] <kriskowal> should be easier to model in node than most other systems
+[21:18] <mjijackson> mjr_: The best cure for async madness is a walk in the park. I always have my best ideas when I'm not at my desk.
+[21:19] <mjijackson> mjr_: That is, of course, if it's making you crazy.
+[21:19] drostie has joined the channel
+[21:19] joshbuddy has joined the channel
+[21:19] <mjr_> Yeah, I think I'm going to do something else for a while that promises to be easy.
+[21:20] <mikeal> _ry: I've done a lot of debugging on this and I kind of need to know what you think at this point
+[21:21] <_ry> mikeal: ?
+[21:21] <mikeal> so, (socket._writeQueueLast() == END_OF_FILE) is true before something is pushed to the writeQueue
+[21:21] <mikeal> but if I check socket._writeQueueLast() before I call .write() on the response
+[21:21] <mikeal> it's not END_OF_FILE yet
+[21:23] <_ry> mikeal: maybe it's drained since then?
+[21:24] <mikeal> it should be blocking on processing between my call to write and making it this far in the stack
+[21:24] <mikeal> shouldn't it?
+[21:24] <JimBastard> yo mjijackson those docs look pretty good
+[21:25] <mjijackson> JimBastard: Thanks! Lots more features to come. As soon as I can get some time to hack on it.
+[21:25] <mikeal> is END_OF_FILE actually sent as a chunk to the data event in the http client
+[21:25] <_ry> mikeal: no, it just triggers shutdown()
+[21:25] <mikeal> ok, then that's not the problem
+[21:26] <mikeal> nobody has called end or error or anything
+[21:26] <JimBastard> if you can update to 1.9 i'll hook it up into hook.io this week for sure
+[21:26] darkf has joined the channel
+[21:27] <mjijackson> JimBastard: Yeah. I'll definitely get it onto 1.9 before the end of the week.
+[21:28] derbumi has joined the channel
+[21:28] <mjijackson> Node is a fast-moving target!
+[21:29] <mikeal> this is driving me mad
+[21:29] <JimBastard> hrmmm markdown seems to have my ascii art
+[21:29] <mikeal> it's a blocking call
+[21:30] <mikeal> but the stream is changing from when i call it 
+[21:30] <mikeal> grrrr
+[21:31] romainhuet has joined the channel
+[21:32] <_ry> mikeal: i don't really get it - you're callign write() when you've already called end()?
+[21:32] <mikeal> no, end hasn't been called
+[21:32] <mikeal> not at least as far as the http response object is concerned
+[21:32] <mikeal> I'm not adding code to Stream.prototype.end to see if someone else calls end
+[21:33] <mikeal> but here's the main thing
+[21:33] <mikeal> I added a reference to the socket from the response object
+[21:33] <mikeal> and I'm checking if it's sent END_OF_FILE, and when I call .write() it hasn't, but then when it makes it down the stack to the stream write the check says that it has send END_OF_FILE
+[21:34] <mjr_> _ry: Here's a fix for test-repl.js that isn't clean and slick like I was hoping, but does work reliably:  http://github.com/mranney/node/commit/6439ff9481e132fc81a2847a730694c83e602451
+[21:36] <mikeal> ok, something called end on the stream
+[21:36] <mikeal> i know that much :)
+[21:37] <_ry> mikeal: maybe the http client itslf?
+[21:37] <mikeal> I'm calling write on the response object
+[21:37] <mjr_> Can you stick something in end to see who is calling it?
+[21:38] <mikeal> ok, i'm not calling end, something else is
+[21:38] rtomayko has joined the channel
+[21:39] javajunky has joined the channel
+[21:39] <mjr_> Can you stick something in there that throws if it isn't you, so you'll get a stack trace?
+[21:39] dgathright has joined the channel
+[21:40] <CIA-77> node: 03Matt Ranney 07master * rafe3c1c 10/ test/simple/test-repl.js : Buffer partial reads before doing expect match. - http://bit.ly/agd0uI
+[21:41] pedro has joined the channel
+[21:42] pedro has joined the channel
+[21:42] <mjr_> It seems to me that if we had an easy way to script tests of multiple clients and servers that problems like these would get noticed more easily.
+[21:43] rednul_ has joined the channel
+[21:43] xla has joined the channel
+[21:48] <_ry> mjr_: perhaps
+[21:50] dgathright has joined the channel
+[21:51] isaacs_ has joined the channel
+[21:51] isaacs_ has joined the channel
+[21:58] mattly has joined the channel
+[22:01] tekky has joined the channel
+[22:04] <mikeal> _ry: i think i figured it out
+[22:06] <_ry> mikeal: cool
+[22:06] <_ry> what is it?
+[22:06] <mikeal> so, .write() calls flush()
+[22:07] <mikeal> which calls flushQueueMessage
+[22:07] <mikeal> and that is calling socket.write
+[22:07] <mikeal> wait, i'm confused, hold on
+[22:07] <mikeal> dammit i thought i had it
+[22:08] <_ry> heh - yeah the http client logic sucks
+[22:08] <_ry> it really needs to be refactored
+[22:08] <mikeal> this is kind of insane
+[22:08] <_ry> the problem is trying t share code between the client and the server
+[22:08] <_ry> which mostly works
+[22:08] <mikeal> i'm trying to find a non-blocking call somewhere in the write logic that is getting pushed behind
+[22:08] <_ry> but makes for some craziness
+[22:09] <mikeal> the thing is
+[22:09] <mikeal> since it does this whole queueing thing
+[22:09] <mikeal> there isn't a good way for me to check at my point in the code if I can call .write
+[22:09] <mikeal> because end hasn't fired yet, i know that
+[22:09] <mikeal> and writing is throwing an exception saying it's been closed
+[22:10] binary42 has joined the channel
+[22:13] charlesjolley has joined the channel
+[22:16] <mikeal> _ry: is there a reason that OutgoingMessage.end doesn't emit("end")
+[22:16] <mikeal> ?
+[22:18] JimBastard_ has joined the channel
+[22:18] <_ry> mikeal: writable streams don't emit 'end'
+[22:19] <_ry> end() sends an eof
+[22:19] <_ry> 'end' recvs it
+[22:19] <mikeal> ok
+[22:30] sh1mmer has joined the channel
+[22:32] towski has joined the channel
+[22:34] <mikeal> _ry: I really think that a writable stream needs to emit an event after is ends EOF
+[22:35] <mikeal> otherwise there is no way to protect yourself from writing to it
+[22:47] dnolen has joined the channel
+[22:50] dnolen has joined the channel
+[22:50] <_ry> mikeal: hm
+[22:50] <_ry> mikeal: well supposedly you have full control of it
+[22:51] <_ry> in the case of a response from a http server, nothing else should end() it
+[22:51] <mikeal> that's what i would thing
+[22:51] <mikeal> er think
+[22:52] <_ry> but response != socket
+[22:53] gf3 has joined the channel
+[22:53] towski has joined the channel
+[22:56] <mikeal> i know
+[22:56] <mikeal> i put a print when the socket end happens an when i call response.end
+[22:56] <mikeal> and there are ton of socket.end calls that i don't initiate from response.end
+[22:59] <_ry> mikeal: hmm
+[22:59] <_ry> mikeal: could it be that you're responding to messages out of order?
+[22:59] <mikeal> i seriously doubt it
+[22:59] <_ry> that someone connecting is pipelining a bunch of requests
+[22:59] <_ry> and you answer the last before the first?
+[22:59] <mikeal> that's possible
+[23:00] <mikeal> if they were pipelining then the server would handle breaking it up in to different responses
+[23:00] <mikeal> wouldn't it?
+[23:00] <_ry> yes
+[23:00] <_ry> supposedly
+[23:00] <_ry> i think there is a test for that even
+[23:01] <_ry> but in that case the server will end() the connectin
+[23:01] <_ry> once it's sent out the last response
+[23:03] creationix has joined the channel
+[23:07] <mjr_> mikeal: I think your problem is too many ifs.
+[23:08] <isaacs> mjr_: XD
+[23:08] <mjr_> cross-channel humor: guaranteed funny
+[23:14] <mikeal> _ry: this is what is breaking me
+[23:14] <mikeal> http://github.com/ry/node/blob/master/lib/http.js#L627
+[23:14] <mikeal> that is closing out the stream I'm trying to write to
+[23:14] <mikeal> or at least the fd matched
+[23:15] hassox has joined the channel
+[23:15] <mikeal> and this is for a http.ServerResponse object
+[23:17] <_ry> mikeal: i thought we were talking about servers..
+[23:18] <mikeal> we are
+[23:18] <mikeal> the fd matches
+[23:18] <mikeal> this should never be called on a clientResponse
+[23:19] tekky has joined the channel
+[23:19] <mikeal> sorry, ServerResponse
+[23:22] <_ry> no, it should never be called on a server response
+[23:22] <mikeal> but I'm print the fd before it does it
+[23:23] <mikeal> and the fd before my exception in Stream.write and they match
+[23:23] <mikeal> they are both 9
+[23:23] lifo has joined the channel
+[23:25] <_ry> ok..hm
+[23:25] towski has joined the channel
+[23:27] <_ry> i don't see how that's possible
+[23:27] <_ry> you're writing to a server response?
+[23:31] <mikeal> ok, more info
+[23:31] <mikeal>     at IOWatcher.callback (net:335:31)
+[23:31] <mikeal> that is what attaches Client to my fd
+[23:32] <mikeal> the Client.ondata event is firing and that's what triggers the close
+[23:33] <mikeal> oh, and this is calling close long before my server gets the clientResponse
+[23:33] <mikeal> sorry
+[23:33] <mikeal> ServerResponse
+[23:35] <_ry> mikeal: are you repoducing this regularly?
+[23:35] <_ry> mikeal: is it possible for me to get in there and check it out via ssh?
+[23:35] <mikeal> yeah, i have to trigger couchdb replication through my proxy to do it
+[23:35] <mikeal> but i can reproduce it every time
+[23:36] <CIA-77> node: 03Ryan Dahl 07master * r1efd261 10/ doc/api.markdown : doc typo - http://bit.ly/c4M2mR
+[23:36] <CIA-77> node: 03Ryan Dahl 07master * rb7947e4 10/ lib/http.js : Recycle http client parsers - http://bit.ly/aWAOWS
+[23:41] <mikeal> ssh would be a little hard
+[23:41] <mikeal> you can probably do it locally
+[23:42] <mikeal> oh no wait, that won't work either
+[23:42] <_ry> it'd be really good to get a test case :/
+[23:43] <mikeal> so, this is happening on a long running stream that doesn't have a content-length
+[23:44] <mikeal> i could write a test if i had any idea what is actually causing it
+[23:45] <_ry> doesn't have a content-length
+[23:45] <_ry> tell me more
+[23:45] <_ry> is it transfer-encoding: chunk ?
+[23:45] <mikeal> chunked
+[23:45] <mikeal> yup
+[23:45] <_ry> can you tell me if there are multiple messages in the stream?
+[23:45] <_ry> i.e. is it using keep-alive?
+[23:46] <_ry> and this stream is coming into a Node http server?
+[23:46] <_ry> or is this the response from couchdb?
+[23:47] <mikeal> here are the headers http://gist.github.com/364133
+[23:47] <mikeal> i'm proxying the request/response
+[23:47] <_ry> okay
+[23:47] <mikeal> and the error happens when I'm writing a chunk I got from the remote request to the ServerResponse object
+[23:48] <mikeal> somewhere over 500K it breaks
+[23:48] <mikeal> the response is a lot longer than that
+[23:49] <_ry> hmmmm...
+[23:49] <_ry> maybe you should tcpdump your connection
+[23:50] <_ry> to the backend
+[23:50] <_ry> both directions
+[23:50] <_ry> maybe we'll see if a FIN packet is being sent in?
+[23:51] confounds has joined the channel
+[23:52] <mikeal> i really doubt it
+[23:52] <mikeal> without the proxy this all works fine
+[23:53] mravaux has joined the channel
+[23:57] towski has joined the channel

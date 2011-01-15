@@ -1,0 +1,2701 @@
+[00:00] ryah: cloudhead: you might have to write \n in the 'close' event
+[00:02] ph^ has joined the channel
+[00:02] cloudhead: hmm nope
+[00:02] edspencer has left the channel
+[00:11] cloudhead: pressing enter goes back to the beginning of the line, then enter characters overwrites the prompt
+[00:11] gf3 has joined the channel
+[00:11] cloudhead: entering*
+[00:12] ajpiano has joined the channel
+[00:13] ryah: cloudhead: this.output.write('\n\x1b[0G');
+[00:13] ryah: cloudhead: process.stdout.write('\n\x1b[0G');
+[00:14] cloudhead: ryah: gonna try that - I see you're writing to stdin though in repl.js
+[00:14] cloudhead: does that make a difference?
+[00:16] ryah: cloudhead: not unless stdout is piped elsewhere.
+[00:16] Sembiance: node.js++
+[00:16] ryah: that's probably oen of the thigns that should be fixed at some point though
+[00:16] cloudhead: hmm
+[00:17] ryah: e.g. "node-repl > /dev/null" doesn't work
+[00:21] PyroPeter has joined the channel
+[00:25] cloudhead: ryah: https://gist.github.com/fdba02251d06e16590d3
+[00:26] cloudhead: oh wait
+[00:26] cloudhead: lol.
+[00:26] cloudhead: >,>
+[00:27] cloudhead: hah
+[00:27] cloudhead: yea
+[00:27] cloudhead: nasty mistake
+[00:27] cloudhead: I was calling this.prompt() instead of that.prompt() but it didn't error because readline has a function called prompt()
+[00:31] cloudhead: ryah: found the problem, it's setEncoding('utf8')
+[00:31] cloudhead: on stdin
+[00:32] ryah: cloudhead: ah
+[00:33] hartley231 has left the channel
+[00:33] hartley231 has joined the channel
+[00:33] cloudhead: an appropriate response indeed
+[00:34] cloudhead: appart from that it seems to work pretty good!
+[00:35] cloudhead: the only thing is when using escape sequences in the prompt, buffrer.byteLength doesn't cut it
+[00:35] cloudhead: not sure what's the best way to deal with that
+[00:35] mjr_: Doesn't using anything utf8 mess up the cursor positioning logic?
+[00:35] ryah: cloudhead: so what you can do is this...
+[00:36] ryah: cloudhead: http://gist.github.com/429428
+[00:36] _announcer: Twitter: "javascript for your web server: http://nodejs.org/"-- Grant Keiser. http://twitter.com/granty/status/15667723305
+[00:37] ryah: mjr_: maybe
+[00:37] ryah: mjr_: probably
+[00:37] cloudhead: aha yes
+[00:37] mjr_: It's almost like JavaScript strings are the right answer for that.
+[00:38] mjr_: As much as I love buffers.
+[00:38] ryah: yeah...
+[00:38] ryah: well 'line' emits a string anyway
+[00:39] ryah: dang.
+[00:40] _announcer: Twitter: "Just wrote a new howtonode.org article about #connect, middleware for #nodejs that I showed off at #txjs and #swdc   http://bit.ly/bXocC7"-- Tim Caswell. http://twitter.com/creationix/status/15667961683
+[00:40] ryah: i think the readline.js should use the utf8decoder manually
+[00:41] ryah: so that it can read the escape sequences before converting to string
+[00:41] CIA-77: node: 03Ryan Dahl 07master * ra6942b3 10/ (lib/repl.js test/simple/test-repl.js): Fix test-repl - http://bit.ly/9g27LS
+[00:42] _announcer: Twitter: "Connect - Middleware for NodeJS http://bit.ly/cUjeHI" [da]-- The Changelog. http://twitter.com/changelogshow/status/15668049969
+[00:44] hassox: anyone there who can help me with an httpClient error?
+[00:44] hassox: ACTION is getting a notfound error 
+[00:45] hassox: trying to get http://twittersentiment.appspot.com/api/counts?query=apple&startDate=5%2F7%2F2010&endDate=5%2F8%2F2010&format=json&aggregationType=1
+[00:45] hassox: it seems almost like it's being requested witha  wrong host name, or the ip address or something
+[00:46] hassox: ACTION can access in the browser, but trying to use a http.ClientRequest returns a 404 (the same 404 as if I access via the ip address)
+[00:46] creationix: hmm, hopefully my tweets don't spam the room too much ;)  you guys are working on some really neat stuff in here today.
+[00:47] cloudhead: hassox: what you using as hostname?
+[00:47] hassox: var twitterClient   = http.createClient(80,'twittersentiment.appspot.com'),
+[00:48] hassox: request = twitterClient.request("/api/counts?" + queryString.stringify(options));
+[00:48] hassox: then setting up listeners and stuff 
+[00:48] cloudhead: hmm
+[00:48] _announcer: Twitter: "compiling, installing, and running my first program on node.js went surpisingly smooth"-- Joshua Flanagan. http://twitter.com/jflanagan/status/15668433037
+[00:48] hassox: where options is all that stuff in the url string
+[00:48] cloudhead: not a dns issue you say?
+[00:48] hassox: I don't know
+[00:48] hassox: I can access via my browser
+[00:48] cloudhead: yea but Im not sure node does the dns lookup
+[00:49] cloudhead: although I dont think youd be getting a 404 if that was teh case
+[00:51] cloudhead: hassox: I'm getting a 404 too
+[00:52] hassox: from your browser too?
+[00:52] cloudhead: no just from node
+[00:52] shahbaz has joined the channel
+[00:52] freshtonic has joined the channel
+[00:53] hassox: is there any way to log the actual request that's being made?
+[00:53] hassox: ryah: ?
+[00:54] mjr_: you could strace node or run tcpdump
+[00:55] javarants1 has joined the channel
+[00:56] shahbaz: hi, can someone help me understand how to use eventemitters with my server?
+[00:56] shahbaz:  it's a text based protocol and I'd like to expose its functionality the way nodejs does it (createMyServer.. to my own events)
+[00:56] freshtonic has joined the channel
+[00:56] shahbaz: i think i know how to export my module, but i don't get event emitter
+[00:57] shahbaz: perhaps something like a stupid simple "ping server"?
+[00:57] ryah: hassox: sudo tcpdump -s 0 -X -i lo0 tcp port 80
+[00:57] ryah: en0 maybe
+[00:57] hassox: champ
+[00:58] mjr_: on linux do -i any
+[00:58] hassox: hrm... so turns out I don't know how to read that ;)
+[00:58] mjr_: I wish I could recommend that you use node_pcap, but that isn't quite ready yet.
+[00:59] ryah: utf8 gr
+[01:00] hassox: :\
+[01:00] hassox: so
+[01:00] hassox: I found it
+[01:00] hassox: adding a host entry to the request did the trick
+[01:00] robrighter has joined the channel
+[01:00] hassox:   request = twitterClient.request("/api/counts?" + queryString.stringify(options), {"host" : "twittersentiment.appspot.com"})
+[01:00] hassox: sorry lads :( 
+[01:00] hassox: thanx for the help though :)
+[01:01] mjr_: wait, so dns failed, and that made the entire thing silently fail without some sort of exception?
+[01:02] hassox: I don't think so
+[01:02] Yuffster has joined the channel
+[01:02] hassox: I think google are mapping it via the host header
+[01:02] hassox: but tbh... I have no idea ;)
+[01:03] mjr_: shahbaz: you need sys.inherits.  Here's an example:  http://github.com/mranney/node_pcap/blob/master/pcap.js#L16
+[01:04] mjr_: hassox: oh, that makes sense.  You connected, didn't send a Host header, so their server didn't know what to do with your request.  404
+[01:04] hassox: yeah
+[01:04] ryah: servers don't like it if you don't send Host
+[01:04] javarants1 has left the channel
+[01:04] hassox: I think so
+[01:04] ryah: the twitter client should do that for you though
+[01:04] ryah: or is it just a raw http client?
+[01:04] ryah: http client arguably should also do it for you
+[01:05] mjr_: he's using http.createClient
+[01:05] shahbaz: mjr_ thanks, i'll check it out
+[01:06] _mythz has left the channel
+[01:06] mjr_: The HTTP API is a little surprising in the respect, but we all know that we need higher level version of HTTP client with keepalive, pooling, and other niceties.
+[01:06] ryah: yeah
+[01:12] mjr_: so I need to reboot in order to install Safari 5?
+[01:12] mjr_: What is this, a Microsoft product?
+[01:12] dji has joined the channel
+[01:13] SteveDekorte has joined the channel
+[01:16] LionMadeOfLions has joined the channel
+[01:19] KungFuHamster has joined the channel
+[01:22] creationix has joined the channel
+[01:24] quirkey has joined the channel
+[01:26] ditesh|cassini has joined the channel
+[01:27] mikeal has joined the channel
+[01:28] ph^ has joined the channel
+[01:37] _announcer: Twitter: "Bespin 仕切り直し: SproutCore / Python から jQuery / Node.js へ http://bit.ly/d65VWp" [fil]-- ベスミット. http://twitter.com/vesmit/status/15671563888
+[01:37] rictic has joined the channel
+[01:37] jakehow has joined the channel
+[01:39] mikeal has joined the channel
+[01:39] markwubben has joined the channel
+[01:40] _announcer: Twitter: "A tutorial for creating a basic Node JS application. Using Node, CouchDB and Haml http://bit.ly/bA7p2x"-- Jeff Schoolcraft. http://twitter.com/jschoolcraft/status/15671808545
+[01:43] ryah: http://github.com/kriszyp/pintura/blob/master/lib/pintura.js <-- ..
+[01:46] isaacs has joined the channel
+[01:46] mcarter has joined the channel
+[01:47] jedschmidt has joined the channel
+[01:48] yatiohi has joined the channel
+[01:49] cce_ has joined the channel
+[01:50] sudoer has joined the channel
+[01:52] jakehow_ has joined the channel
+[01:53] inarru_ has joined the channel
+[01:53] screen-x has joined the channel
+[01:54] chewbranca_ has joined the channel
+[01:54] o_o has joined the channel
+[01:55] Tim_Smart has joined the channel
+[02:01] _announcer: Twitter: "Having a coffee, an orange juice and a cigarette on the terrace. Also writing some Node.JS code while waiting for the sunrise. #insomnia"-- Romain Ruetschi. http://twitter.com/romac17/status/15673278691
+[02:01] SamuraiJack has joined the channel
+[02:05] nicolaerusan has joined the channel
+[02:07] polotek has joined the channel
+[02:08] rtl has joined the channel
+[02:11] crafteh has joined the channel
+[02:11] polotek: Hey, any in the room got experience running memory profiling on v8?
+[02:11] stevendavie has joined the channel
+[02:12] crafteh: I have trouble including modules in my server... anyone know of a good tutorial on how to structure imports and stuff?
+[02:12] polotek: crafteh: what kind of trouble?
+[02:12] crafteh: the modules aren't being found
+[02:12] polotek: where did you place them?  in ~/.node_libraries?
+[02:12] crafteh: I guess I don't layout the project correctly
+[02:13] crafteh: nope
+[02:13] crafteh: i guess I should though
+[02:13] crafteh: heh
+[02:13] polotek: you can also add a location to the require path
+[02:14] polotek: http://nodejs.org/api.html#modules-289
+[02:14] jedschmidt_ has joined the channel
+[02:14] crafteh: have you used socket.io-node?
+[02:15] polotek: nah, sorry
+[02:15] mcarter has joined the channel
+[02:16] Tim_Smart: crafteh: Reletive paths need a './' prefix
+[02:16] Tim_Smart: *relative
+[02:17] hdon: Tim_Smart, or ../
+[02:17] crafteh: do you guys typically put it under the lib folder?
+[02:17] crafteh: when you put it under the lib folder, would you need to do "./lib/socket.io" ... or whatever the module name is?
+[02:17] Tim_Smart: crafteh: yup
+[02:21] softdrink has joined the channel
+[02:23] crafteh: ah i see, thats what unshift is
+[02:27] Aria has joined the channel
+[02:27] _announcer: Twitter: "Our man @creationix just released an excellent blog post about Ext's open source Connect framework: http://howtonode.org/connect-it #nodejs"-- Jay Robinson. http://twitter.com/jayrobinson/status/15675080268
+[02:30] Aria: Oh, nice. Connect looks spiffy.
+[02:30] Aria: O(n) on handlers, but with the idea that one should keep n to a minimum, it looks like.
+[02:31] ryah: O(n) in what
+[02:32] polotek: Aria: it's not that bad. you would have to run the code anyway if you wanted the functionality. It's just a convenient chaining construct
+[02:33] Aria: Yeah, exactly. That wasn't an admonishment.
+[02:33] mcarter has joined the channel
+[02:33] Aria: ryah: Ext JS Connect's handler stack is O(n), in that it's a simple list -- but with small n being the norm, I think that's sane.
+[02:34] Aria: Looks like a clever, simple piece of work.
+[02:36] ceej: do you need to run a connect app using connect? can you not just use node.js ?
+[02:36] ceej: use node*
+[02:36] polotek: connect is the apps plus some glue code to set up the infrastructure
+[02:36] polotek: it changes the method signature of a request function
+[02:37] polotek: so you need that glue
+[02:37] ceej: so it won't run on heroku?
+[02:37] polotek: ceej: connect is built on node
+[02:37] polotek: there's nothing special about it
+[02:37] polotek: you should be able to run it on heroku
+[02:37] Tim_Smart: ceej: It will run using node, connect is just a library
+[02:37] Tim_Smart: like express or something
+[02:37] Aria: Yeah. Just a small library. Like Rack is for ruby.
+[02:37] polotek: I've never used the heroku though so I don't have much insight other than that
+[02:37] Aria: Maybe not even that big.
+[02:37] ceej: i get you
+[02:38] ceej: I'll have to take a look when i get a spare moment 
+[02:38] Aria: (I am oddly okay having _announcer introduce the topic of the moment.)
+[02:41] deanlandolt_home has joined the channel
+[02:43] polotek: Anybody know how I would determine why v8 is using so much memory?
+[02:44] ryah: terminals hate utf8
+[02:44] Aria: Oh? I've never had a problem, backspacing a number of bytes aside.
+[02:44] phiggins has joined the channel
+[02:44] ryah: isn't there like some escape sequneces for "move cursor left one _glyph_"
+[02:45] ryah: instead of "move cursor left one column"
+[02:45] ryan[WIN]: o unicode control characters
+[02:45] ryan[WIN]: how i </3 thee
+[02:46] Aria: Oh, heh, yeah. With double width characters, that gets fugly.
+[02:50] ryah: ryan[WIN]: know anything about them?
+[02:50] ryan[WIN]: ryah, a bit
+[02:51] ryah:  how do i make node not suck with chinese?
+[02:51] ryan[WIN]: i learned a lot about unicode when i made a wacky unicode-encoded VM
+[02:51] ryan[WIN]: ryah, what suck specifically
+[02:51] ryan[WIN]: and which kind of chinese
+[02:51] ryan[WIN]: simplified or extended characters
+[02:51] ryah: knowing glyph width
+[02:52] jedschmidt: ryah: you mean width in pixels?
+[02:52] ryan[WIN]: i wasn't aware node was rendering?
+[02:52] ryan[WIN]: fonts?
+[02:52] ryah: jedschmidt: no, in columns
+[02:52] Aria: Isn't it just a certain range that's double-width?
+[02:52] ryah: Aria: i don't know?
+[02:52] ryan[WIN]: there were some really good charts i had found once
+[02:52] ryan[WIN]: that showed ranges and caveats
+[02:52] ryah: Aria: if charCode is greater than 127 it's double-width?
+[02:53] jedschmidt: ryah: you mean columns in the terminal?
+[02:53] ryah: jedschmidt: yeah
+[02:53] jedschmidt: ryah: there are plenty of single-width glyphs in japanese over 127 charcode.
+[02:53] ryan[WIN]: anything that's not in the control character range is 1 width
+[02:53] ryah: jedschmidt: that's what i thought
+[02:53] jedschmidt: ryah: yeah, sucks.
+[02:54] jedschmidt: i think you just have to render/measure, no?
+[02:54] ryah: no, there must be some control sequences that terminals undersatnd
+[02:54] jedschmidt: http://en.wikipedia.org/wiki/Half-width_kana
+[02:54] ryah: the terminal emulator knows how big the chars are
+[02:54] ryan[WIN]: ryah, there's a thingy i have to find for you
+[02:55] ryan[WIN]: http://msdn.microsoft.com/en-us/library/cc194788.aspx
+[02:55] jedschmidt: ryah: i'm not sure i know enough about terminals so be useful, alas.
+[02:55] ryan[WIN]: but that's not unicode
+[02:55] ryan[WIN]: that's just DBCS
+[02:56] LionMadeOfLions: lol ryan[WIN]
+[02:56] ryan[WIN]: ffuuu
+[02:56] ryan[WIN]: LionMadeOfLions, GTFO
+[02:56] LionMadeOfLions: u
+[02:56] Aria: oh, geez. This is fugly.
+[02:57] ryan[WIN]: LionMadeOfLions, no u
+[02:57] Aria: And certainly not if it's > 127 is it double-width -- é isn't double-width, and is > 127
+[02:57] _announcer: Twitter: "howtonode.org article about #connect , middleware for #nodejs.   http://bit.ly/dCdb7C"-- Scot Gellock. http://twitter.com/sgellock/status/15677178975
+[02:57] ryah: Aria: yeah
+[02:57] JimBastard has joined the channel
+[02:57] ryan[WIN]: god i wish i had that chart thingy
+[02:57] Aria: And now there's the whole "Set character width" control character proposal.
+[02:57] ryah: are there triple width characters?
+[02:57] jedschmidt: ryah: i don't think so.
+[02:58] ryah: long arrows?
+[02:58] ryah: :)
+[02:58] Aria: I don't think there's anything triple-width.
+[02:58] JimBastard: how is HEAD today?
+[02:58] JimBastard: im about to update nodejitsu
+[02:58] JimBastard: im feeling lucky
+[02:59] ryah: JimBastard: it's okay
+[02:59] JimBastard: ACTION is gonna pull HEAD to production
+[02:59] JimBastard: hee hee
+[02:59] JimBastard: aight
+[02:59] ryah: JimBastard: try "./node" (no args) with head
+[02:59] JimBastard: pullin
+[03:00] polotek: anybody got valgrind working on os x 10.6?
+[03:00] ryan[WIN]: ryah, if it makes you feel better, hardly any software takes into consideration non-1-width characters
+[03:00] JimBastard: sup ryan[WIN] 
+[03:01] ryah: ryan[WIN]: yeah, i know. but we're better than that
+[03:01] ryah: (maybe)
+[03:01] ryah: (well, not yet)
+[03:01] _announcer: Twitter: "http://howtonode.org/what-is-this Excellent blog about What is "this" in #js #nodejs"-- Maximiliano Fierro. http://twitter.com/elmasse/status/15677486585
+[03:01] polotek: the mac terminal seems to handle double width characters
+[03:02] polotek: wasn't really paying attention to what you're were trying to do though
+[03:02] ryah: yeah zsh does well
+[03:03] polotek: I'm not cool enough for zsh yet. still slumming it with bash
+[03:03] mscdex has joined the channel
+[03:04] ryan[WIN]: ryah, all i know is that a lot of software doesn't even support past the BMP on unicode
+[03:04] ryan[WIN]: including twitter
+[03:05] ryan[WIN]: i was trying to use CJK extensions and it blew up on me :(
+[03:06] Aria: Yeah... assuming 16-bit characters.
+[03:06] Aria: Grr. I wish people'd use UTF-8. I know it's a pain. It's worth it.
+[03:06] polotek: http://marcorogers.com/blog/static/content/get_a_mac.png
+[03:06] ryah: meh
+[03:07] Aria: Heh.
+[03:07] Aria: I mean, I get why people use 16-bit characters. It's all nice and regular.
+[03:07] Aria: Until it blows up in your face.
+[03:07] Aria: That and not having bytes and strings be interchangeable.
+[03:07] polotek: now back to figuring out why valgrind won't compile on 10.6 ;)
+[03:07] ryah: Aria: that's what js uses
+[03:08] ryah: i'm not sure what happens when they get high characters
+[03:08] Aria: Yeah. Or at least what js hints at as an API
+[03:08] ryah: v8 i should say
+[03:08] Aria: I bet you have to use UTF-16
+[03:08] Aria: (Surrogate pairs)
+[03:09] Aria: And so you get the same /kind/ of pain as UTF-8, just late in the game, and so only the asians hate you
+[03:09] mcarter has joined the channel
+[03:10] ryan[WIN]: ryah
+[03:10] ryan[WIN]: http://mothy.org/hacks/unicodewidth/UnicodeWidth.html
+[03:10] ryan[WIN]: this might be a starting point
+[03:11] ryan[WIN]: the guy's source code has documents on which ranges are single and double width etc.
+[03:11] ryan[WIN]: all in C code with permissive license
+[03:11] ryan[WIN]: er http://www.cl.cam.ac.uk/~mgk25/ucs/wcwidth.c
+[03:11] Aria: Oh, sweet. &bookmark;
+[03:11] mikeal has joined the channel
+[03:12] isaacs: Aria: you've been spending too much time around html.  you're speaking in entities
+[03:12] ryan[WIN]: ryah the function is pretty sweet:   int mk_wcwidth(wchar_t ucs)
+[03:13] ryan[WIN]: lots of overhead but then again making a simple look up table for giant swaths of ranges is somewhat difficult
+[03:13] Aria: ACTION laughs. I've been doing that a long time. Friends started it.
+[03:13] ryan[WIN]: unless you use a hash or something
+[03:14] ryah: ryan[WIN]: rad
+[03:14] ryah: that's exactly what i want
+[03:14] ryah: also watch me stab myself
+[03:14] wilmoore has joined the channel
+[03:14] ryan[WIN]: haha
+[03:15] ryah: very cool
+[03:17] polotek: I really like the look of Connect
+[03:17] polotek: Not sure about the actual implementation of the layers though
+[03:18] ryan[WIN]: ryah, i like this code because not only does it give permission to steal it just simply outlines the ranges and documents what's what
+[03:19] ryah: yeah
+[03:19] ryah: it's good code
+[03:19] ryah: disgusting that one needs to worry about this, for sure
+[03:19] ryah: but good code
+[03:20] ryan[WIN]: this really ought to be something that the unicode folks decide
+[03:20] ryan[WIN]: but they only seem to care about encoding/decoding of data 
+[03:20] ryan[WIN]: not on rendering preferences
+[03:21] ryan[WIN]: it'd be super sweet if the unicode folks were required to release libraries
+[03:21] ryan[WIN]: of heavily tested/public things for everything
+[03:21] ryan[WIN]: i'm sure a big player like google could get involved
+[03:23] Aria: Hehe.
+[03:24] polotek: isaacs: you around?
+[03:24] isaacs: polotek: yo.
+[03:24] polotek: npm always relies on a package.json with a version number right?
+[03:24] polotek: no way to get libxmljs@latest?
+[03:25] isaacs: polotek: you can do npm install libxmljs@latest, yes
+[03:25] polotek: from the registry yeah
+[03:25] isaacs: polotek: right
+[03:25] isaacs: pkg@tag
+[03:25] polotek: but it'll still read the version and install it as that
+[03:25] isaacs: yes
+[03:25] isaacs: it'll fetch the version tagged as "latest", and then install it
+[03:25] polotek: basically I've got the latest stable version on the git repo on my machine
+[03:25] cloudhead: ryah: any idea what version number readline.js is going to make it in?
+[03:26] polotek: that didn't come out right
+[03:26] cloudhead: ryah: got http-console working nicely with it : >
+[03:26] isaacs: polotek: so what's wrong with npm install . or npm link .?
+[03:26] polotek: nothing wrong with link except it still uses a version number
+[03:26] polotek: I would rather the git repo just say "latest" and not worry about changing the version number
+[03:26] ryah: cloudhead: nice
+[03:26] polotek: so it doesn't conflict with the stable version I also have installed
+[03:27] ryah: we're going to have hardcore utf8 support in readline
+[03:27] cloudhead: nice
+[03:27] ryah: cloudhead: in 0.1.98
+[03:27] softdrink has joined the channel
+[03:27] isaacs: polotek: i see.
+[03:27] isaacs: polotek: well, we could solve this in one of 3 ways, as i see it.
+[03:28] isaacs: polotek: a) bump the version to something like 1.2.3-beta (which is *less than* 1.2.3, mind you. bump and tag.)
+[03:28] cloudhead: ok, cool
+[03:28] isaacs: polotek: b) ruin everything
+[03:28] isaacs: polotek: or c) put a special marker on the version for link installs (which is probably a good idea, anyway)
+[03:28] ryah: ACTION bbl
+[03:29] polotek: I like c)
+[03:29] polotek: b) also has a certain charm
+[03:29] isaacs: hehe
+[03:29] polotek: npm link . --tag=latest
+[03:29] isaacs: b is: let the user specify the version to install it as, regardless of the actual version.
+[03:29] isaacs: polotek: that's b
+[03:29] polotek: or something similar
+[03:29] isaacs: and no
+[03:30] isaacs: polotek: then the folder structure isn't valid any more.
+[03:30] polotek: wait
+[03:30] polotek: so what's c?
+[03:30] isaacs: c is that, in the process of the link action, it adds -link to the end of the version number
+[03:30] polotek: ah
+[03:30] isaacs: so you'd have 0.1.2-link and whatever the actual version ends up being at whichever point, who cares?
+[03:30] polotek: indeed
+[03:31] isaacs: or better yet, link-Users-polotek-src-whatever
+[03:31] polotek: the only question there is what happens if the version number changes over the course of time
+[03:31] isaacs: so you know, "this is the version that's linked to such-and-such folder"
+[03:31] polotek: right now if you change your version in package.json, npm can't find it uninstall
+[03:31] polotek: even if it's a link
+[03:31] isaacs: well, you can always just npm uninstall pkg
+[03:31] isaacs: and that'll blast it all out
+[03:32] polotek: and reinstall, yeah
+[03:32] polotek: anyway, this is not a big deal. just wondering if something was already available
+[03:33] isaacs: no, not atm
+[03:33] hsuh: should code from advanced js programming (by TJ Holowaychuk) work on node.js ?
+[03:34] isaacs: polotek: so, the issue with that is, you want other things to be able to use it as a dependency..
+[03:34] isaacs: polotek: maybe i have a library, and i want to make sure that my new changes don't break any of the things that use it.
+[03:34] isaacs: polotek: or test it out with those things
+[03:34] polotek: right
+[03:35] polotek: isaacs: but as long as the version is still there it should still be valid for dependency management right?
+[03:35] isaacs: polotek: right, but it has to be a valid semver.
+[03:36] isaacs: polotek: so it'll be something like 0.1.2-link-sanitized-folder-name
+[03:36] polotek: isaacs: I'm following you
+[03:37] jashkenas has joined the channel
+[03:41] hsuh: is there something like browsers being permissive about ';' on end of statements and node.js being more restrict?
+[03:42] TommyM has joined the channel
+[03:43] polotek: hsuh: unlikely
+[03:43] polotek: what problem are you having?
+[03:44] hsuh: no, i just had to add ';' at the end of every statement on a snippet i copied from a book
+[03:44] hsuh: for it to run on node.js
+[03:44] jashkenas: anyone come across this error before, when trying to write an empty string? 
+[03:44] jashkenas: https://gist.github.com/b56ff5cb60bee7f65020
+[03:46] JimBastard: jashkenas: empty? ive seen that with bad chars
+[03:46] TommyM has left the channel
+[03:46] polotek: hsuh: send an example
+[03:46] jashkenas: in this case, it's an empty file getting read and written... a little hard to figure out where from without the stacktrace.
+[03:46] polotek: pastebin or gist
+[03:46] Tim_Smart: jashkenas: Yes, I have
+[03:47] jashkenas: I'm just wondering if it's something we can patch in node's buffer class, or if I should be handling the error myself.
+[03:47] hsuh: polotek: http://pastebin.com/sBxWw2eC
+[03:47] Tim_Smart: jashkenas: I ended up checking for a zero length string, and not writing if it was the case
+[03:48] polotek: hsuh: what part is node complaining about?  looks okay to me
+[03:49] jashkenas: Tim_Smart: right. What do you think of this diff? http://gist.github.com/429582
+[03:49] polotek: hsuh: works fine for me
+[03:50] polotek: although it doesn't do anything
+[03:50] hsuh: polotek: actually... its not node.js that is complaining, its js2-mode heh
+[03:50] hsuh: but let me try another one
+[03:50] polotek: hsuh: yeah js2-mode is more strict on purpose
+[03:51] polotek: you can turn off the errors in the config somewhere though
+[03:51] hsuh: that makes sense sure
+[03:51] polotek: I've been irritated with js2-mode lately
+[03:51] polotek: it doesn't play nice with the way lots of people like to code in node
+[03:52] hsuh: polotek: yeah, thanks.. i think i was just thinking about js2 instead of node... stuff work on node
+[03:52] hsuh: even Function.prototype.contents = function() {return this.toString().match(/^[^\{]*{((.*\n*)*)}/m)[1]} 
+[03:52] cloudhead: isaacs: latest npm's semver validator doesn't work with edge node
+[03:52] cloudhead: isaacs: test case , [">= 1.0.0", "1.0.0-42"]
+[03:52] Tim_Smart: jashkenas: Looks perfectly reasonable to me
+[03:52] isaacs: cloudhead: please read the semver spec.
+[03:53] jashkenas: 'cept for touching the file, I guess.
+[03:53] isaacs: 1.0.0-42 is less than 1.0.0
+[03:53] cloudhead: O_o
+[03:53] isaacs: cloudhead: semver.org
+[03:53] Tim_Smart: jashkenas: Yeah, that would be the only concern
+[03:53] isaacs: cloudhead: item 3, 1.0.0beta1 < 1.0.0beta2 < 1.0.0
+[03:53] polotek: jashkenas: wouldn't it be nice if some kind of language construct helped with edge cases like that?
+[03:53] jashkenas: aside: Lazeroids.com got some nice updates ... runs much more smoothly than before.
+[03:54] cloudhead: isaacs: but that's not always true
+[03:54] jashkenas: polotek: how so?
+[03:54] isaacs: cloudhead: that's because no one follows semver.
+[03:54] polotek: dunno, just saying it'd be nice :)
+[03:54] isaacs: cloudhead: but at least this way, i can point to a spec and say, "this is how npm works"
+[03:54] hammerdr has joined the channel
+[03:54] cloudhead: isaacs: hmmm
+[03:54] cloudhead: isaacs: kinda sucks, cause node doesn't follow this convention
+[03:54] polotek: cloudhead: yeah I agree. it makes sense when you read the spec
+[03:54] cloudhead: although the convention is questionable
+[03:54] isaacs: cloudhead: write a better spec, get a few people to buy into it (or at least, say they do) and i'll follow that instead.
+[03:54] polotek: cloudhead: what's your use case?
+[03:55] isaacs: cloudhead: i'm not religious about it, even a little.
+[03:55] cloudhead: polotek: node.js
+[03:55] isaacs: cloudhead: 1.2.3-0 is the "lowest" form of 1.2.3
+[03:55] cloudhead: polotek: the latest build on github is 0.1.97-xxx
+[03:55] cloudhead: which is more recent than 0.1.97
+[03:55] cloudhead: but semver thinks not
+[03:55] polotek: cloudhead: yeah I get that
+[03:55] isaacs: cloudhead: maybe, for semver's purpose, - should be > ""
+[03:56] cloudhead: hmm
+[03:56] polotek: but that just means you should get ryah to change his tags :)
+[03:56] isaacs: ie, 0.0.0-0 > 0.0.0 > 0.0.0beta
+[03:56] cloudhead: isaacs: that makes more sense
+[03:56] cloudhead: polotek: well ryah's tag make sense
+[03:56] cloudhead: I'd rather get Tom to fix semver
+[03:56] chilts: polotek: I've just installed js2-mode but yeah, I don't like some things ... did you ever use normal js-mode? I should check that out I guess
+[03:56] cloudhead: ; )
+[03:56] isaacs: cloudhead: sure, get the semver spec changed, and i'll comply with that.
+[03:56] isaacs: cloudhead: for now, it's just too easy to say "semver" and point to a url, and have it work like that.
+[03:56] polotek: cloudhead: depends on how you think about it
+[03:57] polotek: if you're thinking the way numbers usually work then yes
+[03:57] polotek: but semver doesn't work like numbers
+[03:57] cloudhead: polotek: -xxx is usually build number/date
+[03:57] hsuh: polotek: what about this one http://pastebin.com/KeR8xfU0
+[03:57] polotek: yeah I know
+[03:57] cloudhead: -pre/beta is another matter
+[03:57] isaacs: right
+[03:57] cloudhead: but they're not the same
+[03:58] isaacs: cloudhead: find a simple way to explain how it works.  send Tom an issue on github.  then send me one if he accepts your patch.
+[03:58] polotek: 0.1.97-xxx means commit hash xxx and the last stable version was 0.1.97
+[03:58] polotek: that's the info you're conveying
+[03:58] polotek: but no real reason to convey it that way
+[03:58] cloudhead: isaacs: does semver specify -xxx  though? it seems not
+[03:59] isaacs: cloudhead: it actually only allows the tag to start with a-z
+[03:59] isaacs: cloudhead: i'm a *teeny* bit more permissive
+[03:59] cloudhead: isaacs: exactly
+[03:59] isaacs: cloudhead: but only just slightly
+[03:59] PyroPeter has joined the channel
+[03:59] isaacs: cloudhead: the actual logic is all the same
+[03:59] polotek: I thought it did allow -
+[03:59] cloudhead: yea -beta
+[03:59] cloudhead: not -001
+[03:59] isaacs: cloudhead: not -
+[03:59] cloudhead: really?
+[03:59] isaacs: cloudhead: just 0.0.1beta
+[03:59] probably_ has joined the channel
+[03:59] isaacs: yeah
+[04:00] cloudhead: oh yes you're right
+[04:00] probably_: Is there a node.js xmpp server out there?
+[04:00] cloudhead: well then, this is more of an extension to the spec, than changing it
+[04:00] isaacs: [0-9]+\.[0-9]+\.[0-9]+([a-zA-Z][a-zA-Z0-9-]*)?
+[04:00] polotek: probably_: probably
+[04:00] isaacs: cloudhead: yeah
+[04:00] ceej_ has joined the channel
+[04:00] polotek: ACTION couldn't resist
+[04:00] Tim_Smart has joined the channel
+[04:01] cloudhead: cause I agree, 1.0.0[a-z]+ < 1.0.0
+[04:01] cloudhead: but
+[04:01] probably_: ACTION gets that a lot
+[04:01] isaacs: probably_ does
+[04:01] polotek: probably_ http://wiki.github.com/ry/node/modules
+[04:01] cloudhead: 1.0.0-[0-9]+ > 1.0.0
+[04:01] cloudhead: cause the numbers are part of the version number, and not a tag
+[04:01] probably_: polotek: Yeah, those are just clients though. I'm looking for an ejabberd replacement
+[04:02] polotek: cloudhead: could node be 0.1.97adegha ?
+[04:02] probably_: I'll keep looking
+[04:02] polotek: last stable version and most recent commit
+[04:02] polotek: or rather 0.1.98adegha
+[04:02] polotek: last commit before next stable version
+[04:03] isaacs: cloudhead: you're basically saying then that - is a valid character in the minor version number?
+[04:03] cloudhead: isaacs: yea
+[04:03] isaacs: cloudhead: and adds 0.5 or so to the numeric value.
+[04:03] polotek: ACTION scrolls back and sees the word "server"
+[04:03] polotek: sorry
+[04:03] cloudhead: yea
+[04:03] isaacs: cloudhead: so it sorta works like a .
+[04:03] cloudhead: yea
+[04:03] isaacs: (decimal point)
+[04:03] cloudhead: and it's only used for development releases
+[04:04] isaacs: cloudhead: what about 1.2.3-234-123
+[04:04] isaacs: cloudhead: is that [1, 2, 3.234123]?
+[04:04] cloudhead: that's like 1.2.3-234-123
+[04:04] cloudhead: yea
+[04:04] polotek: isaacs: only on occurance of -
+[04:04] cloudhead: oops
+[04:04] cloudhead: what you said
+[04:04] isaacs: cloudhead: what about 1.2.3-999-asdf
+[04:04] cloudhead: same
+[04:04] isaacs: is that [1, 2, 3.999, "asdf"]?
+[04:04] polotek: the problem becomes git hashes
+[04:04] polotek: which aren't sortable
+[04:05] cloudhead: I think asdf is still part of the patch level
+[04:05] polotek: if we don't require the stuff after the dash to be sortable then it doesn't matter if there are more dashes right?
+[04:05] isaacs: polotek: git actually puts a number first.
+[04:05] isaacs: polotek: the number of commits
+[04:05] isaacs: polotek: it's like [tag]-[commit count]-[hash]
+[04:06] isaacs: cloudhead: ahh... wait a second...
+[04:06] isaacs: cloudhead: actually, it's not a decmial point at all.
+[04:06] polotek: mmm
+[04:06] isaacs: cloudhead: because 1.2.3-9 is < 1.2.3-10
+[04:06] cloudhead: hehe yes
+[04:06] isaacs: it's just an even-more-minor version
+[04:06] polotek: but most people just use the first 5-6 chars of the commit to differentiate right?
+[04:06] cloudhead: well, it's a padded decimal point
+[04:06] isaacs: cloudhead: no, it isn't, because you'd have to know ahead of time what the decimal count is.
+[04:07] isaacs: cloudhead: it's another entry in the vector
+[04:07] cloudhead: yea
+[04:07] cloudhead: but when comparing it
+[04:07] isaacs: .10 < .9
+[04:07] isaacs: cloudhead: when comparing, you go down the list comparing each member unless one is greater.
+[04:07] isaacs: 1.0.0 > 0.999999.99999999-9999999
+[04:07] cloudhead: .10 > .09
+[04:07] isaacs: no matter how many 9s you put there
+[04:07] cloudhead: so yea, I guess it's best if it's a seperate entry
+[04:08] chewbranca has joined the channel
+[04:08] isaacs: wow, i really don't want to make semver have an arbitrary number of entries in teh fector
+[04:08] isaacs: vector
+[04:08] isaacs: 1.2.3-4-5-6-7-8-9-0-1
+[04:08] saikat has joined the channel
+[04:08] polotek: isaacs: I didn't know that's where we were headed
+[04:08] cloudhead: well no
+[04:08] isaacs: just one?
+[04:08] cloudhead: we can disallow extra -s
+[04:08] cloudhead: so
+[04:08] isaacs: cloudhead: or just say that they're part of the tag.
+[04:08] isaacs: still, not elegant.
+[04:08] polotek: I thought we were just defining how the 3rd vector could be extended
+[04:08] cloudhead: (-?[0-9]+)?
+[04:09] polotek: cloudhead: +1
+[04:09] cloudhead: eh (-[0-9]+)?
+[04:09] isaacs: ok, so 1.2.3-4-5-6 is [1, 2, 3, 4, "-5-6"]
+[04:09] cloudhead: yea
+[04:09] isaacs: and is < 1.2.3-4-beta
+[04:09] cloudhead: wait
+[04:09] isaacs: what about 1.2.3-4beta
+[04:09] _announcer: Twitter: "Just wrote a fun little website ping / Growl tool in node.js while @fontsquirrel's website was down, and now I have a basic IRC bot up."-- Steve 'Sven' Merrill. http://twitter.com/stevenmerrill/status/15681483021
+[04:09] cloudhead: no it's [1,2,3,"4-5-6"]
+[04:09] polotek: isaacs: let's be more practical about what we're trying to cover
+[04:10] isaacs: cloudhead: why?
+[04:10] polotek: beta, alpha, etc are nondescript tags
+[04:10] isaacs: sure
+[04:10] isaacs: cloudhead: 0.1.97-20-g41f213b
+[04:10] polotek: differentiate from sortable tags
+[04:10] polotek: so 4beta is invalid cause it's a mix
+[04:10] polotek: or it's just a non-sortable tag
+[04:10] isaacs: in npm's semver logic, that's [0, 1, 97, "-20-hash"]
+[04:10] cloudhead: do we really need more than one '-' ?
+[04:10] polotek: and doesn't try to sort
+[04:11] isaacs: cloudhead: well, i'm actually happy with it the way that it is, except that everyone who uses node on master complains about it
+[04:11] polotek: so no - means non sortable tag
+[04:11] polotek: - means sortable tag
+[04:11] polotek: but the next thing that's not sortable kills it
+[04:11] isaacs: polotek: anything non-numeric in the minor version starts the "it's a tag" thing
+[04:11] polotek: isaacs: word
+[04:12] isaacs: and tags are handled alphabetically, and are < the untagged version
+[04:12] cloudhead: I think adding (-[0-9a-z]+) as an extra vector would work
+[04:12] ditesh|cassini has joined the channel
+[04:12] isaacs: a-z?
+[04:12] isaacs: o_O
+[04:12] cloudhead: well, not sure about a-z
+[04:12] cloudhead: but it could work
+[04:12] isaacs: base36 numbers?
+[04:12] isaacs: i mean, alphabetical tags should behave like semver says they do
+[04:13] cloudhead: so 1.0.0beta-123abc
+[04:13] isaacs: or we should say screw semver, and put up some better spec.
+[04:13] cloudhead: : )
+[04:13] isaacs: cloudhead: that'd be [1, 0, 0, "beta-123abc"]
+[04:13] cloudhead: Tom likes specs
+[04:13] polotek: cloudhead: 1.0.0-123-beta-123abc
+[04:13] cloudhead: lol
+[04:13] cloudhead: no
+[04:13] polotek: includes the same info but can be sorted by semver
+[04:13] cloudhead: hm
+[04:13] isaacs: ACTION is ok with that, btw, just that semver is a spec with a lot of support
+[04:14] polotek: 1, 0, 0, 123 + "beta-123abc"
+[04:14] polotek: beta tag and git commit
+[04:14] cloudhead: what's the first 123?
+[04:14] isaacs: cloudhead: git describe --tags
+[04:14] polotek: cloudhead: part of your example :) I don't know
+[04:15] cloudhead: ah interesting
+[04:15] polotek: the point is, if you want it to be sortable and follow semver give it a -[0-9]+ 4th vector
+[04:15] isaacs: cloudhead: that's how node sets its version number.
+[04:15] hammerdr: its interesting how software versioning has been influenced by the 'box software' of the 90s; software is now delivered via the internet and automatic updates. It would be interesting to see a versioning system that works with developer workflow.. we can do this with web apps, why not libraries and native client apps?
+[04:15] polotek: otherwise you're not guaranteed sorting
+[04:15] polotek: except to say it's greater than the base 3 vectors
+[04:15] cloudhead: hmm
+[04:16] cloudhead: what if
+[04:16] isaacs: cloudhead: yeah, i'm gonna let ya'll figger this thing out.  lemmeknow when you get somewhere.
+[04:16] cloudhead: we detected whether it was a git tag or a semver
+[04:16] cloudhead: and support both
+[04:16] cloudhead: and tag > semver
+[04:16] cloudhead: and that's it
+[04:16] fernmicro has joined the channel
+[04:17] JimBastard: fernmicro and tmpvar in the house
+[04:17] isaacs: cloudhead: well, that's just another way to say that the -[0-9]+-[0-9a-z]+ is optional
+[04:17] JimBastard: javascript party
+[04:17] cloudhead: isaacs: yea
+[04:17] cloudhead: specifically that
+[04:17] isaacs: treating the commit count as a 4th (optional) vector item is not terrible.  but i wanna see it added to the sepc.
+[04:17] cloudhead: so, exactly two '-'s, or none at all
+[04:18] isaacs: cloudhead: i'll still allow as many dashes as you want.
+[04:18] polotek: isaacs: best way to get it added is to use it and show the utility right?
+[04:18] cloudhead: right, which you currently do
+[04:18] polotek: the only sticky point is the - which is technically not currently supported
+[04:18] polotek: otherwise it wouldn't break any other implementatins
+[04:18] isaacs: cloudhead: [0-9]+\.[0-9]+\.[0-9]+(-[0-9]+-)?([a-zA-Z0-9-]+)?
+[04:19] cloudhead: hmmm yea, that'd work
+[04:19] cloudhead: quite permissive, but I don't mind
+[04:19] isaacs: so 1.2.3-99-beta is [1,2,3,99, "beta"]
+[04:19] isaacs: 1.2.3-99beta is [1,2,3,"-99beta"] like today
+[04:20] polotek: isaacs: word
+[04:20] cloudhead: hmm
+[04:20] isaacs: or should the first one be [1,2,3,99,"-beta"]
+[04:20] JimBastard: cloudhead: this view engine is starting to get unstoppable
+[04:20] isaacs: nah
+[04:20] cloudhead: JimBastard: nice : >
+[04:21] JimBastard: i got a junior developer assisting me now part time during the day
+[04:21] JimBastard: i gotta make him tasks in lighthouse
+[04:21] JimBastard: fuuuuck
+[04:21] cloudhead: isaacs: yea, doesn't matter I guess
+[04:21] isaacs: cloudhead: yeah, first way's easier
+[04:21] JimBastard: css selectors => state machines FTW
+[04:21] isaacs: feh.  i don't like deviating from the spec in relevant ways, but everyone seems to THINK semver works like this anyway
+[04:22] cloudhead: yea
+[04:22] cloudhead: well, you're already supporting dashes
+[04:22] isaacs: sure, but only because you cant' really get away with not supporting them
+[04:22] polotek: I say we petition to become the canonical implemention of semver
+[04:22] polotek: ;)
+[04:22] isaacs: hehe
+[04:22] cloudhead: yea
+[04:22] mape: polotek: ?
+[04:22] isaacs: http://github.com/isaacs/npm/blob/master/lib/utils/semver.js
+[04:23] polotek: mape: ?
+[04:23] mape: you tried sending me Screenshots over DCC?
+[04:25] polotek: mape: hehe, yeah that was a mistake
+[04:25] polotek: ignore
+[04:25] mape: http://gyazo.com/en
+[04:25] polotek: was messing colloquy
+[04:25] mape: for future screenshot sharing ;)
+[04:26] tmpvar has joined the channel
+[04:26] polotek: mape: nice
+[04:26] isaacs: omg. rlwrap on the repl doens't do anything.  hate. this. so. hard.
+[04:26] tmpvar: yo
+[04:27] indexzero has joined the channel
+[04:27] indexzero: ACTION loves the nerd party at your house JimBastard
+[04:27] JimBastard: lol smoke break
+[04:27] JimBastard: we got 4 guys working on JS here
+[04:27] JimBastard: 3 on node
+[04:27] JimBastard: :-D
+[04:27] isaacs: JimBastard: nice
+[04:27] polotek: JimBastard: I'm not cool enough to come to JimBastard's house yet
+[04:27] isaacs: JimBastard: where at?
+[04:27] JimBastard: 27th and lex
+[04:27] isaacs: JimBastard: ie, part of the country
+[04:27] JimBastard: NYC
+[04:27] isaacs: ahh
+[04:27] indexzero: polotek: Its my house too, where you at?
+[04:27] JimBastard: hee hee
+[04:27] polotek: DC
+[04:28] isaacs: come out to california.  it's so much better out here.
+[04:28] indexzero: polotek: sweet, I'm working on a project going into Smithsonian NMNH tomorrow
+[04:28] isaacs: nyc is great at parties, but a lousy roommate.
+[04:28] polotek: indexzero: if you got chicken wings and orange soda I'll show up though
+[04:28] indexzero: haha
+[04:29] isaacs: nyc pisses on your sidewalk, takes all your money, and invites his strange friends over to make a lot of noise in the middle of the night.
+[04:29] isaacs: and that's great once in a while.
+[04:29] isaacs: but like, every day?
+[04:29] polotek: hsuh: you still there?
+[04:29] mindeavor has joined the channel
+[04:32] indexzero: isaacs: I was born and raised in NYC. I love this city, but it's a complex entity. I think walt whitman says it best http://www.swiss-miss.com/2008/05/there-are-rough.html
+[04:32] mscdex: should fs.realpathSync be returning something like undefined if the given path is not valid? using the async version, the err argument in the callback says just that
+[04:32] indexzero: oops ... I mean E.B. White
+[04:34] mscdex: it seems like fs.realpathSync just blocks forever on bad paths
+[04:34] ryah: mscdex: that's not good
+[04:35] ryah: what is a bad path?
+[04:35] mscdex: one that causes "ENOENT, No such file or directory"
+[04:36] mscdex: so, a path that doesn't exist ;-)
+[04:37] ryah: hm, yeah not good.
+[04:37] polotek: not sure what I had planned to get done this evening.  but it didn't happen
+[04:37] ryah: ACTION wonders why we're not calling the c version
+[04:37] polotek: I'm out guys
+[04:37] ryah: polotek: later
+[04:38] polotek has left the channel
+[04:38] siculars has joined the channel
+[04:39] jedschmidt has joined the channel
+[04:44] creationix has joined the channel
+[04:45] stevendavie has joined the channel
+[04:47] nsm has joined the channel
+[04:49] _announcer: Twitter: "Homework of Interest: Evented Networking I/O - Twisted, EventMachine, Node.js"-- tonkla. http://twitter.com/tonkla/status/15683541419
+[04:50] mscdex: is there a way to copy a function in node/V8?
+[04:53] hammerdr: Astro: you about?
+[04:53] wilmoore_ has joined the channel
+[05:02] jedschmidt has joined the channel
+[05:07] pzich has joined the channel
+[05:09] probably_ has joined the channel
+[05:12] mtodd has joined the channel
+[05:13] JimBastard: hey creationix , how hard would it be to get haml-js to output a JSON object instead of HTML
+[05:14] JimBastard: isaacs: [00:31] <isaacs> nyc pisses on your sidewalk, takes all your money, and invites his strange friends over to make a lot of noise in the middle of the night.
+[05:14] tmpvar has joined the channel
+[05:14] JimBastard: WHO DO YOU THINK IS DOING THE PISSING :-D
+[05:14] isaacs: HAHA
+[05:14] isaacs: JimBastard: that's awesome
+[05:14] JimBastard: my friends are strange though
+[05:14] isaacs: JimBastard is NYC
+[05:15] JimBastard: im using a lot of http://github.com/fernmicro/JUP right now for my view engine
+[05:15] JimBastard: the client side templating stuff
+[05:15] JimBastard: JUP is a pretty sweet syntax, very very simple and uber fast and small
+[05:15] JimBastard: but the problem is my junior developers cant handle writing raw JSON
+[05:15] JimBastard: they need something simple like HAML
+[05:16] JimBastard: so i gotta pick some easy syntax that i can parse and convert >.<
+[05:16] thejustinwalsh has joined the channel
+[05:16] JimBastard: maybe just use YAML
+[05:16] isaacs: JimBastard: make them use JSON
+[05:16] JimBastard: let me show you a partial
+[05:16] isaacs: JimBastard: it's easy to validate.
+[05:17] JimBastard: return   [["div", {"data-behaviors":"nav-menu", "data-resource":"views.behaviors", "class":"menu"}],           ["div", {"id":"subOutput"}, "asdasd"]]                ;
+[05:17] isaacs: JimBastard: make them validate it
+[05:17] JimBastard: how you gonna make a js noob write that by hand?
+[05:17] JimBastard: i installed textmate jslint bundle
+[05:17] JimBastard: still not enough
+[05:17] isaacs: JimBastard: formatted properly, that's not so bad
+[05:17] JimBastard: isaacs: lol
+[05:17] _announcer: Twitter: "Having fun with node.js - compiled debs for debian stable, daemonized it, fronted by apache and serving."-- Dave Beckett. http://twitter.com/dajobe/status/15684948968
+[05:22] isaacs: polotek: http://github.com/isaacs/npm/commit/c93f0bc
+[05:23] thejustinwalsh: isaacs:  You are working on multipart, right?
+[05:23] isaacs: thejustinwalsh: not lately, why?
+[05:23] isaacs: thejustinwalsh: i mean, a while back
+[05:23] thejustinwalsh: just curious, started poking at file uploads, and everything I am finding is a bit dated... :)
+[05:24] isaacs: thejustinwalsh: check out formidable
+[05:24] thejustinwalsh: I think I have the old.js file from multipart-js doing it's thing, but still not perfect.
+[05:24] isaacs: thejustinwalsh: you could also bug felixge
+[05:25] isaacs: thejustinwalsh: he runs transload.it on node, so does a lot of upload stuff
+[05:26] thejustinwalsh: right on thanks for the heads up!
+[05:26] probably_ has joined the channel
+[05:29] tmpvar: yo
+[05:29] tmpvar: is anyone here a waf guru?
+[05:30] _announcer: Twitter: "@mde #nodejs needs better build docs, have to figure out what it means by dl library not found from ./configure script (possibly mac dl)"-- sahil cooner. http://twitter.com/neurodamage/status/15685562505
+[05:33] isaacs: gah!! paste doesn't work in the repl any more.
+[05:33] isaacs: hate. so. hard.
+[05:33] tmpvar: no way
+[05:34] isaacs: jsut gets the first char
+[05:34] isaacs: ACTION misses his rlwra
+[05:34] tmpvar: yikes
+[05:34] isaacs: p
+[05:34] thejustinwalsh: formidable is exactly what i'm looking for.  SWEET!
+[05:35] tmpvar: man, all I need is a bit of waf magic and I think I can get node-ogl running on mac :/
+[05:35] tmpvar: i guess i could post the waf + log
+[05:37] JimBastard: mmmm waf magic
+[05:39] probably_ has joined the channel
+[05:39] mcarter has joined the channel
+[05:42] mape: ogl ogl ogl
+[05:42] tmpvar: YES
+[05:42] tmpvar: mape, you see the latest?
+[05:42] mape: I have no idea what ogl is but I like the sound in my mouth
+[05:43] tmpvar: if anyone has _any_ insight -- http://gist.github.com/429660 osx + waf + glut
+[05:43] tmpvar: mape, check this out
+[05:43] mape: ah opengl
+[05:43] tmpvar: http://github.com/tmpvar/node-ogl/blob/master/example/nehe/lesson6.png
+[05:43] tmpvar: just got texture mapping working this weekend
+[05:44] tmpvar: when i get it running on osx (working on that now) we'll be set :)
+[05:44] mape: Shouldn't the cube be sporting some node.js design? ;)
+[05:44] tmpvar: hehe
+[05:44] tmpvar: soon enough
+[05:44] tmpvar: we're just porting over the nehe tuts
+[05:44] tmpvar: but like i said, need waf help
+[05:45] mape: So.. v8+node+ogl-bindings = openGL-app on the desktop?
+[05:45] tmpvar: yep
+[05:45] mape: hardwareaccelerated 2d web rendering?
+[05:45] tmpvar: if you wanted, i suppose
+[05:45] mape: I do want
+[05:45] tmpvar: use orthogonal mode :P
+[05:46] tmpvar: works _great_ in linux
+[05:46] tmpvar: osx is a POS
+[05:47] tmpvar: im going to end up writing the window spawning myself for linux/mac/windows -- fsck the lack of an offscreen buffer in ogl :/
+[05:47] pdelgallego has joined the channel
+[05:50] isaacs: cloudhead: just landed your suggested semver stuff.
+[05:52] tmpvar: isaacs, what os are you trying to paste on?
+[05:52] isaacs: tmpvar: osx
+[05:52] tmpvar: weird
+[05:52] tmpvar: oh, i see it
+[05:53] tmpvar: wow, thats bad
+[05:53] isaacs: yeah
+[05:54] cloudhead: isaacs: wooh
+[05:54] isaacs: ryah: what was wrong with just leaving node readline-less and using rlwrap?
+[05:59] Tim_Smart has joined the channel
+[05:59] tmpvar: lol
+[05:59] tmpvar: be careful..
+[06:00] tmpvar: apple + d causes problems.. ie: you cant close the term
+[06:00] ryan[WIN]: tmpvar, you'd get a lot more milage making an SDL binding for node rather than trying to write your own window crap and using glut
+[06:00] tmpvar: ryan[WIN], sure.. 
+[06:00] tmpvar: ryan[WIN], its a wrapper, to spwan a window
+[06:01] ryan[WIN]: yeah but nobody uses glut
+[06:01] ryan[WIN]: :)
+[06:01] mscdex: any Script gurus here?
+[06:01] tmpvar: ryan[WIN], dude, that means I have to port 2 libs
+[06:01] mscdex: i'm noticing some unexpected (?) behavior: http://gist.github.com/429670
+[06:01] tmpvar: ryan[WIN], what happened to do the simple thing first? ;)
+[06:01] ryan[WIN]: tmpvar, well if you don't want to do it
+[06:01] ryan[WIN]: i'll do it
+[06:02] ryan[WIN]: i have over a decade of gl use
+[06:02] ryan[WIN]: :D
+[06:02] hammerdr has joined the channel
+[06:02] tmpvar: ryan[WIN], well im surprised you havent tried ;)
+[06:02] ryan[WIN]: and i was going to make my own binding anyway
+[06:02] ryan[WIN]: but i've been busy making a vm for game scripting in js
+[06:03] tmpvar: ryan[WIN], i have no problem with your suggestion.. I was actually thinking about doing that earlier.. but i need to get opengl working (and confirmed in atleast osx and linux) before I can move on.. one of those OCD things
+[06:04] ryan[WIN]: man i wish i had more time in the day
+[06:04] ditesh|cassini has joined the channel
+[06:04] ryan[WIN]: or money to pay people or something
+[06:04] tmpvar: ryan[WIN], just so we're clear, currently in the repo im using glfw, I've tried freeglut/openglut.. none of which seem to have support for osx
+[06:04] tmpvar: glut is my fallback, because it ships with everything ;)
+[06:05] tmpvar: and all i really care about is spawning a window + grabbing an ogl context
+[06:05] ryan[WIN]: SDL does what you're looking for even though it includes a lot of nonopengl stuff
+[06:05] tmpvar: I would honestly prefer to render to a hidden backbuffer.. but that is not possible
+[06:05] ryan[WIN]: depends on what you're trying to do and what version of opengl
+[06:05] ryan[WIN]: in later versions of opengl you can render to a framebuffer object
+[06:06] ryan[WIN]: which is what you want to do
+[06:06] tmpvar: ryan[WIN], oh? is that some extension?
+[06:06] tmpvar: passing a context into node-ogl would be perfect.. less dependencies is better
+[06:06] ryan[WIN]: http://en.wikipedia.org/wiki/Framebuffer_Object
+[06:06] tmpvar: ive read this, its platform specific, no?
+[06:07] ryan[WIN]: GL_EXT_framebuffer_object
+[06:07] ryan[WIN]: no
+[06:07] ryan[WIN]: it's opengl
+[06:07] tmpvar: hrm
+[06:07] ryan[WIN]: will work on osx/lunix/windows/iphone/etc.
+[06:08] ryan[WIN]: why do you need to render to a hidden backbuffer?
+[06:08] tmpvar: so i dont have to include windowing
+[06:08] tmpvar: every lib tries to be the end all, and all I want is a window
+[06:08] tmpvar: (for now)
+[06:08] ryan[WIN]: ah
+[06:09] tmpvar: ideally, you could put user IO in another lib, and windowing in another, just pass in a context to node-ogl and run
+[06:09] stevendavie has joined the channel
+[06:09] tmpvar: that makes, sense, no?
+[06:09] ryan[WIN]: well opengl is a horrendous beast
+[06:09] tmpvar: imho, its much _much_ better than dx
+[06:10] tmpvar: if not just for its platform presence 
+[06:10] ryan[WIN]: maybe dx5
+[06:10] ryan[WIN]: opengl es is nice
+[06:10] ryan[WIN]: it's not the most featured but they've certainly pared it down to reliability
+[06:11] ryan[WIN]: for instance, opengl drivers on mac os x use llvm for software pathing and you may never know if the extension you have is actually performed in hw
+[06:11] ryan[WIN]: without a whole lot of platform specific ugliness
+[06:11] amerine has joined the channel
+[06:12] ryan[WIN]: basically if you want to provide opengl, you'll need some of the following routines:
+[06:12] tmpvar: dude, osx does a ton of weird shit.. 
+[06:13] ryan[WIN]: 1)  a method of getting images from JS into glbindtexture
+[06:13] ryan[WIN]: 2)  a GL extension manager/interface
+[06:13] ryan[WIN]: 3)  bindings for the GLSL compiler (very easy)
+[06:14] tmpvar: 0.5) a context to render to
+[06:14] ryan[WIN]: well yeah but i figured you knew that part ;)
+[06:14] tmpvar: hehe
+[06:14] ryan[WIN]: the cool thing is once you get interfaces to the core opengl crap you don't have to do things like shuffle around pointers
+[06:14] tmpvar: I mean I understand, this isnt a "small" task
+[06:14] ryan[WIN]: i'll be happy to help if you have any quirks or questions
+[06:15] tmpvar: no patches? :P
+[06:15] tmpvar: im almost to your #1
+[06:15] ryan[WIN]: do you have a repo or anything
+[06:15] tmpvar: of course :)
+[06:15] ryan[WIN]: link
+[06:15] tmpvar: http://github.com/tmpvar/node-ogl
+[06:16] tmpvar: ive been auto-generating the binding from mesa headers in an effort to do 20% of hand coding
+[06:16] tmpvar: because ogl is big
+[06:17] JimBastard: so is your mom
+[06:17] tmpvar: bam
+[06:17] JimBastard: lol
+[06:18] ryan[WIN]: tmpvar, yeah i will take a full look on this tomorrow
+[06:18] fernmicro has joined the channel
+[06:18] ryan[WIN]: i'm almost done with my vm thing and then i gotta push a few updates to jzzzt but gl for node is definitely something i've been thinking of
+[06:18] tmpvar: nice, its not near complete, which is why I havent formally announced it
+[06:19] ryan[WIN]: in the context of an actual interface but also a canvas simulation
+[06:19] tmpvar: I honestly dont mind hooking up SDL, but its a matter of getting this out firstish
+[06:19] tmpvar: of course
+[06:19] tmpvar: that is the end goal
+[06:19] micheil has joined the channel
+[06:20] ryan[WIN]: that way i can get some of the js things i've been working on to be native apps
+[06:20] tmpvar: get something like processing.js running in a hardware accelerated desktop environment
+[06:20] tmpvar: and others ;) of course
+[06:20] tmpvar: long road, but im down
+[06:26] _announcer: Twitter: "Connect - Middleware for NodeJS - The Changelog - Open Source moves fast. Keep up. http://goo.gl/Zd6E"-- barlog だいすけ. http://twitter.com/daisuke/status/15687959575
+[06:30] hammerdr has joined the channel
+[06:32] fernmicro has joined the channel
+[06:35] cedricv has joined the channel
+[06:35] TomY_ has joined the channel
+[06:38] nsm has joined the channel
+[06:40] jedschmidt has joined the channel
+[06:44] hdon has joined the channel
+[06:44] isaacs has left the channel
+[06:54] _announcer: Twitter: "Really cool to see this basic node.js example gets Etags right. http://howtonode.org/connect-it Welcome to 2010."-- J Chris Anderson. http://twitter.com/jchris/status/15689047795
+[06:57] mcarter has joined the channel
+[07:00] shfx has joined the channel
+[07:02] rednul has joined the channel
+[07:06] felixge has joined the channel
+[07:09] _announcer: Twitter: "@_lunix_ Actually, for what is being complained about, Node.js is the best language. (imho.)"-- Micheil Smith. http://twitter.com/miksago/status/15689635692
+[07:15] mcarter has joined the channel
+[07:25] hellp has joined the channel
+[07:29] admc_ has joined the channel
+[07:33] mcarter has joined the channel
+[07:35] tav_ has joined the channel
+[07:35] _announcer: Twitter: "If you haven't already check out #connect for #nodejs by @creationix http://bit.ly/bXocC7 it really goes far beyond the realm of cool."-- Tom Blackmore. http://twitter.com/tablackmore/status/15690642893
+[07:37] nicolaerusan has joined the channel
+[07:38] trochala has joined the channel
+[07:39] PyroPeter has joined the channel
+[07:47] Tim_Smart has joined the channel
+[07:54] admc has joined the channel
+[07:55] admc has joined the channel
+[07:59] felixge has joined the channel
+[07:59] felixge has joined the channel
+[08:04] plhw__ has joined the channel
+[08:04] orlandov_ has joined the channel
+[08:04] trodrigues has joined the channel
+[08:04] rektide_ has joined the channel
+[08:04] endor_ has joined the channel
+[08:04] Tim_Smart has joined the channel
+[08:04] chuck_ has joined the channel
+[08:04] exlt_ has joined the channel
+[08:07] jakob` has joined the channel
+[08:10] jedschmidt has joined the channel
+[08:17] hassox has joined the channel
+[08:17] dabreaka has joined the channel
+[08:18] _announcer: Twitter: "http://nodejs.org/ node.js - Evented I/O for V8 javascript."-- Харитина. http://twitter.com/haritina24eg/status/15692200866
+[08:20] steadicat has joined the channel
+[08:25] Pilate has joined the channel
+[08:25] eyzn has joined the channel
+[08:25] derbumi has joined the channel
+[08:30] PyroPeter has joined the channel
+[08:31] niklasfi has joined the channel
+[08:31] niklasfi: hi
+[08:31] niklasfi: how do i install the "multipart" module http://github.com/isaacs/multipart-js ?
+[08:32] N` has joined the channel
+[08:40] Ori_P_ has joined the channel
+[08:41] PyroPeter has joined the channel
+[08:41] ewdafa has joined the channel
+[08:41] rnewson has joined the channel
+[08:49] rnewson has left the channel
+[08:52] niklasfi1 has joined the channel
+[08:54] xla has joined the channel
+[08:58] steadicat has joined the channel
+[09:04] slaskis has joined the channel
+[09:06] isaacs has joined the channel
+[09:07] ommadawn has joined the channel
+[09:08] mAritz has joined the channel
+[09:08] isaacs: w00t.  npm unpublish.
+[09:10] ommadawn: Hi, I'm starting playing with node.js and I have a question regarding the use of callback functions : how can I pass extra variables to the callback functions ?
+[09:10] ommadawn: exemple : i'm trying to populate an array with the content of all the file in a given directory. So far I wrote : http://gist.github.com/429792
+[09:11] fdmanana has joined the channel
+[09:11] ommadawn: But i dont know how I can get the filename in the callback of the readFile method.
+[09:11] MattJ100 has joined the channel
+[09:12] felixge has joined the channel
+[09:12] isaacs: ommadawn: http://gist.github.com/429797
+[09:13] felixge: isaacs: nice one
+[09:13] felixge: isaacs: do you not sleep?
+[09:13] felixge: :)
+[09:13] isaacs: felixge: once in a while :)
+[09:14] isaacs: speaking of which, it's bedtime over here.
+[09:14] _announcer: Twitter: "Just build an iPhone app with a big launch button that told a #nodejs app to launch a customers web site. #geek #fun"-- Felix Geisendörfer. http://twitter.com/felixge/status/15694249623
+[09:15] ommadawn: oh I see ! so in order for a variable to be readable through the callback chain, it must be an argument of one of the parent callback, right ?
+[09:16] _announcer: Twitter: "Node's goal is to provide an easy way to build scalable network programs: http://nodejs.org/"-- Martin Fleck. http://twitter.com/ooooaki/status/15694333173
+[09:17] jedschmidt has joined the channel
+[09:20] eyzn has joined the channel
+[09:20] Pilate has joined the channel
+[09:20] PyroPeter has joined the channel
+[09:30] _announcer: Twitter: "Connect takes the familiar concepts of Ruby's Rack and applies it to the asynchronous world of node.js http://tskr.us/Bfb"-- alex kessinger. http://twitter.com/voidfiles/status/15694889063
+[09:30] _announcer: Twitter: "The #nodejs mailing list has surpassed 1500 members."-- Felix Geisendörfer. http://twitter.com/felixge/status/15694891121
+[09:31] PyroPeter has joined the channel
+[09:34] margle has joined the channel
+[09:35] _announcer: Twitter: "Connect: Rack and WSGI inspired middleware for #node.js. http://bit.ly/bXocC7"-- Hermanni Hyytiälä. http://twitter.com/hemppah/status/15695075868
+[09:36] mape: or just assigned in the scope
+[09:36] ommadawn: hmm
+[09:38] Ori_P has joined the channel
+[09:39] ommadawn: yeah, except i could not use this for my issue since the variable was actually changing between callback call.
+[09:39] ommadawn: but I get it now anyway
+[09:40] ommadawn: is there a a nicely formatted api documentation for ECMA-262 somewhere, apart from the language specs ?
+[09:51] caolanm has joined the channel
+[09:53] ewdafa has joined the channel
+[09:58] caolanm: If anyone is interested, I'm looking for some feedback on http://github.com/caolan/async ...it allows you to do things like map/reduce/filter etc using standard node functions like fs.stat and path.exists
+[09:59] caolanm: I realise everyone is probably a bit tired of 'I have a new way to handle async' though, so I've tried to just stick to the standard single callback, not wrap things in continuations or promises etc
+[10:01] mcarter has joined the channel
+[10:09] nsm has joined the channel
+[10:18] mcarter has joined the channel
+[10:26] _announcer: Twitter: "crossdressers: server side js http://nodejs.org/, client side php @ http://gtk.php.net/ coding horror" [de]-- Ronald Widha. http://twitter.com/ronaldwidha/status/15697042611
+[10:26] PyroPeter has joined the channel
+[10:27] slaskis: Why does V8 have array extensions like forEach and map when it's not in the js spec? Is there somewhere i can see which ones that exist? because the only way i've found those two is by looking at other peoples libs...
+[10:27] stagas: caolanm: nice
+[10:29] maushu has joined the channel
+[10:29] unomi has joined the channel
+[10:31] ommadawn: slaskis : it is in the JS spec, just only in the recent ones like ECMA-262
+[10:31] ommadawn: http://www.ecma-international.org/publications/files/ECMA-ST/ECMA-262.pdf
+[10:31] ashb has joined the channel
+[10:31] stagas: caolanm: there is an error in the auto() example with the square brackets
+[10:31] slaskis: ommadawn: ok, i thought that they followed edition 3 only
+[10:34] caolanm: stagas: thanks! I'll take a look
+[10:35] stagas: caolanm: really nice module
+[10:37] mcarter has joined the channel
+[10:45] caolanm: thanks stagas :) ...I've updated the auto example now
+[10:46] caolanm: sometimes I wonder where to ask for feedback on modules, I've avoided doing it on the mailing list because it might get a bit noisy if everyone does it
+[10:46] caolanm: I think its been mentioned before, but perhaps a projects announcement list would be a good idea?
+[10:49] rmetzler has joined the channel
+[10:49] rmetzler: hi
+[10:51] rmetzler: I had a question yesterday about npm. Why is it, when I install a package with required node.js version >=0.1.97 it fails with an error for node.js v0.1.97-25-ga6942b3
+[10:51] rmetzler: ?
+[10:51] mape: regex fail perhaps?
+[10:51] K`` has joined the channel
+[10:52] K``: hello.
+[10:52] K``: is this really the way - 			try { fs.statSync(userDataPath); } catch (e) { sys.puts("creating " + userDataPath); fs.mkdirSync(userDataPath, 0700); }?
+[10:52] rmetzler: http://github.com/isaacs/npm/issues/issue/61/#comment_267695
+[10:53] rmetzler: Isaacs says it works as expected. Is v0.1.97-25-ga6942b3 not sufficient for >=0.1.97 ?
+[10:56] mcarter has joined the channel
+[10:59] rnewson has joined the channel
+[11:02] rmetzler has joined the channel
+[11:06] zomgbie has joined the channel
+[11:08] rmetzler has joined the channel
+[11:11] hellp has joined the channel
+[11:15] ph^ has joined the channel
+[11:16] nsm has joined the channel
+[11:21] stagas: caolanm: or a forum
+[11:22] hdon has joined the channel
+[11:23] steadicat has joined the channel
+[11:26] hellp has joined the channel
+[11:26] PyroPeter has joined the channel
+[11:35] rmetzler has joined the channel
+[11:40] _announcer: Twitter: "node.js compilation, rather than go through the compilation of the V8 engine. It can be helped to replace the V8 with the 0.1.95 source" [ja]-- KOBA789. http://twitter.com/koba789/status/15700229720
+[11:41] maushu: Moonspeak, in my #node.js?!
+[11:44] joshbuddy has joined the channel
+[11:47] nsm has left the channel
+[11:56] rnewson has joined the channel
+[11:58] _announcer: Twitter: "@izs npm might reach 0.2.0 before #nodejs :p"-- Marco Rogers. http://twitter.com/polotek/status/15701121779
+[12:00] jetienne has joined the channel
+[12:08] dabreaka has joined the channel
+[12:12] stagas: I set up a free forum on http://nodejs.lefora.com/ anyone bored enough to help configure it?
+[12:15] stagas: don't rush! :P
+[12:17] zomgbie has joined the channel
+[12:21] hdon has joined the channel
+[12:32] caolanm: stagas: looks like a sesible setup
+[12:32] caolanm: *sensible
+[12:34] stagas: I kinda copied jQuery's forum categories :P
+[12:35] caolanm: I wonder if someone would donate some hosting ;)
+[12:35] caolanm: having a 'games' link feels a little unprofessional, heh
+[12:35] stagas: you can turn it off
+[12:36] stagas: it even lets you throw any custom css
+[12:37] stagas: and the chatter
+[12:38] stagas: anyone wants admin access tell me I'm too lazy to configure all that stuff by myself
+[12:44] mape: Doubt setting up the forum will be the issue, rather having people use it
+[12:44] caolanm: stagas: I wonder if its worth posting to the google group first to see what people would like to keep on google groups and what we might need to support elsewhere
+[12:44] gwoo has joined the channel
+[12:45] caolanm: mape: absolutely, the tricky part is getting people to participate ;)
+[12:50] chandru_in has joined the channel
+[12:51] chandru_in: when u sing queryString .parse I get an error "Object has no method 'split'"
+[12:51] chandru_in: I'm basically trying to parse a post string
+[12:52] _announcer: Twitter: "stoked for the new #nodejs readline lib"-- TJ Holowaychuk. http://twitter.com/tjholowaychuk/status/15703972370
+[13:06] quirkey has joined the channel
+[13:07] caolanm: chandru_in: are you trying to parse a buffer?
+[13:07] caolanm: try calling .toString() on it before parsing
+[13:07] caolanm: just a guess, I don't have time to actually test this out atm ;)
+[13:10] chandru_in: caolanm: You were right.  I didn't know that the API had been updated :(
+[13:11] caolanm: no worries chandru_in! ...that one caught me out a couple of times too ;)
+[13:12] ncb000gt has joined the channel
+[13:13] davidsklar has joined the channel
+[13:15] gf3 has joined the channel
+[13:20] margle has joined the channel
+[13:21] _announcer: Twitter: "@technoweenie Please find me today and bring any node/js buddies. It'll be worth it."-- Sean Cribbs. http://twitter.com/seancribbs/status/15705665774
+[13:21] rmetzler has joined the channel
+[13:22] gf3 has joined the channel
+[13:22] softdrink has joined the channel
+[13:25] mcarter has joined the channel
+[13:26] robrighter has joined the channel
+[13:38] rolfb has joined the channel
+[13:39] dji has joined the channel
+[13:39] dji has joined the channel
+[13:43] cedricv has joined the channel
+[13:43] shfx has joined the channel
+[13:43] mcarter has joined the channel
+[13:48] creationix has joined the channel
+[13:49] jetienne has joined the channel
+[13:49] margle has joined the channel
+[13:52] jetienne has joined the channel
+[13:54] femto has joined the channel
+[13:57] frodenius: hey guys
+[13:58] frodenius: is anyone successfully using envjs on node? 
+[13:58] ceej has joined the channel
+[14:05] gerad has joined the channel
+[14:06] pzich has joined the channel
+[14:06] _announcer: Twitter: "Why you need node.js. Its a single universal uniform event based paradigm for handling, network IO, file IO and signals."-- Joe Drumgoole. http://twitter.com/jdrumgoole/status/15708539960
+[14:09] N` has joined the channel
+[14:12] teemow has joined the channel
+[14:15] jedschmidt has joined the channel
+[14:16] mcarter has joined the channel
+[14:16] _announcer: Twitter: "Stoked on using @heroku.  Free node.js hosting with dead simple git-based deployment.  http://heroku.com/"-- Joe McCann. http://twitter.com/joemccann/status/15709173278
+[14:16] tjholowaychuk has joined the channel
+[14:17] bradleymeck has joined the channel
+[14:17] technoweenie has joined the channel
+[14:22] ceej: is the difference between http://github.com/visionmedia/js-oo and http://github.com/visionmedia/class.js the fact js-oo will work in all browsers as class.js will only work in class A browsers?
+[14:23] pgriess has joined the channel
+[14:23] dabreaka has joined the channel
+[14:29] spoob has joined the channel
+[14:32] mcarter has joined the channel
+[14:36] tjholowaychuk: ceej: ya
+[14:37] tjholowaychuk: ceej: class.js is specifically for node, although I dont even really use it myself anymore, it is convenient in some ways but not really necessary
+[14:37] jherdman has joined the channel
+[14:39] mape: tjholowaychuk: Had any time to look at the asset manager? :)
+[14:39] bradleymeck: i personally think classes in js w/ inheritence can cause issues
+[14:39] tjholowaychuk: mape: nope :( sorry man, already a bit behind polishing up my new app
+[14:40] mape: Nah no worry, I'll just keep bugging you ;)
+[14:40] _announcer: Twitter: "Are there any other javascript platforms built on google v8 that implement the #commonjs module spec? #nodejs"-- Marco Rogers. http://twitter.com/polotek/status/15710756645
+[14:41] ceej: tjholowaychuk: that's what I thought ty :)
+[14:41] ceej: tjholowaychuk: how's it going?  I saw the talk on connect v.nice
+[14:42] tjholowaychuk: ceej: going pretty good! my blog at http://tjholowaychuk.com has a little intro to it as well (unless that is what you are talking about)
+[14:42] tjholowaychuk: ceej: other than a few god damn annoying bugs I have to find I have another cool OS project on the way 
+[14:42] bradleymeck: oi someone w/ a tritter account throw polotek a bone, http://groups.google.com/group/v8-users/browse_thread/thread/ded63b58802d0d9e
+[14:43] Yuffster has joined the channel
+[14:44] _announcer: Twitter: "Is ready to do a preso about #DependencyInjection @dpcon. Also @wspruit on #HipHop and @schmkr on #nodeJs #YAY #PHP #CONF"-- Stefano. http://twitter.com/stefanooldeman/status/15711005588
+[14:44] ceej: tjholowaychuk: nice :)  I saw the presentation on vimeo 
+[14:48] caolanm: tjholowaychuk: I'm liking the look of connect btw
+[14:49] tjholowaychuk: caolanm: thanks man, still a WIP but its a start
+[14:49] caolanm: lets hope this project gains some traction
+[14:50] caolanm: it would really help move things along if the community got behind one of these systems
+[14:51] _announcer: Twitter: "I want node.js on heroku beta access! NAO! However the application email I sent them yesterday was kinda lame. We'll see"-- Marvin Killing. http://twitter.com/mkilling/status/15711475936
+[14:54] ph^ has joined the channel
+[14:55] ceej: doh gotomeeting webinar fail http://screencast.com/t/YmFjNDZjZmYt
+[14:56] ditesh|cassini has joined the channel
+[14:58] behmann has joined the channel
+[15:03] justinlilly has joined the channel
+[15:04] spot__ has joined the channel
+[15:04] kevwil has joined the channel
+[15:05] hsuh has joined the channel
+[15:08] _announcer: Twitter: "[del] [from atifaziz] node.js: Evented I/O for V8 JavaScript. HTTP is a first class protocol in Node. http://url4.eu/4CZsa"-- sldfjd ldajds. http://twitter.com/sldfjd/status/15712608540
+[15:09] rtl has joined the channel
+[15:09] nicolaerusan has joined the channel
+[15:10] _announcer: Twitter: "Oh, what tread, node.js Some people translate the summary. . . http://bit.ly/8Z0LCq and it was @ masahif You&#39;re encouraged to Mr. Yon. I forgot." [ja]-- Yohei Sasaki. http://twitter.com/yssk22/status/15712701634
+[15:11] _announcer: Twitter: "Node.js really good but I think, that the design of server-side JS developer I guess I did not quite. ." [ja]-- Yohei Sasaki. http://twitter.com/yssk22/status/15712778600
+[15:14] rednul_ has joined the channel
+[15:17] tjholowaychuk has joined the channel
+[15:17] jedschmidt has joined the channel
+[15:22] ph^ has joined the channel
+[15:25] sanderjd has joined the channel
+[15:30] ajpiano has joined the channel
+[15:30] voodootikigod has joined the channel
+[15:31] ditesh|cassini has joined the channel
+[15:36] slaskis: how do i define setters and getters? i know i saw it somewhere but i can't find it again...
+[15:37] shajith has joined the channel
+[15:38] caolanm: slaskis: http://ejohn.org/blog/javascript-getters-and-setters/
+[15:38] JAAulde has joined the channel
+[15:40] tekky has joined the channel
+[15:43] derbumi has joined the channel
+[15:45] _announcer: Twitter: ""Connect - Middleware for NodeJS" by @changelogshow #tech #javascript http://bit.ly/9OuGiH"-- Elijah Manor. http://twitter.com/elijahmanor/status/15714779417
+[15:46] slaskis: caolanm: thanks
+[15:46] caolanm: np
+[15:50] ph^ has joined the channel
+[15:56] mscdex has joined the channel
+[15:56] mscdex: !so-last
+[15:57] mscdex: :-(
+[15:58] JimBastard has joined the channel
+[15:59] mscdex: any Script experts around? :>
+[15:59] JimBastard: lulsup
+[16:00] ajpiano has joined the channel
+[16:00] mscdex: http://gist.github.com/429670
+[16:00] mscdex: :-\
+[16:05] gerad has joined the channel
+[16:09] sveilin has joined the channel
+[16:11] utgo has joined the channel
+[16:11] gerad has joined the channel
+[16:12] technoweenie has joined the channel
+[16:15] _announcer: Twitter: "I wonder if this is a great http://nodejuice.com/ Node.js reflected in real time to monitor changes in source code" [ja]-- laiso. http://twitter.com/laiso/status/15716219281
+[16:15] _announcer: Twitter: "http://bit.ly/a470Mr ◊ NPM - A little package manager for #nodejs"-- François-G. Ribreau. http://twitter.com/FGRibreau/status/15716220837
+[16:17] jedschmidt has joined the channel
+[16:18] bradleymeck: mscdex idk if you can do  that w/o some c++ hackery, the context that the script runs in has to have permission to access any closure of the function you send it if i am right
+[16:19] sudoer has joined the channel
+[16:20] mscdex: hmm
+[16:21] stevendavie has joined the channel
+[16:23] mscdex: well, the strange thing is it seemed to work in another situation... i'll have to see if i can extract a simple example of that
+[16:26] tav has joined the channel
+[16:28] shfx has joined the channel
+[16:31] gerad has joined the channel
+[16:32] ryan_gahl has joined the channel
+[16:33] fitzgen has joined the channel
+[16:36] JimBastard: where did require.paths go again
+[16:37] _announcer: Twitter: "anyone know any good node.js injection attacks?"-- Christopher ODonnell. http://twitter.com/markitecht/status/15717495938
+[16:37] JimBastard: lolwut ^^
+[16:37] JimBastard: i wish i had twitter so i could make fun of that guy
+[16:37] fitzgen: JimBastard: hey yeah I came to say the same thing
+[16:37] fitzgen: about require.paths
+[16:37] JimBastard: << marak
+[16:38] fitzgen: ahhh
+[16:38] jedschmidt has left the channel
+[16:38] fitzgen: v0.1.97 in the repl, require.paths is undefined
+[16:39] JimBastard: hrmmm
+[16:39] JimBastard: whats up with directory watching?
+[16:39] JimBastard: there is no fs.watchDir right
+[16:40] JimBastard: should i just use fs.stat on a timer?
+[16:41] JimBastard: check for the timestamp change?
+[16:41] JimBastard: would fs.watchDir ever make it into the fs module?
+[16:44] bmizerany has joined the channel
+[16:44] fitzgen: made a ticket: http://github.com/ry/node/issues/issue/169 
+[16:45] caolanm has joined the channel
+[16:47] Aria has joined the channel
+[16:47] linuxsable has joined the channel
+[16:50] steadicat has joined the channel
+[16:53] ly- has joined the channel
+[16:55] rictic has joined the channel
+[16:55] mjr_ has joined the channel
+[16:55] vnguyen has joined the channel
+[16:56] jherdman has joined the channel
+[16:57] creationix has joined the channel
+[16:57] user9 has joined the channel
+[17:00] ryah: JimBastard: there is no need for watchDir
+[17:00] JimBastard: ryah: i dont think fs.stat or fs.watchFile is enough?
+[17:00] JimBastard: i need to know when the contents of an arbitrary file has been modified inside a directory.
+[17:00] JimBastard: am i just being dumb?
+[17:01] JimBastard: i was about to ask mailing list as to best approach for watching a dir
+[17:01] felixge has joined the channel
+[17:01] ryah: JimBastard: hmm
+[17:02] JimBastard: it seems to pick up new files and deletes, but not modifications
+[17:02] ryah: yes
+[17:02] JimBastard: and a .stat of the parent directory doesnt change
+[17:02] JimBastard: so im not sure how to query for this unless i have N filewatchers
+[17:02] JimBastard: where N is entire contents of my dir
+[17:02] ryah: you need to do a watchFile for each file in the dir
+[17:02] JimBastard: >>>>><<<<<<<<
+[17:02] ryah: maybe you can think of a different solution
+[17:02] JimBastard: i figured that was the wrong solution
+[17:03] JimBastard: i have dir traversal code already
+[17:03] JimBastard: so i can get an array easy enough
+[17:03] user9: arg. express would be my framework of choice if it didn't pollute the damn global namespace. 
+[17:03] JimBastard: express is for communists 
+[17:03] JimBastard: tjholowaychuk
+[17:03] JimBastard: fuck hes here today
+[17:03] JimBastard: lol
+[17:03] tjholowaychuk: hahah
+[17:03] ryah: JimBastard: it's going to be slow if you do that
+[17:04] JimBastard: i usually do t-j , then press tab to see if hes here
+[17:04] JimBastard: ryah: i know man, what else to do?
+[17:04] JimBastard: im not sure the POSIX way of directory watching
+[17:04] mjr_: We could get a binding for the OSX way of directory watching.
+[17:04] tjholowaychuk: JimBastard: dont be a hater :p 
+[17:04] JimBastard: im building a CI script for this project, its pretty important to trigger the BUILD process if a source file has changed
+[17:04] JimBastard: hee hee aight tjholowaychuk 
+[17:04] ryah: mjr_: is there such a thing?
+[17:05] mjr_: ryah: yeah, lemme find it
+[17:05] ryah: mjr_: i don't think so
+[17:05] ryah: part of kqueu?
+[17:05] user9: tjholowaychuk: so, why does it break conventions and mess with the global namespace? 
+[17:06] JimBastard: ryah: im going to try that out. i have like 100+ files and directories, i wonder how bad its gonna slow down
+[17:06] demolithion has joined the channel
+[17:06] JimBastard: i'll make sure to unwatch / block so i dont stack the change events
+[17:06] tjholowaychuk: user9: because it was written before we even had CommonJS for the most part, it ended up being legacy code that stuck for far to long
+[17:06] tjholowaychuk: user9: I have just had no time to work on the project lately
+[17:06] user9: ah fair enough
+[17:06] mjr_: ryah: http://en.wikipedia.org/wiki/FSEvents
+[17:07] user9: tjholowaychuk: so it is considered a wart. good to know.
+[17:08] tjholowaychuk: user9: unfortunately there is a bit of legacy stuff in there, almost none of it was written when node became "stable", all before so things like Server not inheriting from http.Server etc
+[17:08] ryah: JimBastard: don't do that.. it's going to be horrible
+[17:08] ryah: mjr_: interesting
+[17:08] JimBastard: ryah: what else can i do?
+[17:09] JimBastard: its not for a server or anything, its just a locally running script
+[17:09] mjr_: I can't tell whether fsevents is a good or bad thing, but it does do exactly what JimBastard is asking.
+[17:09] CIA-77: node: 03Ryan Dahl 07master * r0377b12 10/ lib/readline.js : 
+[17:09] CIA-77: node: Use strings instead of buffers in readline
+[17:09] CIA-77: node: For eventual large character support. - http://bit.ly/cMItCS
+[17:09] JimBastard: that the developer runs 
+[17:09] tjholowaychuk: JimBastard: you could wait a day or two and use my CI server that supports arbitrary test commands / n browsers for client-side stuff
+[17:09] tjholowaychuk: :D
+[17:10] mjr_: Speaking of strings in readline, is there a unicode way to determine "word" boundaries?
+[17:10] mjr_: Many of the readline commands work on words.
+[17:10] JimBastard: tjholowaychuk: wouldnt work probaly, i got way too much custom stuff
+[17:10] JimBastard: not for this project at least
+[17:10] tjholowaychuk: JimBastard: ah fair enough :)
+[17:10] user9: does ryah=_ry?
+[17:10] JimBastard: but really ryah, can you suggest any other solution?
+[17:11] ryah: mjr_: yes
+[17:11] ryah: mjr_: er, sorry 
+[17:11] ryah: mjr_: i thought you were wasking something else
+[17:11] JimBastard: tjholowaychuk: are you watching for file changes and autobuilding?
+[17:11] ryah: user9, yes
+[17:11] tjholowaychuk: JimBastard: nope it's post-commit stuff via svn/git/github hooks etc
+[17:11] ryah: mjr_: just look for a space
+[17:11] JimBastard: yeah 
+[17:12] tjholowaychuk: JimBastard: sounds like you have more of a test runner like autotest instead of a CI server
+[17:12] tjholowaychuk: which is great too
+[17:12] JimBastard: tjholowaychuk: i have a strange approach to life (and programming). my build script actually autogenerates a shit ton of code
+[17:12] JimBastard: so every one line or two i make in the library refects like 25-50 lines in the actual code base and generated JS bundle (for browser)
+[17:12] JimBastard: i know, i have issues
+[17:12] tjholowaychuk: haha nice
+[17:13] JimBastard: its pretty sane once you see what its doing though, very simple and straight forward
+[17:13] JimBastard: just not standard at all :-\
+[17:13] JimBastard: yeah so directory watching
+[17:13] deanlandolt_: JimBastard: see email
+[17:13] tjholowaychuk: has anyone had luck getting v8's  json ast stuff to work?
+[17:14] JimBastard: reading deanlandolt_ 
+[17:14] tjholowaychuk: AH FCUFASDFLASDFAsfds
+[17:14] tjholowaychuk: found my god damn bug
+[17:14] tjholowaychuk: fucker
+[17:14] JimBastard: yeah i mean it looks like thats just a watchfile approach
+[17:14] JimBastard: deanlandolt_: 
+[17:15] JimBastard: im just gonna try this out with 100+ file watchers
+[17:15] deanlandolt_: shouldn't be a hit
+[17:15] JimBastard: if its slow ill just post on the node mailing list how php is better then node
+[17:15] indiefan has joined the channel
+[17:15] deanlandolt_: heh
+[17:15] creationix: deanlandolt_:  any ideas on an alternative to "next" for Connect?
+[17:15] Aria has left the channel
+[17:15] deanlandolt_: there's not a syscall to watch a folder IIRC
+[17:16] deanlandolt_: creationix: let me look closer at what next() does
+[17:17] rmetzler has joined the channel
+[17:17] creationix: deanlandolt_: it does take three arguments, they're just optional
+[17:17] JimBastard: hey creationix , people are being haters on the mailing list
+[17:17] JimBastard: i havent had a chance to try out Connect yet but it looks cool
+[17:17] creationix: JimBastard: no, they just want to make sure we're not duplicating efforts
+[17:17] charlesjolley- has joined the channel
+[17:18] deanlandolt_: i don't think anybody's really hating
+[17:18] deanlandolt_: JimBastard: you're referring to the extjs bs right?
+[17:18] creationix: A lot of thought and discussion went into JSGI, so it makes sense to be concerned that I completely bypassed it all
+[17:19] deanlandolt_: creationix: i think he means hating because it's hosted in the extjs repo as mit :)
+[17:19] JimBastard: i just mean general EXTJS hating
+[17:19] creationix: yeah, that part is kinda strange
+[17:19] JimBastard: its like texas js with dyslexia 
+[17:20] charlesjolley- has joined the channel
+[17:20] ryah: if someone could invent an interface that could be shared between fsevents and inotify, i'll do it
+[17:20] JimBastard: yo ryah it doesnt seem that slow
+[17:21] ryah: but they seem totally different
+[17:21] JimBastard: seems fairly usable
+[17:21] deanlandolt_: creationix: i can't find any next examples in the examples part...can you poijnt me to any in particular?
+[17:21] ryah: JimBastard: ...
+[17:21] ryah: JimBastard: polling on N files is unacceptable
+[17:21] JimBastard: i think "slow" in nodejs still means "super fucking fast" everywhere else
+[17:21] JimBastard: well ryah, its not really an infinite set
+[17:21] JimBastard: N < 500
+[17:21] creationix: deanlandolt_:  they're only used by filters, it's for middleware that don't provide a response body
+[17:21] JimBastard: N < 1000
+[17:22] JimBastard: i dont think it would ever exceed 1k
+[17:22] ryah: JimBastard: it's doing it all synchronously though - it's really bad
+[17:22] deanlandolt_: what about middleware that can provide a provide a response body?
+[17:22] creationix: deanlandolt_: the static provider does both as does the cache filter
+[17:22] deanlandolt_: cool
+[17:22] JimBastard: ryah: this is part of a build script running locally for one user. 
+[17:22] ryah: JimBastard: it's just calling stat() over and over
+[17:22] JimBastard: still a problem you hink?
+[17:22] ryah: JimBastard: mac?
+[17:22] JimBastard: aye
+[17:23] JimBastard: you run this little CI server and its gonna build shit if you change stuff in the dir
+[17:23] ryah: watchFile on the mac sucks.. it's just calling stat() over and over
+[17:23] ryah: for each file
+[17:24] ryah: synchronously nevertheless
+[17:24] ryah: anyway. bbl.
+[17:24] utgo has joined the channel
+[17:25] JimBastard: ahahaha okay
+[17:25] JimBastard: ACTION posts fs.watchDir to the mailing list saying its fine to use in production
+[17:25] JimBastard: naaah im just kidding
+[17:25] JimBastard: :p
+[17:25] tsyd has joined the channel
+[17:26] tsyd: is it ryah or ryan?
+[17:26] stephenlb has joined the channel
+[17:26] JimBastard: both
+[17:26] JimBastard: lolwut
+[17:27] voxpelli-laptop has joined the channel
+[17:29] whoahbot has joined the channel
+[17:31] qFox has joined the channel
+[17:31] creationix: tsyd: http://tinyclouds.org/
+[17:31] rtl has joined the channel
+[17:33] felixge: ryah: the new repl *ROCKS*
+[17:33] felixge: ryah: anybody working on tab completion yet?
+[17:34] ewdafa has joined the channel
+[17:35] lolninja has joined the channel
+[17:35] lolninja: Hello
+[17:35] siculars has joined the channel
+[17:36] femto has joined the channel
+[17:36] utgo1 has joined the channel
+[17:36] lolninja: I'm trying to write an irc bot, but when I run net.createConnection(6667, 'irc.freenode.net'); I get a ERROR :Closing Link: 127.0.0.1 (Connection timed out) response, it this there I am something doing wrong, or is my computer blocking the connection? I'm on OSX.
+[17:38] pzich has joined the channel
+[17:40] charlesjolley- has joined the channel
+[17:45] reid1 has joined the channel
+[17:46] Ori_P has joined the channel
+[17:48] pgriess has joined the channel
+[17:49] ph^ has joined the channel
+[17:49] b_erb has joined the channel
+[17:50] JimBastard: sup lolninja 
+[17:50] JimBastard: there are a few node irc bots already
+[17:50] JimBastard: check out Jerk
+[17:51] mtodd has joined the channel
+[17:51] stephenlb has joined the channel
+[17:52] user9: lolninja: what ip does irc.freenode.net resolve to when you ping it?
+[17:52] isaacs has joined the channel
+[17:53] rmetzler_ has joined the channel
+[17:53] user9: ooh, repl by default. as god intended.
+[17:55] cloudhead has joined the channel
+[17:57] mcarter has joined the channel
+[17:58] fitzgen: JimBastard: Can you see if you can install wu via npm for me?
+[17:59] JimBastard: kk
+[17:59] JimBastard: npm install wu?
+[17:59] fitzgen: sure
+[17:59] fitzgen: maybe you have to update your catalog first? I have never used npm
+[17:59] isaacs: fitzgen: you would need to tag it as stable, and it looks like it's getting a 404 on the tarball.
+[17:59] JimBastard:  Error: Tag stable not found for package wu 
+[17:59] isaacs: fitzgen: maybe it didn't update first.
+[17:59] mitkok has joined the channel
+[17:59] isaacs: didn't upload, that is
+[17:59] JimBastard: isaacs: why does it not default to master?
+[17:59] fitzgen: isaacs: k, it said it never worked, but now I see it in the remotes....
+[17:59] JimBastard: or at least look for master if stable isnt there
+[18:00] isaacs: JimBastard: it defaults to stable.  if you want latest, you have to specify that.
+[18:00] isaacs: JimBastard: if you want it to have multiple defaults, i'd love a patch
+[18:00] isaacs: .
+[18:00] JimBastard: i see the benefit in that
+[18:00] JimBastard: id like to see  Error: Tag stable not found for package wu try to find master though before it bombs
+[18:00] JimBastard: ive seen a few people hit that error
+[18:00] gerad has joined the channel
+[18:00] isaacs: fitzgen: can you try unpublishing that version and sending it up again?
+[18:00] saikat has joined the channel
+[18:01] fitzgen: isaacs: k how do I unpublish? npm unpublish wu?
+[18:01] isaacs: fitzgen: npm unpublish wu 0.1.1
+[18:01] fitzgen: k thnks brb
+[18:01] isaacs: fitzgen: unpublish is a little persnickety, to keep you from accidentally deleting a lot of stuff.
+[18:01] mtodd has joined the channel
+[18:02] fitzgen: isaacs: is it preferred to "npm publish ." or to point it at a tarball from github?
+[18:02] isaacs: fitzgen: it's the same thing either way
+[18:02] fitzgen: k
+[18:02] isaacs: fitzgen: in both cases, it first caches it to a canonical location, so it ends up uploading its own tarball
+[18:02] lolninja: user9: its giving me 140.211.166.3
+[18:03] behmann has joined the channel
+[18:03] fitzgen: isaacs, JimBastard: how does it look now?
+[18:03] JimBastard: npm ! Error: Tag stable not found for package wu 
+[18:04] JimBastard: fitzgen: isaacs is the guy who wrote NPM
+[18:04] _announcer: Twitter: "@ Barbuza think nekovm suitable as a platform? but not in js to compile and run on node.js?" [ru]-- Andrey Popp. http://twitter.com/andreypopp/status/15722617550
+[18:04] isaacs: JimBastard: npm install wu@latest
+[18:04] fitzgen: JimBastard: I am aware
+[18:04] JimBastard:  Error: 404 { server: 'nginx/0.7.62' , date: 'Tue, 08 Jun 2010 18:04:31 GMT' , 'content-type': 'text/plain;charset=utf-8' , connection: 'close' , 'content-length': '64' , 'cache-control': 'must-revalidate' } 
+[18:04] JimBastard: npm fetch http://registry.npmjs.org/wu/-/wu-0.1.1.tgz to /Users/Marak/.node_libraries/.npm/.cache/wu/0.1.1/package.tgz npm fetch http://registry.npmjs.org/wu/-/wu-0.1.1.tgz npm fail Error installing wu@0.1.1 
+[18:05] isaacs: fitzgen: can you please gist the output from when you'er uploading it?
+[18:05] fitzgen: k hold on
+[18:05] JimBastard: would it make sense to allow sys.puts to accept commas 
+[18:05] JimBastard: as an optional replacement to +
+[18:05] JimBastard: sys.puts('foo ', bar)
+[18:06] fitzgen: isaacs: http://gist.github.com/430406 
+[18:06] JimBastard: i really should actually look at the node C++ code some day
+[18:06] JimBastard: or even its JS source
+[18:06] JimBastard: im terrible
+[18:06] isaacs: JimBastard: sys.puts = (function (p) { return function () { p(Array.prototype.join.call(arguments, "")) } })(sys.puts)
+[18:07] isaacs: fitzgen: thanks
+[18:07] isaacs: fitzgen: this is concerning: npm registry error parsing json
+[18:07] probablycorey has joined the channel
+[18:07] JimBastard: lol, isaacs 
+[18:07] JimBastard: comma fail here
+[18:07] JimBastard: it was working
+[18:07] fitzgen: isaacs: whoah missed that
+[18:07] isaacs: oh, hah
+[18:08] reid1: how do i get into on a package in the registry?
+[18:09] reid1: like, where the narwhal* packages came from
+[18:09] lolninja has left the channel
+[18:09] isaacs: reid1: narwhal packages come from the tusk catalog.
+[18:09] isaacs: reid1: ping kriskowal about that
+[18:09] fitzgen: isaacs: I'm not seeing anything wrong with my json, wnat to take a look? http://gist.github.com/430412 
+[18:10] isaacs: fitzgen: it's actually the json coming back from the registry that's not parsing properly.  it's weird to me that it's not erroring out at that point, though
+[18:10] fitzgen: isaacs: so where do we go from here?
+[18:11] isaacs: fitzgen: i'm digging into it
+[18:11] fitzgen: k
+[18:14] aho has joined the channel
+[18:15] ph^ has joined the channel
+[18:16] isaacs: whoa, that's lame.
+[18:16] isaacs: on error resume next
+[18:18] cloudhead: hey isaacs, can you take a look at this? http://github.com/cloudhead/http-console/issues/#issue/5
+[18:19] isaacs: fitzgen: can you do me a favor?  download the latest npm code from my repo, do a "make install", unpublish wu 0.1.1, and try to publish it again.
+[18:19] isaacs: fitzgen: it may still fail, but i want to see if it fails in a more helpful way
+[18:20] isaacs: cloudhead: yeah, twas a regression.  fixed in 0.1.15
+[18:21] tekky has joined the channel
+[18:21] cloudhead: isaacs: oh, I think he has the latest npm though
+[18:21] cloudhead: I'll let him know
+[18:21] isaacs: cloudhead: can you try?
+[18:21] cloudhead: ah you already did
+[18:21] cloudhead: works for me
+[18:21] isaacs: npm rm eyes; npm rm http-console; npm install http-console
+[18:21] cloudhead: but
+[18:21] cloudhead: yea
+[18:21] cloudhead: will do that
+[18:21] fitzgen: isaacs: k will do
+[18:22] isaacs: if he thinks he is using the latest npm because he did a git pull, he should know that that does nothing.
+[18:22] isaacs: the way to update npm is to do: npm install npm
+[18:22] cloudhead: yep, works for me, from a fresh install
+[18:22] isaacs: great
+[18:22] sechrist has joined the channel
+[18:22] JimBastard: sup cloudhead , im trying out eyes today for my CI server
+[18:22] JimBastard: try some color output
+[18:22] JimBastard: :p
+[18:23] fitzgen: isaacs: v0.1.15 or HEAD?
+[18:23] cloudhead: JimBastard: tehe cool
+[18:23] isaacs: fitzgen: HEAD, please.
+[18:23] fitzgen: k
+[18:23] isaacs: fitzgen: if you do a "make link" then just updating from git will update the installed version.  make install will install the code you have sitting right there.  just "make" alone installs the stable version.
+[18:24] fitzgen: isaacs: says I have an incompatible node version
+[18:24] _announcer: Twitter: "Parsing file uploads at 500 mb/s with node.js » Debuggable Ltd:  http://bit.ly/aQn6Iu"-- Matthijs. http://twitter.com/mullender/status/15723724683
+[18:24] fitzgen: v0.1.97
+[18:25] isaacs: derp.  just a sec.
+[18:25] isaacs: fitzgen: pull and try again.
+[18:25] fitzgen: k
+[18:26] fitzgen: npm ! Error: node version not compatible:
+[18:26] fitzgen: required: >=0.1.97
+[18:26] fitzgen: actual: v0.1.97
+[18:26] fitzgen: is it that little v?
+[18:26] isaacs: hmmm....
+[18:26] kwluo has joined the channel
+[18:27] isaacs: yep, apparently.
+[18:27] tmpvar has joined the channel
+[18:27] fitzgen: is it my end or yours?
+[18:27] isaacs: debugging.  my end.
+[18:27] JimBastard: im surprised this isnt just working
+[18:27] fitzgen: ...
+[18:27] tomh- has joined the channel
+[18:28] tmpvar: hello
+[18:28] kwluo: How close is Node.js to production-ready?
+[18:28] JimBastard: isaacs: did you hit a special use case with this package?
+[18:28] creationix: isaacs: the "v" varies depending if you're on a release version of node or a normal git release
+[18:28] JimBastard: kwluo: fully, microsoft uses it for windows7
+[18:28] isaacs: JimBastard: it's the changes to semver logic.  this is why id idn't want to change that stuff.
+[18:28] tomh-: hey guys, how would you use image manupilation with node.js?
+[18:28] creationix: kwluo: what do you mean by production-ready?
+[18:28] tomh-: any libs available for that
+[18:28] JimBastard: tomh-: check the modules page on the wiki
+[18:29] kwluo: creationix: ready to be deployed to be used on a large scale
+[18:29] drostie has joined the channel
+[18:29] kwluo: JimBastard: cool, thanks
+[18:29] JimBastard: kwluo: lol
+[18:29] JimBastard: i wouldnt use node for a large scale project
+[18:29] kwluo: well
+[18:29] JimBastard: id use it for a small project that could grow quickly
+[18:29] creationix: kwluo: I wouldn't do it quite yet unless you're ready to handle unexpected stuff
+[18:29] JimBastard: and hope it doesnt shit itself
+[18:29] kwluo: I'm onlly using it for the backend of a chat server
+[18:30] kwluo: my main application is in rails
+[18:30] creationix: there are large sites running on it
+[18:30] JimBastard: are you bank of america? or joe blows chat room?
+[18:30] JimBastard: i mean, just keep it real. node is not v1.0 yet
+[18:30] tomh-: ah cool there are several
+[18:30] JimBastard: ive had node survives massives amounts of traffic
+[18:31] JimBastard: aight back to work
+[18:31] isaacs: fitzgen: ok, try again, please.  pull, make install, upload
+[18:31] fitzgen: k thanks
+[18:31] ryan_gahl: lol... two great news headlines there (just poking head in)... "Jow blows Chat Room" and "Node survives massive amounts of traffic"
+[18:32] ryan_gahl: hi all
+[18:32] tmpvar: hai
+[18:32] creationix: ryan_gahl: howdy
+[18:32] ryan_gahl: creationix: kudos on Connect
+[18:32] creationix: thanks, hopefully we can pull this off
+[18:33] fitzgen: isaacs: :( gist on the way
+[18:33] creationix: node needs some sort of middleware framework
+[18:33] ryan_gahl: well, node yes, but also SSJS in general, but that's sort of the crux of the pseudo-debate i suppose
+[18:34] fitzgen: isaacs: http://gist.github.com/430450 
+[18:35] isaacs: fitzgen: fantastic.
+[18:35] isaacs: ok, i know what this is.
+[18:35] _announcer: Twitter: "Connect is a Rack-inspired middleware framework for #nodejs that I can't wait to use. http://is.gd/cHxVg"-- Robert Coker. http://twitter.com/robsays/status/15724310260
+[18:35] isaacs: fitzgen: the issue is that nginx isn't letting your tarball through because it's too big.
+[18:36] fitzgen: isaacs: hmmmmmm
+[18:36] isaacs: fitzgen: it's the closure compiler, most likely
+[18:36] fitzgen: prolly cause I have closure compiler
+[18:36] fitzgen: yea
+[18:36] fitzgen: should I just make a custom tar for npm?
+[18:37] isaacs: fitzgen: so, it'd be good to not include the closure compiler, yeah.  however, this is a persistent problem, and closure is only about 4MB after all.
+[18:38] isaacs: fitzgen: i'm gonna bump up the client_max_body_size  in nginx to let it through
+[18:38] fitzgen: yeah, its really nice having it in the repo though, I will probably just make a Jake task
+[18:38] fitzgen: isaacs: oh ok great
+[18:38] isaacs: fitzgen: i'd like to support a .npmignore file eventually
+[18:39] fitzgen: isaacs: that sounds like a perfect solution
+[18:39] isaacs: fitzgen: with just a list of globs to tell tar to ignore when it creates the bundle.
+[18:39] fitzgen: yup
+[18:39] isaacs: fitzgen: then you could even have like multiple different types of programs, and only give npm the bit that works with node, if you have like browser stuff and whatnot that doesn't make sense with node.
+[18:40] Validatorian has joined the channel
+[18:40] Validatorian: anybody know how to make node 'beep'? I've tried exec('echo -en "\007"') to no avail
+[18:41] fitzgen: isaacs: yeah, wu was pretty easy to make work on both ends though just check if window or exports
+[18:41] sechrist: I'm trying to run make on kiwi and it's asking for spec
+[18:41] sechrist: what is that?
+[18:41] sechrist: (I need kiwi to run express-auth apparently)
+[18:42] orlandov_: omg, i'm in love with node's new readlineish behaviour
+[18:42] isaacs: orlandov_: really?  i rolled it back.
+[18:42] fitzgen: isaacs: is the max size bumped up yet?
+[18:42] isaacs: orlandov_: (just in my local install, i mean)
+[18:42] isaacs: fitzgen: workin on it, just a sec
+[18:42] fitzgen: k sorry to bug
+[18:42] orlandov_: isaacs: oh really? you don't care for it?
+[18:42] mjr_: orlandov_: yeah, isn't readline great?  I've been wanting it for so long.
+[18:43] orlandov_: i just really like line editing and history - after using the python repl for years i really missed it
+[18:43] isaacs: orlandov_: i have "js" aliased to "rlwrap node-repl" already, and that uses my .inputrc
+[18:43] isaacs: orlandov_: with the latest readline.js changes, all my customizations break.
+[18:43] fitzgen: orlandov_: you never used ipython??
+[18:44] orlandov_: fitzgen: no... it sounds really familiar though
+[18:44] _mythz has joined the channel
+[18:44] fitzgen: orlandov_: its really great, check it out if your still doing python stuff
+[18:44] isaacs: orlandov_: so, i can't do C-X C-E to edit in textmate, or type the first few chars and use Up and Down arrows to scroll through just the matching lines in history, and my history isn't tracked across sessions in ~/.node-repl_history
+[18:44] mjr_: isaacs: how does the new readline break your stuff?  I thought it was disabled unless node owned the tty.
+[18:44] fitzgen: orlandov_: http://ipython.scipy.org/screenshots/ 
+[18:44] isaacs: mjr_: node *does* own the tty when it's rlwrap-ed
+[18:44] orlandov_: mjr_: well, it's not really readline that ry implemented
+[18:45] mjr_: oh, that's interesting.  It shouldn't own the tty under rlwrap, IMO.
+[18:45] orlandov_: just some of it's basic features
+[18:45] orlandov_: readline proper is gpl iirc
+[18:45] isaacs: mjr_: sure, but it has to fake it so that programs will still work as if they're interactive when wrapped with rlwrap
+[18:45] mjr_: orlandov_: Yeah, I know it is a hacked up thing in JS.  I added a bunch of bindings for it yesterday.
+[18:45] mjr_: I want to add a bunch more.
+[18:45] isaacs: mjr_: otherwise rlwrap cat will just exit immediately.
+[18:45] orlandov_: mjr_: yes! make it awesome :)
+[18:45] joshowens has joined the channel
+[18:46] mjr_: isaacs: I think we can work that out so it works right under rlwrap.
+[18:46] isaacs: mjr_: add "read .inputrc exactly like readline and implement everything the same way readline does" and i'll be a happy camper.
+[18:46] isaacs: or that.
+[18:46] mjr_: well, ha
+[18:46] isaacs: that would work, too
+[18:46] mjr_: Proabbly not THAT much like readline, but it shoudl at least get out of the way.
+[18:46] isaacs: yeah
+[18:46] orlandov_: i do kind of miss vi mode, but whatever
+[18:46] isaacs: fitzgen: ok, worked, looks like nginx restarted ok.  try again.
+[18:47] fitzgen: isaacs: thanks a bunch
+[18:47] isaacs: also, with this change, when the upload fails, the version doesn't end up in the repo.  that's AWESOME.
+[18:47] isaacs: i can't even TELL you how incredibly awesome that is.
+[18:47] isaacs: bad data is SO much worse than no data.
+[18:47] fitzgen: yes, agreed!
+[18:47] fitzgen: but, still getting the error
+[18:48] isaacs: really?  too big still?  i set it to 10m
+[18:48] isaacs: how big is your tarball?
+[18:48] isaacs: ls -laF ~/.node_libraries/.npm/.cache/wu/0.1.1/package.tgz
+[18:48] b_erb: i need to create an atom (xml) feed in node.js. which (leightweight) template/xml engine would you suggest?
+[18:49] fitzgen: isaacs: ls: cannot access /home/fitzgen/.node_libraries/.npm/.cache/wu/0.1.1/package.tgz: No such file or directory
+[18:49] isaacs: fitzgen: er, where is npm installed?
+[18:49] fitzgen: where is my clone?
+[18:49] isaacs: fitzgen: npm config ls
+[18:50] isaacs: or just npm config get root
+[18:50] fitzgen: usr local lib node apparently
+[18:50] isaacs: ah, i see.  you're a sudoer :)
+[18:50] fitzgen: it wasn't working w/o sudo :)
+[18:50] isaacs: ls -laF $(npm config get root)/.npm/.cache/wu/0.1.1/package.tgz
+[18:50] sudoer: I am a sudoer
+[18:50] fitzgen: hahahahahhahaahahhahahahahahahahahah
+[18:51] fitzgen: perfect timing
+[18:51] ph^ has joined the channel
+[18:51] fitzgen: isaacs: 3957391
+[18:51] sechrist: sudoer: make me a sandwich
+[18:51] sudoer: haha
+[18:52] sudoer: sandwich making failed
+[18:52] sechrist: sudoer: sudo make me a sandwich
+[18:52] isaacs: fitzgen: hm.  so, it's only like 4M
+[18:52] isaacs: 10M should be more than enough
+[18:52] jxson has joined the channel
+[18:52] sudoer: sandwich completed
+[18:52] orlandov: make: *** No rule to make target `me'.  Stop.
+[18:52] sudoer: and eaten by me
+[18:52] sechrist: cat sandwich >> /dev/stomach
+[18:52] fitzgen: isaacs: will try again
+[18:53] fitzgen: isaacs: still saying its too big
+[18:53] steadicat has joined the channel
+[18:53] isaacs: hrm.
+[18:54] isaacs:   client_max_body_size 20M;
+[18:54] derferman has joined the channel
+[18:54] fitzgen: have all the processes restarted?
+[18:54] isaacs: yeah, i think so
+[18:55] fitzgen: same
+[18:55] niklasfi has joined the channel
+[18:55] isaacs: fitzgen: ok, just stopped, verified that they had all stopped, and started again.
+[18:56] reid1 has joined the channel
+[18:57] fitzgen: isaacs: trying once more
+[18:57] fitzgen: isaacs: nope
+[19:03] mikeal has joined the channel
+[19:03] femtoo has joined the channel
+[19:03] sechrist: ugh ciaranj's crap is usuable because of kiwi
+[19:03] kwluo has joined the channel
+[19:03] sechrist: this stuff seems horribly broken
+[19:05] gerad1 has joined the channel
+[19:06] isaacs: fitzgen: that is lame.
+[19:07] fitzgen: isaacs: where do we go from here?
+[19:07] isaacs: fitzgen: maybe couchdb is saying it's too big?
+[19:07] isaacs: and nginx is just proxying the error?
+[19:07] isaacs: fitzgen: i think tonight i'm going to implement the .npmignore file
+[19:07] fitzgen: k, so I should just wait?
+[19:07] isaacs: fitzgen: if you can try moving the closure jar out of the way, and then publish, see if that works.
+[19:07] teemow has joined the channel
+[19:08] fitzgen: k, will do
+[19:08] fitzgen: isaacs: is npm packaging the whole .git/ dir too?
+[19:08] isaacs: fitzgen: no, it ignores .git
+[19:08] fitzgen: k sweet
+[19:08] tsyd: creationix: i see his name listed as both ryan dahl, and ryah dahl... which one is it?
+[19:08] niklasfi: can someone tell me what errors fs.stat can throw?
+[19:09] isaacs: fitzgen: i also want to have it ignore .svn and CVS folders, but it turns out that pretty much 100% of node projects use git.
+[19:09] isaacs: niklasfi: man 2 stat
+[19:09] creationix: tsyd: I think his real name is Ryan, you'll have to ask him to know where the ryah name comes from.
+[19:09] isaacs: niklasfi: check the "ERRORS" section of that manpage.
+[19:09] behmann has joined the channel
+[19:09] fitzgen: yeah, surprised that no one uses hg, but I guess I code in python a lot
+[19:10] niklasfi: that would be "node man 2 stat"?
+[19:10] isaacs: niklasfi: no.
+[19:10] isaacs: niklasfi: just "man 2 stat"
+[19:10] isaacs: niklasfi: on some posix system :)
+[19:10] niklasfi: ok
+[19:11] dks has joined the channel
+[19:11] niklasfi: so that is actually the os stat function being called?
+[19:11] isaacs: niklasfi: yeah, and any errors just bubble up.
+[19:11] isaacs: niklasfi: node's fs module is *very* low level.
+[19:11] isaacs: niklasfi: and very close to the posix standards.
+[19:11] niklasfi: that is what i was wondering about when reading the code
+[19:12] niklasfi: the errors were just returned but i did not know where they originate from
+[19:12] isaacs: there are some conveniences, but the base-level stuff is exposed, too
+[19:18] reid1: anybody get the narwhal package on npm to install?
+[19:19] isaacs: reid1: what do you mean by "narwhal package"?
+[19:19] isaacs: reid1: you mean, something in the tusk catalog?
+[19:19] reid1: No. I mean this: http://github.com/kriskowal/narwhal-node
+[19:19] cloudhead: ryah: any plans to get readline history to work accross sessions?
+[19:19] sechrist: narwhalz
+[19:20] isaacs: reid1: npm install narwhal@latest
+[19:20] isaacs: reid1: it kinda sorta not really almost works.
+[19:20] isaacs: :D
+[19:20] reid1: tag stable not found?
+[19:20] isaacs: reid1: since it's not stable, i haven't tagged it such
+[19:20] reid1: npm ! Error: Tag stable not found for package narwhal-lib
+[19:21] isaacs: oh, hrm...
+[19:21] reid1: that's cool,
+[19:21] reid1: but how do i force it?
+[19:21] fitzgen: isaacs: can you checkout wu from npm? I think I published successfully
+[19:21] reid\work has joined the channel
+[19:21] maushu has joined the channel
+[19:22] isaacs: fitzgen: not found?
+[19:22] fitzgen: isaacs: really??
+[19:22] fitzgen: @latest?
+[19:23] reid\work: isaacs: I get a 404 when doing a npm install narwhal-lib@latest
+[19:23] isaacs: reid\work: hrm.  yeah.  it's broken.
+[19:23] isaacs: just a sec.
+[19:23] reid\work: k
+[19:24] isaacs: reid\work: well, that's a shame.
+[19:25] rtl has joined the channel
+[19:25] ryah: cloudhead: no
+[19:26] reid\work: isaacs: doesn't npm host the tarball?
+[19:26] isaacs: reid\work: yeah, but this was uploaded a while back.
+[19:26] reid\work: ah
+[19:26] isaacs: reid\work: i'm republishing now.
+[19:26] isaacs: open source moves fast.
+[19:26] reid\work: isaacs: thanks!
+[19:26] voodootikigod has joined the channel
+[19:26] isaacs: occasionally a tarball flies out the window on the highway.
+[19:26] reid\work: yessir
+[19:27] ryah: isaacs: do mac apps also read .inputrc? 
+[19:27] isaacs: ryah: anything that uses readline does.
+[19:27] isaacs: ryah: the actual readline, i mean
+[19:27] ryah: so, no
+[19:27] ryah: ?
+[19:27] isaacs: ryah: i think editline does, too
+[19:28] isaacs: ryah: bash does, rhino does, etc.
+[19:28] ryah: i mean macintosh applications
+[19:28] ryah: ichat
+[19:28] isaacs: ryah: oh... um... no, i dont' think so
+[19:28] javajunky has joined the channel
+[19:28] isaacs: but that'd be AWESOME.
+[19:28] ryah: :)
+[19:28] ryah: we're not going to get too crazy with the readline stuff
+[19:28] isaacs: yeah
+[19:28] ryah: we'll provide a pretty good default thing
+[19:29] ryah: people can hot patch it if they want something better
+[19:29] isaacs: if repl.js could at least detect whether or not it's rlwrapped, that'd probably be fine.
+[19:29] ryah: maybe with a real link to libreadline
+[19:29] isaacs: if node's gonna include something, it should be light and simple.
+[19:29] mindeavor has joined the channel
+[19:29] ryah: isaacs: yeah, i think we can do that - right now it's just checking if the stream.fd < 3
+[19:29] ryah: just need to call isTTY
+[19:30] ryah: which i'll fix right now
+[19:30] cloudhead: ryah: would you accept a patch to do cross-session history?
+[19:30] cloudhead: can store it in ~/.node_history
+[19:31] ryah: cloudhead: let's not do that right now
+[19:31] cloudhead: ok
+[19:31] ryah: maybe later
+[19:32] isaacs: cloudhead: rlwrap does that for you for free.
+[19:32] cloudhead: isaacs: not for free : )
+[19:32] cloudhead: I need to type 'rlwrap' before commands
+[19:32] isaacs: cloudhead: alias, man
+[19:32] isaacs: cloudhead: alias js="rlwrap node-repl"
+[19:32] isaacs: or even, now, alias js="rlwrap node"
+[19:32] cloudhead: yea, dunno
+[19:33] cloudhead: it's only a coincidence that I have rlwrap installed
+[19:33] cloudhead: was for playing with clojure I think
+[19:34] b_erb has joined the channel
+[19:34] tilgovi has joined the channel
+[19:35] hsuh has joined the channel
+[19:35] cloudhead: ryah: maybe a nice middle-ground would be to allow libraries to pre-fill readline.js's history
+[19:35] cloudhead: which I guess is already possible
+[19:36] ryan_gahl: ryah: do you have any feedback re: my EventEmitter patch submittal from last week? is it that I went about submitting the patch in the wrong manner, or just busy with lot'o'shit?
+[19:37] voxpelli-laptop has joined the channel
+[19:40] steadicat has joined the channel
+[19:41] slaskis_ has joined the channel
+[19:41] ryah: ryan_gahl: just busy - but i'm also not jumping to add core API like that...
+[19:42] ryan_gahl: ok, cool, just wanted to hear something :) - now i know what to spend time on patch-wise (or rather, what not to)
+[19:42] ryan_gahl: thx
+[19:42] ryah: ryan_gahl: i'll reply to the email soon - sorry for taking so long
+[19:42] javajunky has joined the channel
+[19:43] ryan_gahl: trust me, dude... no worries, you must be inundated with stuff
+[19:43] mikeal has joined the channel
+[19:43] ryah: i could have sworn we had a istty binding....
+[19:44] isaacs: ryah: process.binding("stdio").isStdoutBlocking or something like that
+[19:44] isaacs: ryah: process.binding("stdio").isStdoutBlocking()
+[19:44] isaacs: ryah: which means "it's not a TTY"
+[19:44] fitzgen: isaacs: can you check if wu is in npm now? if not I have a gist showing what seems to be success...
+[19:45] ryah: isaacs: oh yeah
+[19:45] isaacs: fitzgen: hm.  still not there.
+[19:45] isaacs: fitzgen: so, i'm gonna have to dig into this further, but for now, i need to do work that i get paid for.
+[19:45] isaacs: can you gist the log?
+[19:45] fitzgen: isaacs: k check this out: http://gist.github.com/430544 
+[19:45] fitzgen: isaacs: understandable
+[19:46] isaacs: fitzgen: yeah, something weird is happening.
+[19:46] isaacs: fitzgen: i'm seeing that, too
+[19:46] maushu: Anyone knows how they did smooth scrolling in aves game engine?
+[19:46] isaacs: fitzgen: fyi, if you do'nt see "npm ok" at the end, then it didn't work.
+[19:46] isaacs: it's just timing out or something
+[19:46] fitzgen: isaacs: k sweet, good to know
+[19:46] fitzgen: thanks for the help
+[19:47] isaacs: fitzgen: what's weird is that it works fine for some packages, but not others.
+[19:48] isaacs: fitzgen: it's a shame.  wu is by far the most interestingly branded package in the registry.  i wish it wasn't giving you so much trouble.
+[19:49] isaacs: fitzgen: also, the "repo" thing should really be something like "git://github.com/fitzgen/wu.js.git"
+[19:49] fitzgen: isaacs: thanks, oh good catch
+[19:49] voodootikigod: ryah: you are famous!
+[19:51] ryah: voodootikigod: ?
+[19:52] voodootikigod: http://www.slideshare.net/igrigorik/no-callbacks-no-threads-railsconf-2010
+[19:52] voodootikigod: slide 38 
+[19:52] voodootikigod: people setting node.js as the "we are some much better than you!!!!!!"
+[19:52] mape: fitzgen: What might wu.js be good for? (typical applications of it)
+[19:53] tomh-: hehe they can only be better if they significantly improve the ruby runtime
+[19:54] peutetre has joined the channel
+[19:54] fitzgen: mape: its pretty general
+[19:55] javajunky has joined the channel
+[19:55] creationix: voodootikigod: ahh, but they cheated and used coroutines, I think callbacks are easier
+[19:55] fitzgen: its like languages, you can do a lot of the same stuff in a lot of languages, but its easier/ more elegant in some
+[19:56] mape: fitzgen: But why would I do something like chain instead of just using a for loop?
+[19:56] ryah: voodootikigod: :)
+[19:56] voodootikigod: you're nobody until somebody hates you
+[19:56] voodootikigod: :)
+[19:56] fitzgen: mape: chain is just for combining existing iterables
+[19:56] fitzgen: you can remove a nested for loop or nested .each
+[19:56] javajunky: SWEET, finally found some time to sort out install node.js into windows.
+[19:57] ryah: voodootikigod: indeed:)
+[19:57] ryah: voodootikigod: btw when is my jsconf video coming out?
+[19:57] voodootikigod: umm when do you want it
+[19:57] voodootikigod: i have you mid queue
+[19:57] voodootikigod: can move you up if you want
+[19:57] mape: Now? :)
+[19:57] fitzgen: mape: does that make sense to you?
+[19:57] ryah: yes, would be nice
+[19:58] voodootikigod: will do
+[19:58] ryah: thx
+[19:58] creationix: voodootikigod: :)
+[19:58] mape: fitzgen: Yeah, don't see how it would help me much though, might just be I'm missing something obvious though
+[19:58] voodootikigod: ryah: can you send me your slides in pdf if you still  have them
+[19:59] voodootikigod: just as  a backup
+[19:59] fitzgen: mape: well if you happened to have three different lists, which you really just want to iterate over once together and it doesn't make sense to do them seperately, that is a good use of chaining, especially since it is lazy
+[20:00] ryah: voodootikigod: sent
+[20:00] voodootikigod: danke
+[20:00] mape: So keep them separate but use wu to easily iterate over them when I need to?
+[20:00] fitzgen: yeah
+[20:01] fitzgen: if you happen to get them in separeate ways, but want to treat them as one collection
+[20:01] ryah: isaacs: how are you testing if rlwrap works correctly? it seemed to work for me 
+[20:01] mape: fitzgen: Is there any overhead to speak of?
+[20:01] fitzgen: mape: next to none since they are lazily evaluated
+[20:02] fitzgen: mape: once one is exhausted, it just starts taking from the next
+[20:02] fitzgen: no initial joining overhead
+[20:02] isaacs: ryah: i have an alias that does "rlwrap node-repl", and then make sure that i can scroll through my previous sessions, and that paste works, and type a few chars and then use up and down arrows to go through the history matching that prefix.
+[20:03] isaacs: ryah: basically, cross-session history, and my inputrc things.
+[20:03] isaacs: ryah: http://github.com/isaacs/dotfiles/blob/master/.inputrc
+[20:04] Kiba has joined the channel
+[20:04] Kiba: hello
+[20:04] Kiba: http://gist.github.com/430575
+[20:04] femto has joined the channel
+[20:04] Kiba: I have an error "Uncaught illegal access"
+[20:05] Kiba: and I narrowed it down to line 37
+[20:05] ryah: isaacs: http://gist.github.com/430578
+[20:05] ryah: isaacs: can you try that
+[20:05] isaacs: fitzgen: bestest readme EVAR.
+[20:06] tsyd: voodootikigod: where are you going to post the slides/video?
+[20:06] fitzgen: isaacs: hahaha, thanks!
+[20:06] voodootikigod: blip.tv/jsconf
+[20:06] tsyd: voodootikigod: is this a recent video?
+[20:06] mape: voodootikigod: not found?
+[20:06] stb has joined the channel
+[20:06] voodootikigod: http://jsconf.blip.tv/
+[20:06] fitzgen: isaacs: are you refering to the actual README or the gh-pages?
+[20:07] isaacs: fitzgen: the actual README
+[20:07] isaacs: fitzgen: W
+[20:07] fitzgen: isaacs: yeah, I wasn't sure how many coders actually get the reference :)
+[20:09] fitzgen: isaacs: I'm about to run, can I ping you later this evening?
+[20:09] Kiba: Erm. Can anybody give me clues to what might be going on line 37?
+[20:09] isaacs: fitzgen: sure.  i'll be around, probably
+[20:09] Kiba: I got "Uncaught illegal access"
+[20:09] fitzgen: k if I can't find you, I'll send a github message
+[20:09] Kiba: I am using websocket to send some messages
+[20:09] isaacs: ryah: nope.
+[20:10] isaacs: ryah: it's trapping up and down and alt keys, and rlwrap isn't getting them
+[20:10] mape: voodootikigod: ryans talk going live today? Or later on?
+[20:10] isaacs: ryah: alt-delete doesn't work, can't paste, etc.
+[20:11] Kiba: http://gist.github.com/430575
+[20:11] slaskis has joined the channel
+[20:12] ryah: isaacs: ok
+[20:13] ryah: is does alt-delete do?
+[20:13] sechrist: live on ustream
+[20:13] sechrist: righttt?
+[20:13] isaacs: ryah: it backspaces a word.
+[20:13] cedricv has joined the channel
+[20:14] cloudhead: what would I need to hold an http connection forever with node's http client?
+[20:14] ryah: cloudhead: ?
+[20:15] cloudhead: ryah: I'd like to open a connection, and not have it close
+[20:15] cloudhead: do I just set a keep-alive header?
+[20:16] maushu: ...that reminds me.
+[20:17] maushu: Announcer! Nooooooooooooooooo!
+[20:17] maushu: Error: ECONNREFUSED, Connection refused >_>
+[20:18] _announcer has joined the channel
+[20:18] cloudhead: oh nm I think I just have to start parsing the body as the data arrives instead of on end()
+[20:18] hellp has joined the channel
+[20:18] maushu: cloudhead, twitter?
+[20:20] cloudhead: maushu: no couchdb _changes
+[20:20] cloudhead: but I suspect it might be similar
+[20:22] ph^ has joined the channel
+[20:22] JimBastard has joined the channel
+[20:22] JimBastard_ has joined the channel
+[20:22] ryah: maushu: :(
+[20:23] maushu: Wut?
+[20:23] JimBastard_: is there any really easy really stupid way to play a sound file from node on mac os?
+[20:23] voodootikigod: mape: later this week
+[20:23] ryah: maushu: announcer is gone 
+[20:23] mape: voodootikigod: Awsome :)
+[20:23] JimBastard_: ACTION asks dumb questions
+[20:23] maushu: ryah, not anymore.
+[20:23] maushu: I'm trying to find the problem.
+[20:23] maushu: It's connection related obviously.
+[20:23] ryah: maushu: you're using uncaughtException? 
+[20:23] sechrist: what's going wrong? twitter problems?
+[20:24] maushu: Nope, but why keep it running if it's not online anymore?
+[20:24] ryah: isaacs: yeah it seems difficult to detect rlwrap
+[20:24] maushu: I think it's the irc connection.
+[20:24] sechrist: JimBastard: all I know how to do is change the volume on a mac via console :\
+[20:24] ryah: i had assumed it dup2'd pipes to the node's stdio
+[20:24] sechrist: surely there's a way to play music in userland
+[20:26] technoweenie has joined the channel
+[20:27] maushu: Wait, maybe it's google.
+[20:27] sechrist: turn off translations
+[20:28] bradleymeck: JimBastard, not unless you wanna use openal sans alut
+[20:28] mcarter has joined the channel
+[20:28] k23z__ has joined the channel
+[20:28] behmann has joined the channel
+[20:29] k23z__: wow so many people here
+[20:29] bpot has joined the channel
+[20:29] sechrist: JimBastard_: you can control iTunes from applescript
+[20:29] orlandov: it's the node army
+[20:29] bpot has left the channel
+[20:29] sechrist: if the sound is canned -- you can load it into itunes
+[20:30] sechrist: and call it via applescript through node
+[20:30] _announcer has joined the channel
+[20:30] _announcer: Twitter: "test announcer #node.js" -- Chase Sechrist. http://twitter.com/chasesechrist/status/15730510532
+[20:30] sechrist: ^
+[20:30] JimBastard_: sechrist: word
+[20:31] maushu: Ok. Now it *shouldn't* crash.
+[20:31] JimBastard_: sechrist: you think i can sys.exec myself a applescript sound?
+[20:31] javajunky: sechrist: you still using my oauth stuff or have you found a better way ?
+[20:31] JimBastard_: having sound fx for my CI script would be amazing
+[20:31] sechrist: javajunky: i'm using express-oauth
+[20:31] sechrist: now I need a web-interface for oauth
+[20:31] maushu: The twitter connection reconnects if something happens, the irc connection reconnects if something happens and I'm using uncaughtException.
+[20:31] sechrist: for server side api calls I just reload the token
+[20:31] sechrist: it all makes sense now
+[20:31] javajunky: sechrist: hmm thats a oauth producer isn't it ?
+[20:31] brianmario has joined the channel
+[20:32] sechrist: well express-oauth is a web interface for sessions
+[20:32] sechrist: as far as I know
+[20:32] sechrist: it works like that
+[20:32] hassox has joined the channel
+[20:32] sechrist: it does the callback stuff
+[20:32] sechrist: express-auth is nice
+[20:33] javajunky: oh right, perhaps I misunderstood it entirely, I thought it let you act as an oauth producer not as an oauth consumer.
+[20:33] sechrist: code needs to be updated though, the session vars in the array are prepended with twitter_ now, and sys.p is set to deprecate
+[20:34] hassox_ has joined the channel
+[20:34] javajunky: sechrist: surprised there's sys,p in there, oops I'll get rid of that :) ..  yeah the twitter_ stuff is because you can support multiple oauth authentications in parallel if neccessary ;) I could make it configurable though :) 
+[20:35] behmann has joined the channel
+[20:35] sechrist: yeah I was talking about example/app.js
+[20:35] sechrist: the actual lib seems fine
+[20:35] sechrist: kiwi pissed me off at first because I wasn't familiar with it -- now it's fine
+[20:36] javajunky: sechrist: hmm if it depends on kiwi I've done something wrong (the example app probably does, but not the lib) 
+[20:36] sechrist: I have no idea where it installed it
+[20:36] sechrist: ~/.kiwi it looks like
+[20:36] sechrist: that's retarded
+[20:36] javajunky: yeah I think if you install via kiwi it does,  but git submodules should also work ;) 
+[20:36] sechrist: that's probably a kiwi problem -- not your's
+[20:37] sechrist: may I suggest upping it to npm?
+[20:37] sechrist: ;)
+[20:37] javajunky: is npm working again now ?
+[20:37] sechrist: isaacs:
+[20:38] gwoo: javajunky: it was yesterday
+[20:38] sechrist: I think so
+[20:39] javajunky: I keep meaning to get around to adding a package.json and pushing it to the registries.
+[20:40] javajunky: (same with all my apis) .. yeah I'm reading the code of express-oauth and I totally missed that it would let you act as a consumer too , thats neat, I'd have 'borrowed' some of that rather than re-invetn the wheel when I  did express-auth (which supports oauth 2 as well ;) ) sorry christkv ;) 
+[20:41] sechrist: what do you mean by provider?
+[20:42] sechrist: the proxy thing between a browser and twitter?
+[20:43] sechrist: or do you mean providing the key authentication process
+[20:43] sechrist: for your own app
+[20:45] _announcer: Twitter: "@igrigorik's talk on async ruby & eventmachine was very solid if not inspiring to some...node.js is affecting everyone's thinking #railsconf" -- Derek Kaczmarczyk. http://twitter.com/dkaz/status/15731261066
+[20:45] javajunky: sechrist: an example provider would be twitter , i.e. it exposes end points that allow it to give out and authenticate tokens.
+[20:45] sechrist: ah gotcha
+[20:45] javajunky: the correct term may be producer rather than provider I get confused easily ;)
+[20:45] sechrist: the latter I mentioned then
+[20:45] javajunky: yeah the latter.
+[20:45] javajunky: I was under the impression that thats what express-oauth was
+[20:45] sechrist: consumer <-> producer <-> providers?
+[20:45] mcarter has joined the channel
+[20:46] javajunky: feck knows
+[20:46] sechrist: sounds like the food chain in biology
+[20:46] sechrist: XD
+[20:46] Aria has joined the channel
+[20:46] javajunky: goddamn 'all' I want to do is build node in cygwin, and I'm in some git CRLF hell :(
+[20:47] sechrist: cygwin provides a full posix interface and epoll right? meaning node should work?
+[20:49] ryan_gahl: javajunky: why cygwin and not just fire up a VM and work in linux-proper?
+[20:50] javajunky: sechrist: oh yeah I'm using the fork that apparently builds under cygwin, I'm just fighting Git atm, not started fighting cygwin ;)
+[20:50] _announcer: Twitter: "scored heroku nodejs beta access at rails conf.  today is a good day..." -- BrianEhmann. http://twitter.com/codelotus/status/15731556454
+[20:51] reid\work: i'd love to use node to build a javascript project in javascript
+[20:51] reid\work: contributors to this project use windows.
+[20:51] teemow has joined the channel
+[20:51] sechrist: so you can javascript while you javascript?
+[20:51] charlesjolley- has joined the channel
+[20:51] reid\work: oh yes.
+[20:51] sechrist: node-xzibit
+[20:51] javajunky: ryan_gahl: ;) For irony's sake I'm doing this in cygwin, inside a VM running  windows in MacOsX ;) … Why so my colleagues who only work in windows have a more tolerable route to playing with the stack  :) Windows does exist, it will open up the platform more, which can only  be a good thing right ?
+[20:51] felixge: JimBastard_: your recent mailing list comments are worrysome :|
+[20:52] reid\work: javajunky: if you have success with cygwin somehow, let me know?
+[20:52] ryah: javajunky: you got the cygwin patches working?
+[20:52] mscdex has joined the channel
+[20:52] javajunky: ryah: I"m trying to get raff's fork to work atm, but I've not used this windows vm in a while, and something about my Git setup (autocrlf I suspect) is screwing up configure atm
+[20:53] ryah: isaacs: i can't figure out how to get rlwrap detected...
+[20:53] javajunky: reid\work: I was planning a howtonode article on 'express & node.js on windows' ;) .. but so far my progress has been lame ;)
+[20:53] javajunky: stuff it I'll re-install git.
+[20:53] ryah: javajunky: let me know, i'm going to try to merge those patches soon
+[20:54] ryah: i also hit a road block when trying them the other day
+[20:54] javajunky: ryah: will do, it would be awesome. 
+[20:54] javajunky: one step closer to world domination eh
+[20:55] ryan_gahl: javajunky: i use windows for work (have to) > virtualbox w/ ubuntu 10.04 server VM for node > easy shmeasy... IMHO easier to get those lazy bastards to learn how to type "sudo apt-get install xyz" a few times :) 
+[20:55] sechrist: the alejandro video is so odd
+[20:55] charlesjolley- has joined the channel
+[20:55] hdon has joined the channel
+[20:55] mjr_: ryah: does isatty() not tell you whether you are under rlwrap or not?
+[20:56] javajunky: ryan_gahl: I appreciate your sentiment, but lets be realistic, there aren't too many other server side platforms where the common response is 'install a VM on your production server' ;) .. 
+[20:56] ryan_gahl: i can't quite see how mucking with cygwin is deemed more convenient that firing up a VM, but hey :)
+[20:56] charlesjolley- has joined the channel
+[20:56] javajunky: ryan_gahl: oh it's not great, but its closer, much closer.
+[20:56] sechrist: runs native with just a dll
+[20:56] sechrist: that's how
+[20:56] sechrist: node.exe + cygwin1.dll should work fine
+[20:57] ryah: mjr_: no
+[20:57] k23z__ has left the channel
+[20:57] charlesjolley- has joined the channel
+[20:57] ryah: mjr_: rlwrap apparently opens a new tty and gives it to the child
+[20:57] ryan_gahl: sechrist: that's a different story, didn't realize that model was the target
+[20:57] javajunky: yeah but that abstraction layer will come at a cost (at least historical experience with cygwin suggests so), either way if I can get a binary (and associated shared dll) that will be sweet-as
+[20:57] ryah: mjr_: so that if the child uses tcsetattr() or something, it'll still work
+[20:58] mjr_: ryah: bad on rlwrap then.
+[20:58] ryah: no, good rlwrap
+[20:58] ryah: but hard for us.. 
+[20:58] ryan_gahl: but still... production windows server running node === shudder (cost, etc)
+[20:58] mjr_: I don't get how having the rlwrap use another tty helps rlwrap or anybody, but whatever.  I'm content to let someone else figure this out.
+[20:58] rolfb has joined the channel
+[20:59] sechrist: ryan_gahl: a lot of managers at big name corporate firms don't trust linux
+[20:59] sechrist: for whatever reason
+[20:59] sechrist: I don't understand
+[20:59] reid\work: i see it useful for development
+[20:59] javajunky: ryan_gahl: As long as supporting windows doesn't come at a cost for the other platforms it seems a no-brainer !
+[20:59] reid\work: not so much in production
+[20:59] sechrist: it's free therefore it's crap ideology
+[21:00] ryan_gahl: javajunky: don't get me wrong, i'm all for someone else doing it and using it, just saying I can't get my mind around wanting to
+[21:00] aconbere has joined the channel
+[21:00] javajunky: I guess you're not the target demographic ;) 
+[21:00] ryan_gahl: :)
+[21:01] aconbere: in the latest node 1.97 I get an error about an undefined method replace (running a jsline module)
+[21:01] aconbere: has that moved... or is there a changelog that mentions it
+[21:01] aconbere: my brief tour of the changelog didn't show up anything
+[21:02] JimBastard_: lol felixge which one
+[21:02] JimBastard_: toString + + eval() 
+[21:02] mjr_: isaacs: do you know about socat + readline?  Does that help work around your rlwrap issues?
+[21:02] felixge: JimBastard_: yeah
+[21:02] JimBastard_: you can do ANYTHING (the wrong way) using toString() and eval()
+[21:02] felixge: JimBastard_: :)
+[21:02] JimBastard_: lol
+[21:02] JimBastard_: :p
+[21:02] felixge: JimBastard_: well, it will be hard to do what he is asking for
+[21:03] JimBastard_: my personal favorite is when i discovered aspect oriented programming
+[21:03] felixge: JimBastard_: and the question remains if you could freeze a v8 vm and "teleport" it
+[21:03] JimBastard_: and implemented it in JS using toString and eval()
+[21:03] felixge: :)
+[21:03] JimBastard_: ahhh good times
+[21:03] felixge: JimBastard_: lol
+[21:03] JimBastard_: yeah, felixge seems way over my head
+[21:03] aconbere: NEVER MIND
+[21:03] aconbere: I'm dumb
+[21:03] bradleymeck: ryah, tcgetpgrp() doesnt work to get a handle on rlwrap?
+[21:03] aconbere: it's the whole buffers vs. strings thing that happened
+[21:03] JimBastard_: like i said aconbere 
+[21:03] JimBastard_: toString() solves all
+[21:04] felixge: JimBastard_: anyway, I will watch you. I have narrowed your address down to a city with only 8 million people, I can track you down :)
+[21:04] ryah: bradleymeck: that might be the trick - will try
+[21:04] JimBastard_: 135E 27th Street
+[21:04] JimBastard_: bring it bitch
+[21:04] JimBastard_: i aint scared of no germans
+[21:04] JimBastard_: :-D
+[21:04] felixge: JimBastard_: if/when we meet, there will be a beer drinking contest
+[21:04] rolfb: isaacs: i'm having issues getting npm to work properly. doesn't seem to be added to my $PATH
+[21:04] felixge: ;)
+[21:05] JimBastard_: hee hee, you'll probaly win
+[21:05] JimBastard_: but i wont go down without a fight
+[21:05] felixge: JimBastard_: (and then I'll steal any technology prototypes you may happen to carry with you)
+[21:05] JimBastard_: hopefully i'll be at jsconf.eu
+[21:05] JimBastard_: ahaha nice
+[21:05] felixge: JimBastard_: I'll be there :)
+[21:05] mcarter has joined the channel
+[21:05] javajunky: ls
+[21:05] javajunky: (err doh)
+[21:05] mscdex: :P
+[21:06] mscdex: is there currently a way to change the execution context of a function after it's been defined?
+[21:07] javajunky: ACTION beats Git into submission uggh windows
+[21:08] teemow has joined the channel
+[21:09] sechrist: is there a git2svn tool that lets you use git identically to subversion?
+[21:09] sechrist: ACTION waits to be punched
+[21:09] ryan_gahl: sechrist: are you in windows?
+[21:09] Kiba: hmm
+[21:09] sechrist: no, osx
+[21:09] isaacs: sechrist: there's a tool i like that lets you use git instead of subversion...
+[21:09] Kiba: look like nobody answered my pastie problem
+[21:09] sechrist: I just don't want to learn git
+[21:09] isaacs: sechrist: it's git.
+[21:09] Kiba: http://gist.github.com/430575
+[21:09] ryan_gahl: isaacs: GFC :)
+[21:09] Kiba: line 37
+[21:09] sechrist: coda doesn't support git
+[21:09] sechrist: angers me
+[21:10] isaacs: sechrist: take it up with coda.
+[21:10] isaacs: sechrist: or use eclipse
+[21:10] sechrist: I know I know
+[21:10] Kiba: I got an error "Uncaught illegal access"
+[21:10] ryan_gahl: sechrist: tortoiseGit has a GUI
+[21:10] sechrist: I'm not in windows
+[21:10] sechrist: to use tortoise
+[21:10] ryan_gahl: oh, thought they had a mac client
+[21:10] sechrist: i'm on zeh mac
+[21:10] sechrist: oh
+[21:10] sechrist: they might
+[21:10] ryan_gahl: they might not
+[21:10] ryan_gahl: but they might
+[21:10] sechrist: there's gitx
+[21:10] sechrist: hmm
+[21:11] ryah: bradleymeck: nope..
+[21:11] sechrist: but if I were to use git I'd use it just like I use svn
+[21:11] sechrist: one repo, commits and checkouts
+[21:11] Aria: Can't do that.
+[21:11] sechrist: so why use git
+[21:11] sechrist: lame
+[21:11] Kiba: ACTION waves around
+[21:12] Aria: Gotta have multiple repos ;-)
+[21:12] sechrist: waste
+[21:12] sechrist: oh oh I know that
+[21:12] sechrist: I mean like a server
+[21:12] sechrist: not the local version
+[21:12] creationix: sechrist: have you tried bzr?
+[21:12] sechrist: each copy is it's own repo is a trip
+[21:12] creationix: it's like subversion, but better (and does distributed too when you need it)
+[21:12] Aria: It's a waste until you're on the train.
+[21:13] sechrist: I've heard of it, but that doesn't solve my issue creationix
+[21:13] sechrist: if i'm going to stop using svn I might as well use git
+[21:13] bradleymeck: if you ever want to deal w/ forks I feel that git is a godsend vs svn
+[21:13] sechrist: I just don't see the motivation
+[21:13] sechrist: my tools use svn
+[21:13] creationix: well, at least github supports svn too
+[21:13] Kiba: yo. yo. yo.
+[21:13] sechrist: bradleymeck: they may be
+[21:13] tekky has joined the channel
+[21:13] Kiba: http://gist.github.com/430575
+[21:13] javajunky: and so begins the bzr/mercurial/git shoot out.
+[21:13] Aria: Hehe. And that's where I never ran into trouble. .. no tools beyond a shell.
+[21:13] sechrist: creationix: github supports svn? wattt
+[21:13] sechrist: does it check out and make it git?
+[21:14] Aria: It does the git entirely server-side, and exports it as a SVN repo
+[21:14] sechrist: svn2git hahaha
+[21:14] creationix: http://github.com/blog/626-announcing-svn-support
+[21:14] creationix: strange that it was announced on April 1, but they say it's not a joke
+[21:14] sechrist: I guess you can use git like svn but not svn like git
+[21:14] Aria: Hehe. It is a joke. Just one that's working and useful ;-)
+[21:15] Kiba: http://gist.github.com/430575
+[21:15] Kiba: Uncaught illegal access error
+[21:15] sechrist: do you hear something?
+[21:15] Kiba: I pretty much
+[21:15] rnewson has joined the channel
+[21:15] Kiba: narrows the problem down to line 37
+[21:15] Kiba: as far as I can tell
+[21:16] sechrist: your code is really too simple to understand, it could be the ws lib
+[21:16] sechrist: haven't used it to know
+[21:17] onar has joined the channel
+[21:18] Kiba: ACTION checks
+[21:18] isaacs: Kiba: s/JSON.parse/JSON.stringify/
+[21:18] isaacs: Kiba: line 36
+[21:18] sechrist: what? I use JSON.parse all the time
+[21:18] sechrist: is that a problem
+[21:18] isaacs: sechrist: json.parse is for converting a string to an object.
+[21:18] sechrist: well yes
+[21:18] isaacs: sechrist: json.stringify is for converting an object to a string.
+[21:18] Kiba: ah
+[21:18] sechrist: OH LOl
+[21:18] sechrist: now I see
+[21:18] Kiba: I see.
+[21:19] isaacs: that should actually be throwing, afaik.
+[21:19] sechrist: yeah ur doin it rong
+[21:19] isaacs: because "[Object object]" isn't valid JSON
+[21:19] Kiba: ACTION done a little bit more investigation
+[21:19] Kiba: I thought it was a websocket
+[21:19] sechrist: message is an object
+[21:19] sechrist: if you're wanting to send json over wire
+[21:19] sechrist: you stringify it
+[21:19] ryan_gahl: i agree with bradleymeck, branch/merge/reverse merge in svn always gives me issues with weird tree conflicts and whatnot. git's way is prettier, and as mentioned works disconnected by default
+[21:19] javajunky: falling at first hurdle here,  anyone know what causes this issue with 'configure' (I assue its a well known issue as a google brings up the same error by someone else ;) ' http://pastebin.com/pV1NEDfs
+[21:20] Aria: Old python, javajunky?
+[21:20] javajunky: I thought that, so pushed it to 2.6.5 same result
+[21:20] javajunky: node compiles fine on my mac with 2.6.1
+[21:20] ryah: javajunky: try "cp deps/v8/tools/jsmin.py tools/jsmin.py
+[21:21] ryah: tools/jsmin.py is a symlink to dpes/v8/tools/jsmin.py
+[21:21] ryah: i think windows doesn't recognize it 
+[21:21] ryah: (does windows have symlinks?)
+[21:22] javajunky: yes, spot on, no windows doesn't .. well I Think there's some semantic argument to be had about ntfs supporting them or something, but ultimately no  ;) 
+[21:22] Aria: (Only something similar and new)
+[21:22] ryan_gahl: http://www.howtogeek.com/howto/windows-vista/using-symlinks-in-windows-vista/
+[21:22] Aria: (But yeh, no is the usual answer to that.
+[21:22] mcarter has joined the channel
+[21:22] creationix: xp doesn't have them even in ntfs
+[21:22] ryan_gahl: that's the new thing... but I also found a shell extension that did it well... looking for it
+[21:23] Connorhd has joined the channel
+[21:23] javajunky: ah ok, what I had was a file with the name of the sym-linked file inside it.. I just figured it was some weird python thing ;) ..but it must be git being 'clever' ;)
+[21:24] ryan_gahl: http://sourceforge.net/projects/ntfslinkext/
+[21:25] awenkhh has joined the channel
+[21:25] ryan_gahl: the one i used was the original version of that, and it worked fine
+[21:25] ryan_gahl: (different use case of course)
+[21:25] bradleymeck: @_@ async template blocks /falls over
+[21:26] jxson has joined the channel
+[21:26] ryan_gahl: the thing about these ntfs symlinks though... it's possible to get one that's impossible to delete if you don't do things right
+[21:26] ryan_gahl: (IIRC)
+[21:27] sechrist: ryan_gahl != ryah?
+[21:27] ryan_gahl: true
+[21:27] sechrist: get your own name
+[21:27] Aria: ACTION laughs
+[21:27] ryan_gahl: this has been my name for 31 years :)
+[21:27] sechrist: ..
+[21:27] sechrist: ACTION mindstatus blown
+[21:27] javajunky: ooo so close 50/67 
+[21:29] sechrist: ryan_gahl: sorry then, hehe
+[21:30] ryan_gahl: np, i get that 
+[21:31] ryan_gahl: first day i posted to the mailing list, some dude(s) went as far as creating gmail accounts for ryan.fahl and ryan.zahl and it a whole big thing
+[21:31] ryan_gahl: good times
+[21:31] derbumi has joined the channel
+[21:31] ryan_gahl: s/it a/it was a
+[21:32] ryan_gahl: ntfs symlink stuff get you anywhere?
+[21:33] javajunky: I don't think anyone actually needed it ;) 
+[21:34] ryan_gahl: oh, ok, well fine then :)
+[21:34] javajunky: sry
+[21:34] javajunky: ughh compiling v8 in a VM under cygwin is sloooooww.w
+[21:34] creationix: What I need is an EXT4 reader for OSX
+[21:35] javajunky: that fuse stuff not work ?
+[21:35] javajunky: fusion.
+[21:35] creationix: I don't think there is one for macfuse
+[21:35] ryan_gahl: i thought something wasn't working because symlinks were peppered around 
+[21:35] creationix: javajunky: you know of one?
+[21:35] stb: why is it so hard to deal with writing binary data :(
+[21:35] creationix: stb: buffers are your friend
+[21:35] javajunky: ryan_gahl: ryah's suggestion was to blat the sym-linked file with the original, which I did, and it worked ;) result.
+[21:36] creationix: stb: it's because strings are not binary data
+[21:36] stb: creationix: been playing with buffers for the last few hours, still not playing nicely with me
+[21:36] creationix: stb: got a gist of where it's acting up
+[21:36] creationix: ?
+[21:36] ryan_gahl: gotcha
+[21:36] _mythz has joined the channel
+[21:37] _announcer: Twitter: "@shadowhand Real Heroku is better (cuz it's not PHP) and my Node.js enabled Heroku account beats all.  :D :P #nodejs #heroku #phpsucks" -- Jim Auldridge. http://twitter.com/JAAulde/status/15733967178
+[21:37] creationix: heh, I like the #phpsucks tag :P
+[21:37] stb: creationix: not at this moment, since i've junked every iteration of code i've been playing with... will try to get something on there tomorrow and come back for help then
+[21:37] creationix: stb: good luck
+[21:37] ryan_gahl: javajunky: 'tis my nature to over-engineer shit
+[21:37] _announcer: Twitter: "kann mir jemand sagen warum node.js python abhängigkeiten besitzt? ich dachte es wäre in C geschrieben? http://bit.ly/bOxOI4 (vortrag video)" -- Guybrush Threepwood. http://twitter.com/theneutrino/status/15734008407
+[21:38] stb: creationix: thanks
+[21:38] javajunky: creationix: um, no afraid not 
+[21:38] mscdex: blah
+[21:39] mscdex: guess i'll have to resort to copying function.toString() into the new context to be able to use them >.>
+[21:39] _mythz has left the channel
+[21:39] innu has joined the channel
+[21:39] javajunky: OMG it built!
+[21:39] gerad has joined the channel
+[21:40] javajunky: muhahahh I have node.exe and it actually executes.
+[21:40] javajunky: damn it need to pack the car, bbias with the helloworld.
+[21:41] gerad2 has joined the channel
+[21:41] mcarter has joined the channel
+[21:42] kevwil has joined the channel
+[21:42] joshowens has joined the channel
+[21:43] maushu: wat.
+[21:43] maushu: Node.exe?
+[21:43] maushu: Me wants.
+[21:45] javajunky: Me got
+[21:45] javajunky: me about to try it
+[21:46] JimBastard_: man
+[21:46] ryan_gahl: gj dude
+[21:46] JimBastard_: automating processes owns
+[21:46] JimBastard_: http://imgur.com/MjoAi.png
+[21:46] JimBastard_: built a CI script today in node, named it after our office manager
+[21:46] JimBastard_: he gets mad when you make changes to the library and does a BUILD
+[21:46] mrjjwright has joined the channel
+[21:46] tjholowaychuk has joined the channel
+[21:46] JimBastard_: tjholowaychuk: http://imgur.com/MjoAi.png :p
+[21:48] teemow has joined the channel
+[21:48] tjholowaychuk: JimBastard_: hahaha nice! liken that style, i always want to yell at people in my output
+[21:49] JimBastard_: Ted is the name of our office manager
+[21:49] JimBastard_: CI.js just wanted cutting it for me
+[21:49] JimBastard_: Ted.js is way better
+[21:50] JimBastard_: s/wanted/wasnt
+[21:50] tjholowaychuk: hahaha
+[21:50] JimBastard_: ill probaly throw in a unit test
+[21:50] tjholowaychuk: what was your solution to the dir watching thing
+[21:50] JimBastard_: "a" unit test
+[21:50] bradleymeck: CI.js?
+[21:50] JimBastard_: just standard
+[21:50] JimBastard_: traverse the dir to get paths
+[21:50] JimBastard_: iterate through paths adding watcher
+[21:50] JimBastard_: trigger watcher, unwatch all
+[21:51] JimBastard_: perform build
+[21:51] tjholowaychuk: ah, i thought you were having some issue before
+[21:51] JimBastard_: rebuild paths and apply
+[21:51] JimBastard_: i was, the approach is shit
+[21:51] JimBastard_: and still is
+[21:51] JimBastard_: too much overhead
+[21:51] JimBastard_: but it works
+[21:51] JimBastard_: and pretty fast
+[21:51] JimBastard_: for a single user
+[21:51] JimBastard_: it made ryah cry a little
+[21:52] gerad has joined the channel
+[21:52] pdelgallego has joined the channel
+[21:52] tjholowaychuk: hahah
+[21:52] _announcer: Twitter: "Holy cr@p #nodejs now for windows (non-official fork) : http://github.com/raff/node fricken-awesome! http://yfrog.com/12xlbzj" -- Ciaran Jessup. http://twitter.com/ciaran_j/status/15734783744
+[21:52] felixge has joined the channel
+[21:52] javajunky: as above.
+[21:52] bradleymeck: tests pass?
+[21:52] ryan_gahl: :)
+[21:53] tpryme has joined the channel
+[21:53] hassox has joined the channel
+[21:53] javajunky: bradleymeck: meh, helloworld not enough ? .. Apparently 1 test fails.. but my make test didn't start, about to look at.
+[21:53] ryan_gahl: now node4win will be like mono... always just a tad behind ;)
+[21:53] JimBastard_: i'll believe it when i see it
+[21:53] JimBastard_: i asked for the windows binary just about 8 months ago
+[21:53] javajunky: ryan_gahl: it shouldn't be.. well I can send the exe if anyone wants it
+[21:54] javajunky: sorry 2nd half of that sentence was for JimBastard_
+[21:54] ryan_gahl: (not target demographic) :)
+[21:54] javajunky: indeed
+[21:54] ryan_gahl: peace out all, bbl
+[21:54] reid\work: tjholowaychuk: I'm getting a weird error using kiwi: http://gist.github.com/430708
+[21:55] reid\work: "".match is a function… wtf.
+[21:55] javajunky: srly where can I dump this .exe to see if it will work elsewhere ? ..  my server's not setup just to dump + Serve files ;) 
+[21:55] tjholowaychuk: what version?
+[21:55] tjholowaychuk: kiwi --version
+[21:56] reid\work: it's in the gist
+[21:56] _announcer: Twitter: "Featured spotlight: @couchdb + @nodejs ~= distributed objects . Yay!" -- Kadir Pekel. http://twitter.com/kadirpekel/status/15734977715
+[21:56] reid\work: 0.3.0
+[21:56] tjholowaychuk: you need 0.3.1 for latest node, due to a Buffer change
+[21:56] tjholowaychuk: its trying to call String#match() on a Buffer or something i forget
+[21:56] reid\work: gotcha, will upgrade
+[21:56] tjholowaychuk: kiwi install kiwi
+[21:58] reid\work: ew, it requires sudo
+[21:58] aconbere: mikeal: ping
+[21:58] mikeal: hiya
+[21:58] aconbere: oo
+[21:58] aconbere: actually you might both be here
+[21:58] aconbere: reid\work: are you the author of node-jslint?
+[21:59] reid\work: tjholowaychuk: any reason kiwi requires `sudo make install` instead of just `make install`?
+[21:59] reid\work: aconbere: that's me
+[21:59] tjholowaychuk: reid\work: cant remember, probably not no
+[21:59] aconbere: do you have a patch to update your repository for the changes to readFileSync?
+[21:59] aconbere: I just did a pull request
+[21:59] aconbere: then looked at the fork diagram
+[21:59] reid\work: awesome, i'll check it out
+[21:59] aconbere: and realized I'm confused
+[21:59] aconbere: it's pretty stupid / basic
+[22:00] mikeal: rednul_: just add toString() on the return from readFileSync
+[22:00] aconbere: I just read the buffer in before acting on input
+[22:00] aconbere: mikeal: yep
+[22:00] _announcer: Twitter: "#nodejs cygwin port  http://bit.ly/8YmAs0" -- Andreas Wenk. http://twitter.com/awenkhh/status/15735203910
+[22:00] aconbere: I just saw your fork on there, and it mentions changes for fs
+[22:00] aconbere: I figured you had already made those changes as well
+[22:00] mcarter has joined the channel
+[22:00] mikeal: that was older
+[22:01] mikeal: i think that was merged a while back
+[22:01] jsilver has joined the channel
+[22:01] aconbere: k
+[22:01] aconbere: :)
+[22:01] aconbere: just checking
+[22:02] Determinist has joined the channel
+[22:02] aconbere: cool
+[22:02] gerad has joined the channel
+[22:02] aconbere: reid\work: thanks :)
+[22:02] javajunky: bradleymeck: 87 passes, 9 fails I think … I reckon a few of those are due to my VM config though, will take a closer look
+[22:02] reid\work: aconbere: applied, thank you for the patch!
+[22:04] admc has joined the channel
+[22:06] rnewson has joined the channel
+[22:06] rnewson has joined the channel
+[22:07] javajunky: ryah: to answer your previous questions, yeah it works, although there are several test failures (at least for me)
+[22:08] ryah: javajunky: okay
+[22:08] ryah: good to know
+[22:08] ithinkihaveacat has joined the channel
+[22:09] aconbere: reid\work: well it makes jslint about a million times easier for us to use, so we're very happy
+[22:09] weepy has joined the channel
+[22:09] weepy: hi is isaacs around ?
+[22:10] mikeal: he might still be on a cruise ship
+[22:11] weepy: i hope it's sunny :)
+[22:11] weepy: perhaps someone might know if its possible to 'require' a file more than one and create a new context for each ?
+[22:11] weepy: e.g BUST the node cache
+[22:11] ithinkihaveacat: creationix: with the conditional-get.js filter in connect, do you still need to go to the effort of producing a complete response even if you return a 304 in the end?
+[22:11] ithinkihaveacat: creationix: not sure if i'm reading that correctly
+[22:12] creationix: ithinkihaveacat: yes, it sits in front of the other layers
+[22:12] creationix: so the server will have already built the entire response
+[22:12] creationix: but simply not send it to the browser because there is no point
+[22:12] javajunky: is there anyone windows-y out there who could try this exe out on their machine  for me ? (otherwise I have to spin up a new clean vm and I'm far too lazy / its late in the day for me :( ) 
+[22:13] javajunky: … at which point my SCP upload to a remote server drops to 1KB/s *sob*
+[22:13] ithinkihaveacat: creationix: okay
+[22:14] tjholowaychuk: weepy: saw your issues on github there, i will try and fix the debug middleware today when i have a chance later tonight
+[22:14] tjholowaychuk: weepy: should be doable
+[22:14] isaacs: weepy: yo
+[22:14] ithinkihaveacat: i suppose if-none-match would be the same ... not ideal i guess
+[22:14] isaacs: weepy: at work, though, so i'm in and out
+[22:14] weepy: hey
+[22:14] weepy: isaacs - a little birdy told me you might know if its possible to bust node's require cache
+[22:14] gerad has joined the channel
+[22:14] weepy: i.e. require different contexts for the same file
+[22:15] isaacs: weepy: i'd look into nodules if you want clever dependency-tracked live updating and reloading, or node-supervisor if you want dead-simple "restart the server when anything changes" type stuff.
+[22:16] isaacs: weepy: or email the list with your use case if it's not one of those.
+[22:16] behmann has joined the channel
+[22:16] mcarter has joined the channel
+[22:16] gerad1 has joined the channel
+[22:16] weepy: isaacs - yep basically i've got crazy external js file. normally i'd write a class, but it's tricky here, so i just thought i'd ask
+[22:18] weepy: tjholowaychut: great stuff. I've got a twitter project coming up. Would OAuth be within the scope of a Connect layer ?
+[22:18] creationix: weepy: I don't think we'll bundle oauth with connect, but it should work as a connect layer
+[22:19] weepy: kool.  -  didn't mean as a bundle. just feasibility 
+[22:19] javajunky: I'm thinking of porting express-auth to connect, since that itself was a rough port of Warden for rack it should fit in quite well
+[22:19] creationix: tjholowaychuk: what do you think about the stream discussion on the mailing list?
+[22:19] tjholowaychuk: weepy: we could maybe get a Connect-Contrib repo going with submodules so people  could just pull down a huge repo of middleware i dunno
+[22:20] creationix: I like that
+[22:20] tjholowaychuk: creationix: didnt see it
+[22:20] creationix: tjholowaychuk: in the responses to my connect announcement
+[22:20] joshowens has joined the channel
+[22:21] tjholowaychuk: looks like a lot to ready haha, shit, will have to check it out later
+[22:21] ithinkihaveacat: creationix: could you add a key to res in conditional-get.js to signal the writeHead caller that it doesn't actually need to produce the content?
+[22:23] sudoer has joined the channel
+[22:23] tjholowaychuk: i think streams are all fine an dandy if you have a streaming json parser etc, but that will not be bundled within connect
+[22:23] tmpvar has joined the channel
+[22:24] tjholowaychuk: and for average sites there are still many times when you would want to buffer the request body IMO. just different needs
+[22:24] mikeal: we have a streaming json parser
+[22:24] _announcer: Twitter: "Learning Server-Side JavaScript with Node.js http://bit.ly/94e1Qe" -- Brett Widmann. http://twitter.com/goatboy91587/status/15736515262
+[22:24] deanlandolt_: tjholowaychuk: you shouldn't need a streaming json parser
+[22:24] tjholowaychuk: for sure
+[22:24] deanlandolt_: you should be able to stream objects
+[22:24] mikeal: yajl is a streaming parser, bindings for node already work
+[22:24] tjholowaychuk: no i know but im just saying we need to have light support for things out of the box as well, not JUST streaming parsers 
+[22:25] tjholowaychuk: not saying the buffering needs to belong in connect at all
+[22:25] isaacs: tjholowaychuk, creationix: hey.  connect needs a package.json file.
+[22:25] creationix: ok, I just checked about the contrib module, we don't want one yet, go ahead and host third-party projects on your own github accounts for now
+[22:25] mikeal: it's not about requiring anything
+[22:25] mikeal: it's trivial to buffer data from a stream
+[22:25] mikeal: or to just write an entire large response in one write
+[22:26] creationix: isaacs: good idea
+[22:26] mikeal: but if that's your *only* api then it means you can't do any streaming
+[22:26] tjholowaychuk: we dont really define any requirements in that sense
+[22:27] creationix: ithinkihaveacat: I tried that kind of logic before and spent several days trying to find a solution
+[22:27] tjholowaychuk: its not like rack where you have to return a crafted array 
+[22:27] creationix: it gets really messy and breaks the containment of the layers really badly
+[22:28] creationix: ithinkihaveacat: really, the purpose of 304 is to save bandwidth, you'd have to hit the disk anyway to see if the file has change or not on the server
+[22:28] ithinkihaveacat: creationix: hrm, yes i can see it would get messy
+[22:28] isaacs: holy moly, mape's thing makes a lot of GETs to the registry
+[22:28] mape: isaacs: I told you!
+[22:28] mikeal: creationix: depends
+[22:28] mikeal: you could read a file
+[22:28] mape: isaacs: It doesn't get heavy traffic though?
+[22:28] mikeal: return it with an etag
+[22:28] ithinkihaveacat: creationix: ETags are certainly used to avoid doing work
+[22:28] mikeal: then just put a file watcher on it to invalidate the etag
+[22:29] mikeal: then you don't have to hit disc for 304
+[22:29] isaacs: mape: no, it's fine for now
+[22:29] mikeal: even with CouchDB, you can keep the etag in memory and invalidate it on _changes
+[22:29] mikeal: you don't even need to hit the server for every HEAD request
+[22:30] mikeal: once we start getting events out of all these external sources etags and 304 are pretty awesome
+[22:30] mape: isaacs: Not sure what you want to do about the github stuff, I have a node app that fetches all the stuff from github and caches it
+[22:30] _announcer: Twitter: "@exavolt and I would really like to implement those nodejs :p" -- Didiet. http://twitter.com/lynxluna/status/15736863489
+[22:30] creationix: yes, the code could be optimized more, I'm just not sure how to do it without breaking all sorts of encapsulation
+[22:30] mape: So it can be used as a external json-fetch kinda thing
+[22:30] mikeal: it's an open question how to do it easily
+[22:30] mape: Instead of built into the couch app
+[22:30] isaacs: mape: sure
+[22:31] mape: Guess that is a good thing to be sure to add in the npm rush
+[22:31] isaacs: mape: for now, i think it's just about making it look good and figure out how it's supposed to work
+[22:31] mape: Yeah
+[22:31] ithinkihaveacat: creationix: are there any other examples where you ideally want to communicate across layers?? i can't think of any at the moment
+[22:31] isaacs: mape: eventually, yeah, it should be wedded more tightly to the couchapp or to npm's internal registry site if we go in that direction.
+[22:31] creationix: 304 and caching was the one I had trouble with
+[22:31] mape: Yeah
+[22:31] javajunky: oh ffs how in this day and age can my upstream speed be measured in single digit kilobytes per second *sob*
+[22:32] creationix: of course, there is nothing stopping a particular layer from implementing a smarter 304 at it's own layer
+[22:32] creationix: you don't have to use the general purpose 304 layer
+[22:32] mikeal: creationix: caching semantics are hard
+[22:32] creationix: yes, but I took the 80/20 rule for now
+[22:33] creationix: most of the time most the cost is in the bandwidth
+[22:33] creationix: and that's easy to save with a generic 304 layer
+[22:33] mikeal: some plugins don't care, like gzip, and some do want to provide consistent hashing like templates and db components
+[22:33] gwoo has joined the channel
+[22:34] creationix: maybe the onion approach isn't a good idea
+[22:34] creationix: would something purely event based be better
+[22:34] mcarter has joined the channel
+[22:34] creationix: or will that get tangled real quick
+[22:34] javajunky: have you considered a chill-pepper approach, they have layers too ? :P
+[22:34] creationix: mmm, cliki-pepper
+[22:35] mikeal: i had a crazy idea about how to handle this
+[22:35] mikeal: it's a long explanation, maybe we can go over it next meetup
+[22:36] ithinkihaveacat: creationix: i think the layers are okay, actually i like the "solution" that each layer implements its own 304 handler (if you want to save "work", not bandwidth)
+[22:37] creationix: mikeal: when do you want that to be?
+[22:37] mikeal: that also means that each layer needs to keep it's own hashmap
+[22:37] mikeal: i don't know, whenever the next meetup is :)
+[22:37] mikeal: maybe we should schedule a node meetup :)
+[22:37] creationix: sounds good to me
+[22:39] creationix: deanlandolt_: you're not local to the bay area are you?
+[22:39] deanlandolt_: no, in dc
+[22:39] creationix: that's what I thought, just making sure
+[22:39] deanlandolt_: heading to bmore in a bit to troll the rails crowd
+[22:40] creationix: sounds like fun
+[22:40] mikeal: hahaha
+[22:40] mape: isaacs: Any idea when you want the page done? And I guess right before that have a push for submissions?
+[22:40] deanlandolt_: yeah, voodootikigod knows how to throw a party so i'm looking forward to it
+[22:41] isaacs: mape: i'm not in a hurry.  npm has bugs and key feature requirements, and i'm pretty focused on those.
+[22:41] isaacs: mape: you're hired.
+[22:41] mape: Hehe great, I assume the pay is awsome?
+[22:41] javajunky: In case anyone's interested (ryah) http://drop.io/2dwcadi  has a compiled node for windows ..  use at your own risk, but it seems to work for me.
+[22:42] _announcer: Twitter: "Following on from previous tweet http://drop.io/2dwcadi  contains a #nodejs executable for windows, your mileage may vary, own risk etc." -- Ciaran Jessup. http://twitter.com/ciaran_j/status/15737515490
+[22:42] javajunky: arggg flipping twitter announcer, everything's so echo-y
+[22:42] creationix: wait till it gets retweeted 10 times
+[22:44] isaacs: mape: it's awesome if you think free is awesome!!
+[22:44] deanlandolt_: beautiful...node/cygwin works for me too
+[22:44] mape: I don't get stock options or anything? :S
+[22:44] javajunky: deanlandolt_: my binary or compiled yourself ?
+[22:44] deanlandolt_: your binary
+[22:44] javajunky: sweet I can bugger off to bed knowing s'all good :) 
+[22:45] isaacs: mape: no, but you'll get a line on the contributor list :)
+[22:45] mape: Woot
+[22:45] javajunky: whoever raff is, he's done a grand job there :) 
+[22:45] javajunky: (or she)
+[22:45] creationix: If only I had windows to test this insanity
+[22:46] CIA-77: node: 03Ryan Dahl 07master * radc06dd 10/ (doc/api.markdown lib/readline.js lib/repl.js): 
+[22:46] CIA-77: node: Add NODE_NO_READLINE check for REPL
+[22:46] CIA-77: node: Setting this environmental variable to a non-zero integer will start all
+[22:46] CIA-77: node: REPL interfaces without readline. For use with rlwrap. - http://bit.ly/bwjnjo
+[22:46] isaacs: ryah: thanks!
+[22:47] ryah: javajunky: okay thanks
+[22:51] mcarter has joined the channel
+[22:52] _announcer: Twitter: "@saranjapan I'm doing very good, thanks for asking. Writing a lot of node.js code!" -- Peteris Krumins. http://twitter.com/pkrumins/status/15738107722
+[22:53] Tim_Smart has joined the channel
+[22:55] ajpiano has joined the channel
+[22:55] o_o has joined the channel
+[23:02] dji has joined the channel
+[23:04] behmann has joined the channel
+[23:05] ph^ has joined the channel
+[23:08] _announcer: Twitter: "Watching a guy in front of me hacking node.js in fullscreen vim" -- Jose Fernandez. http://twitter.com/jrfernandez/status/15739001357
+[23:10] freshtonic has joined the channel
+[23:10] jbr has joined the channel
+[23:10] mcarter has joined the channel
+[23:12] aconbere has joined the channel
+[23:12] o_o has joined the channel
+[23:17] creationix: mikeal: did you to meetup tonight
+[23:17] creationix: others can come if they want to, nothing big
+[23:17] creationix: mde: are you busy tonight?
+[23:18] aconbere has joined the channel
+[23:21] mikeal: where?
+[23:21] mikeal: i don't think so
+[23:21] mikeal: tomorrow would work, in the City
+[23:21] mikeal: i can find a space in the city
+[23:22] mjr_: mikeal: you can come work in our office in SF tomorrow if you want.
+[23:23] creationix: hmm, not sure if I can come up there during work hours
+[23:24] mikeal: 6pm?
+[23:24] creationix: that would be fine
+[23:24] creationix: where at?
+[23:24] mikeal: mjr_: that time good for you?
+[23:25] mattly has joined the channel
+[23:25] mjr_: What are you guys doing?
+[23:25] mjr_: You can hang our in my office during the day, but I'll probably have to leave by 7PM or so tomorrow.
+[23:25] creationix: probably talking about node stuff
+[23:27] mcarter has joined the channel
+[23:27] gf3 has joined the channel
+[23:29] _announcer: Twitter: "The idea of @t's CASSIS—to use the same lang server- & browser-side—is right on. But the lang we should use is simply JavaScript. #nodejs" -- Edward O'Connor. http://twitter.com/hober/status/15740165983
+[23:30] mjr_: If we could do like 4PM, that'd be easier for me.
+[23:30] maushu: Types would've been pretty good in javascript.
+[23:30] mjr_: Otherwise, I'd need to coordinate things with my family.
+[23:30] maushu: Kind of redundant with v8 though. Me thinks.
+[23:30] [[zz]] has joined the channel
+[23:31] ph^ has joined the channel
+[23:31] mjr_: Any other SF people want to come?
+[23:32] mikeal: i can do that if creationix can make it
+[23:32] creationix: I should be able to make it
+[23:32] creationix: what part of the city?
+[23:32] mjr_: I'm at 2nd and Bryant, a few blocks from Caltrain if that's your thing.
+[23:32] creationix: nah, I got a car
+[23:32] creationix: and soon my scooter will be here :D
+[23:32] mjr_: nice
+[23:33] mjr_: ryah: you want to get together tomorrow afternoon?
+[23:40] ncb000gt has joined the channel
+[23:43] gerad has joined the channel
+[23:44] JimBastard has joined the channel
+[23:44] JimBastard: sup tjholowaychuk 
+[23:45] isaacs: you know that feeling when you're at a job, and not feeling it, and just waiting for it to be late enough to be socially acceptable to get up and leave?
+[23:45] creationix: pgriess: I want to make a connect example that merges with your multi-process example
+[23:45] isaacs: vacations are hazardous.
+[23:45] JimBastard: did you get that thing i sent ya?
+[23:45] mjr_: isaacs: I know that feeling all too well.
+[23:45] mcarter has joined the channel
+[23:46] mjr_: BTW, we just added your name to our EULA clickwrap file today, because of YUI compressor because of cssmin.
+[23:46] isaacs: mjr_: hey, neat :)
+[23:46] ncb000gt: isaacs: Yep. Just got back from vacation. Called out today... =o
+[23:46] isaacs: mjr_: i never intended cssmin to get around as much as it has.
+[23:46] isaacs: mjr_: it's really very brittle.
+[23:47] sanderjd has left the channel
+[23:47] tjholowaychuk: JimBastard: ey, not much, working on bugs still lol yay...
+[23:48] JimBastard: just wondering if you had any insight on that, im tearing apart creationix haml-js now
+[23:48] isaacs: fitzgen: probably not gonna get to any npm tonight.  tomorrow or the next day, though, hopefully.
+[23:48] tjholowaychuk: what are you doing with haml-js?
+[23:49] jbrantly has joined the channel
+[23:49] tjholowaychuk: i have a crappy streaming C cssmin project lol wahoo..
+[23:51] isaacs: tjholowaychuk, mjr_: cssmin.php was in fact just about a 1-hour hack to cut down the massive weight of uncompressed css on games.yahoo.com
+[23:51] isaacs: then others at yahoo started using it, julien ported it to java, and i've been paying the price for that hack ever sinc.e
+[23:51] mjr_: That is hilarious.
+[23:51] tjholowaychuk: isaacs: nice nice! i cant even remember why i made mine i did not really need it
+[23:51] isaacs: oh, we REALLY needed it.
+[23:52] isaacs: i mean, seriously.
+[23:52] tjholowaychuk: i believe it, with that much traffic even tiny optimizations would be great
+[23:52] isaacs: it was like a 30% reduction in our overall download size.
+[23:52] mjr_: wow
+[23:52] isaacs: well, less, since it's gzipped.
+[23:52] isaacs: but a LOT of css, all uncompressed, for many many dfiferent pages across the site.
+[23:52] mjr_: Surely everything is gzipped now, when possible, right?
+[23:52] tjholowaychuk: mine saves about 17%
+[23:52] isaacs: there were huge comments in a bunch of them.
+[23:53] tjholowaychuk: shit
+[23:53] isaacs: it was ridiculous.
+[23:53] isaacs: that one hour hack was super valuable.  but i didn't even try to make it generally applicable to all CSS constructs, since there's a lot of things that we didn't use.
+[23:53] isaacs: it's not a CSS parser.  it's a bunch of regexes.  that's it.
+[23:54] tjholowaychuk: mine is just a tiny little cluster fuck of goto statements
+[23:54] isaacs: tjholowaychuk: while/switch is not so different from a buncha gotos.
+[23:54] isaacs: just slightly more structured.
+[23:57] tjholowaychuk: would be sort of a fun c project to re-write, without lookahead
+[23:57] tjholowaychuk: should probably stick to things i personally use though
+[23:57] isaacs: tjholowaychuk: i think nzakas wrote a javascript css parser.
+[23:57] isaacs: tjholowaychuk: he seemed to indicate that the CSS grammar is less than plasant.
+[23:57] tjholowaychuk: isaacs: i just like to find excuses to fiddle with c land :D
+[23:58] tjholowaychuk: would be cool to implement that as middleware in connect actually
+[23:58] mjr_: I think Safari 5 might be "faster" than Chrome in subjective perception of speed.
+[23:58] mjr_: Feels really snappy to me.
+[23:59] isaacs: mjr_: yeah, it is crazy fast.

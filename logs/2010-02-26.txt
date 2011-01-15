@@ -1,0 +1,1600 @@
+[00:10] cloudhead has joined the channel
+[00:14] vdrab has joined the channel
+[00:18] vdrab has left the channel
+[00:26] mikeal has joined the channel
+[00:37] ryah_away: i say we drop commonjs modules and just use loadScript()
+[00:38] inimino: ryah_away: what's loadScript()?
+[00:38] mikeal: ryah_away: you coming to the couch.io party tomorrow?
+[00:38] ryah_away: er, importScript
+[00:38] inimino: what's importScript?
+[00:39] ryah_away: inimino: http://www.whatwg.org/specs/web-workers/current-work/#importing-scripts-and-libraries
+[00:39] inimino: oh, that
+[00:39] ryah_away: so basically it's the same, except you have to do your own namespacing
+[00:39] ryah_away: no 'exports'
+[00:39] inimino: hm, yeah
+[00:40] dekz has joined the channel
+[00:40] inimino: I'm not sure what that'd be a plus
+[00:40] mikeal: it's scoped to the worker
+[00:40] inimino: I guess some people will like it
+[00:40] ryah_away: right
+[00:40] ryah_away: process scope
+[00:40] inimino: yeah, it makes a lot more sense for workers
+[00:40] ryah_away: it's more minimal
+[00:40] inimino: than something that's global
+[00:40] ryah: mikeal: um, sure - what time is it?
+[00:40] mikeal: starts at 4
+[00:40] ryah: okay
+[00:40] mikeal: http://www.mobaganda.com/couchioadminparty
+[00:40] inimino: it is minimal though
+[00:41] inimino: but then I'd be happy with just fs and eval :)
+[00:42] mikeal: moving from commonjs modules would send a message those guys that node just isn't going to be part of those specs anymore
+[00:42] mikeal: it's the only formalized spec they have :)
+[00:42] inimino: hehe
+[00:43] inimino: I actually like CommonJS modules
+[00:43] mikeal: i would really like to be able to add something to the import context
+[00:44] mikeal: and it doesn't support that
+[00:44] inimino: the import context?
+[00:44] mikeal: basically, to this
+[00:44] mikeal: in the eval context
+[00:45] ryah: It's just that node's module system is becoming so bloated
+[00:45] ryah: it's like hundreds of lines
+[00:45] inimino: really?
+[00:46] mikeal: is it just because it's grown too quickly and needs some refactoring
+[00:46] mikeal: or is this just what is required to support modules they way they are specified in commonjs
+[00:46] mikeal: i just wrote support for commonjs modules in the couchdb view server
+[00:46] mikeal: and it wasn't all that much code
+[00:47] mikeal: of course, the relative import stuff is relative to the design doc and not the filesystem
+[00:47] mikeal: also, I have an eval context so I don't have to do everything in function wrapper for the eval
+[00:48] inimino: hm, yeah there is a lot
+[00:48] mikeal: i need a nap
+[00:49] mikeal: i'm making more typing errors than usual
+[00:51] ryah: the other reason is by no implmenting commonjs modules, it opens the door for people like Kris Kowal to do their own
+[00:51] ryah: (he's mashing node with narwhal)
+[00:52] inimino: ryah: hm, I guess you could pull all this out and just make it a module
+[00:52] inimino: yeah, if he wants to take it on
+[00:52] inimino: just that as far as I know there isn't one yet... and pulling it out without a replacement would probably be bigger breakage than promises
+[00:53] mikeal: i think there should be one standard module system, whatever itis
+[00:53] ryah: inimino: oh definitely
+[00:53] mikeal: not having a standard one makes developing a package manager really hard
+[00:54] inimino: I think require() is pretty nice
+[00:55] mikeal: isaacs should probably be aware of this conversation :)
+[00:55] isaacs: wha?
+[00:55] isaacs: hey
+[00:55] isaacs: ho
+[00:55] mikeal: i actually like the explicit exports
+[00:55] mikeal: i think that mixin should be thrown out tho
+[00:55] inimino: yeah, I quite like it
+[00:55] inimino: yes, I'd very much like to see mixin gone
+[00:56] ashb: the mixin(exports, foo) (anit-)pattern?
+[00:56] inimino: yes
+[00:56] inimino: and the implementation of mixin
+[00:56] mikeal: it's one of those features that begs to be abused
+[00:56] ashb: is it anything more than a for loop?
+[00:56] inimino: which is jQuery's extend
+[00:56] inimino: it's horrid
+[00:56] isaacs: yes, mixin is dumb.
+[00:57] isaacs: a deep Object.extend would be better.
+[00:57] ashb: how would O.extend differ from O.create?
+[00:57] isaacs: er, Object.create
+[00:57] inimino: it should've just been a for(p in o) b[p]=a[p]
+[00:57] mikeal: i want the v8 eval context to get exposed to javascript in a nice way
+[00:57] mikeal: and you to be able to hand require a context to eval in
+[00:57] isaacs: mikeal: that's a change to the js language.
+[00:57] ashb: a vm module :)
+[00:57] ashb: require('vm')
+[00:57] mikeal: isaacs: not really
+[00:58] mikeal: it's in spidermonkey by default
+[00:58] isaacs: but yeah, a reference to the current activation context (ie, the local fn scope) would be nice
+[00:58] isaacs: like sm's evalcx
+[00:58] ashb: mikeal: its not exposed by default anbymore is it?
+[00:58] ashb: it also had huge scope leaking issues
+[00:58] mikeal: by default when you compile spidermonkey it is
+[00:58] isaacs: last i was into v8's internals, there was nothing like that, and in fact, hacking it in was really really hard/impossible
+[00:58] mikeal: it's not available to the content space in the browser
+[00:58] inimino: I'd rather have workers
+[00:58] ashb: the `js` bin != spidermonkey
+[00:58] konobi: var return = vm.eval(function(){ /* do stuff */ });
+[00:59] stephenlb: workers~
+[00:59] mikeal: isaacs: the v8 docs make it look so simple :)
+[00:59] ashb: mikeal: the js bin has a lot of code that isn't in the spidermonkey lib itself
+[00:59] inimino: yes...
+[00:59] isaacs: mikeal: it's simple to create and use a v8 ContextObject thing.  but exposing that as a javascript Handle<Object> is not so simple.
+[00:59] mikeal: https://developer.mozilla.org/en/Introduction_to_the_JavaScript_shell#evalcx%28string.5b.2c_object.5d%29
+[00:59] isaacs: or at least, wasn't last year.
+[00:59] inimino: ACTION vaguely remembers someone or other trying to read his ssh keys
+[00:59] isaacs: :)
+[00:59] mikeal: it's a "builtin function"
+[01:00] ashb: mikeal: js shell != spidermonkey lib
+[01:00] isaacs: so, anyway... require() and package manager.
+[01:00] isaacs: let's keep require() working the way it does.  but the way it's implemented in node is bloated and crazy.
+[01:00] isaacs: and also a bit insecure.
+[01:01] isaacs: the code has just grown a lot, and it jumps around from place to place, and the module.id and module.uri aren't set sanely, and can lead to require()ing the same file and getting different modules, etc.
+[01:01] mikeal: ashb: if you run javacsript files using the js bin it'll have that function
+[01:01] ashb: mikeal: yes but most embeddings that use sm wont do that
+[01:02] mikeal: which embeddings?
+[01:02] mikeal: couchdb does
+[01:02] ashb: it runs thing through the js shell?
+[01:02] mikeal: not the "interactive" shell, but i uses the system bin to run the js file, yes
+[01:03] ashb: you shell out? why on earth not just embed things?
+[01:03] mikeal: the view server is just a javascript file that talks over stdout
+[01:03] ashb: remind me to see if you suffer from the buffer overrun explooit
+[01:03] mikeal: because the view server should NEVER do IO
+[01:03] mikeal: other than stdout
+[01:03] mikeal: it should only block on processing
+[01:03] arlolra has joined the channel
+[01:03] mikeal: and it's a lot safer to run it in a process than embed it in the erlang vm
+[01:03] mikeal: but we actually considering using erlang_js
+[01:04] ashb: that's the lesser aproach. most every other project i know uses the C api
+[01:04] ashb: *lesser taken
+[01:04] mikeal: yeah, and a bunch of them also use threads
+[01:04] mikeal: which is just insane
+[01:04] konobi: (SM threads)--
+[01:05] mikeal: SM threads are basically abandoned
+[01:05] ashb: they in the process of sorting that out
+[01:05] mikeal: not basically, actuallys
+[01:05] mikeal: who?
+[01:05] ashb: define abandoned
+[01:05] ashb: the mozilla guys, who else?
+[01:05] mikeal: the Mozilla javascript team has stopped supporting them
+[01:05] ashb: rubish.
+[01:05] mikeal: there won't be bugfixes in that code again, ever
+[01:05] mikeal: umn….. I talked with Shaver about this 3 months ago
+[01:06] mikeal: the reason there hasn't been a release
+[01:06] mikeal: since 1.7, is because the community that wants releases are using the threads
+[01:06] ashb: is because of a thread safety issue, yes
+[01:06] mikeal: so the js team stopped doing releases of SM
+[01:06] ashb: not quite
+[01:06] mikeal: and are letting the community members fix those bugs
+[01:06] ashb: and threads *are* still supported
+[01:06] mikeal: but the spidermonkey shipping with firefox will NEVER be held up for threading issues
+[01:07] mikeal: and the threads that are currently in Firefox won't be available soon at all
+[01:07] mikeal: because everything is going in to seperate processes
+[01:07] inimino: ala chrome?
+[01:07] ashb: yes, but they are still talking about threading support of a sort
+[01:07] mikeal: a little more than chrome
+[01:07] ashb: shared nothing threads
+[01:07] ashb: but sitll supporting mutlie threads running js
+[01:07] mikeal: extensions and plugins wil also be in seperate processes
+[01:08] isaacs: hey, ashb you see the js-registry stuff that mikeal did?
+[01:08] ashb: no
+[01:08] inimino: I didn't even know Spidermonkey exposed threads
+[01:08] ashb: it doesn't
+[01:08] inimino: isaacs: how's npm coming? is it usable?
+[01:08] ashb: it has threads safe C api
+[01:08] isaacs: inimino: not quite.
+[01:08] mikeal: me and dmose talked with shaver about getting some SM releases so that couchdb could move on to using a tracing enabled SM
+[01:08] inimino: isaacs: oh, ok, I was thinking about using it for fileIO
+[01:08] isaacs: inimino: working on versioning and resolving dependencies.  looking good for next weekish
+[01:08] konobi: the one place threads are useful is GC performance, but that's it
+[01:08] inimino: isaacs: cool
+[01:08] ashb: mikeal: http://code.google.com/p/js18
+[01:09] mikeal: and basically the answer is "the people that need releases want threads and we don't care enough about them to fix those bugs, so when that community fixes them we'll push releases. If you don't want to be 2 years behind you're going to have to just create a tarball of the sm code at a specific Firefox tag"
+[01:10] isaacs: inimino: if you feel like creating a package.json file and pointing me at a tarball, i'd be happy to test with your kit and make sure npm can give it what it needs.
+[01:10] mikeal: the sm guys will merge your fixes
+[01:10] mikeal: there is no question
+[01:10] ashb: mikeal: get your facts straight
+[01:10] ashb: do you think i'd spend work on that if i didn't check first?
+[01:10] mikeal: but anyone who doesn't want to be a year or so behind on their SM version is still going to have to pull the tag
+[01:10] mikeal: which sucks
+[01:11] ashb: yes it does.
+[01:11] inimino: isaacs: what's the package.json supposed to look like?
+[01:11] ashb: inimino: do you use vim>
+[01:11] ashb: ?
+[01:11] inimino: ashb: yes
+[01:11] mikeal: for couchdb, we don't care about threads
+[01:11] isaacs: inimino: roughly this: http://wiki.commonjs.org/wiki/Packages/1.0
+[01:11] ashb: inimino: http://gist.github.com/311512
+[01:11] mikeal: so we may actually push a tarball for those tags to distro package managers
+[01:11] ashb: helper method for the lazy
+[01:11] isaacs: if you have a "main" file that you'd like to include when I do require("fileIO") then you can specify that as the "main" module.
+[01:11] mikeal: so that we can depend on them in couchdb instead of the mainline versions
+[01:12] isaacs: { ... "main" : "path/to/fileIO/main/module" }
+[01:12] mikeal: because tracing is the perfect optimization for views
+[01:12] ashb: mikeal: so i take it you have no interest in helpign fix the last blocker on a js 1.8 release?
+[01:12] isaacs: inimino: the main key is that i get a tarball with a package.json in the root of it
+[01:12] isaacs: i'll bug you if it doesn't work ;)
+[01:12] ashb: isaacs: root, or inside the only dir?
+[01:12] isaacs: ashb: right, sorry, yes
+[01:12] mikeal: is the fix in code or in politics?
+[01:12] ashb: (i.e. from github auto repo downloads?)
+[01:12] isaacs: inside the only dir
+[01:13] konobi: isaacs: looks like a META.yml
+[01:13] inimino: isaacs: alright, I'll take a look
+[01:13] isaacs: the tarball must contain a single folder, and that folder must contain a package.json file
+[01:13] konobi: ashb: no doubt that's your fault
+[01:13] ashb: konobi: it is
+[01:13] konobi: =0)
+[01:13] ashb: konobi: i brow beat people to let me let them learn from CPAN
+[01:14] konobi: CPAN++ # battle tested
+[01:14] ashb: indeed.
+[01:14] isaacs: the name of the folder inside the tgz doesn't matter.
+[01:14] ashb: CPAN-- # it got some things wrong tho
+[01:14] mikeal: it's still better than anything Python ever did
+[01:14] konobi: i think that's more implementation details that went wrong that we've had to support
+[01:14] ashb: yeah - there was the whole 'python people want a cpan' thing
+[01:15] ashb: one thing python doesn't do is mirror packages in pypi
+[01:15] mikeal: the best they could do was an installer that doesn't uninstall :P
+[01:15] ashb: i've come across 'dead' packages on pypi surpisgnly often
+[01:15] mikeal: not just that
+[01:16] mikeal: the installer checks for the website, and will try and scrape the html for a tarball link
+[01:16] ashb: o_O
+[01:16] rictic has joined the channel
+[01:16] ashb: thats ..... wow
+[01:16] mikeal: yup....
+[01:16] mikeal: you can thank pje for that "feature"
+[01:16] inimino: heh, wow
+[01:16] ashb: thats kinda as stupid as the cpan 'this package needs X, do you want to install it [yes/no]'
+[01:16] inimino: heh
+[01:17] ashb: talk about brain dead fucking questions
+[01:17] inimino: the whole CPAN-having-its-own-shell idea was the mistake IMO
+[01:17] mikeal: that's what `yes` is for
+[01:17] ashb: one thing that it occurs to me that package.json is missing is some way of doing platform specific deps (that doesn't end up broken like perl's is)
+[01:17] ashb: inimino: yeah - cpanminus is so much cooler
+[01:18] ashb: the one thing that i think cpan got very right is the unified docs rendering
+[01:18] ashb: and interlinking/searching
+[01:18] inimino: and getting a critical mass using it
+[01:18] mikeal: one thing that package.json *could* have is a "platform-specific" attribute which should be overlayed on the root of the json object for some platform specific cases
+[01:18] ashb: mikeal: yeah, but is that enough?
+[01:19] ashb: i wonder if it needs a script ot be run
+[01:19] mikeal: then you can add *any* attribute or option for those cases
+[01:19] konobi: ashb: cpanminus appears to html scrape... eeewww...
+[01:19] ashb: konobi: i thought it scraped the indexes
+[01:19] ashb: hmm
+[01:19] mikeal: the only thing that would be annoying are cases when you want to exclude on a single platform
+[01:19] mikeal: but being simpler for the 90% case sounds good to me
+[01:20] ashb: mikeal: the other thing i pushed for was some simple way of indicating external dependancies
+[01:20] ashb: liek 'i need the libsvn' or similar
+[01:20] ashb: but it got punted from the first spec
+[01:21] mikeal: i think it's easier to add integration from apt and other package managers
+[01:21] mikeal: than to do it the other way around
+[01:21] ashb: konobi: ah it uses search.cpan as an API and scrapes that. neat but horrible
+[01:21] mikeal: the nice thing about JSON is that you can just add attributes as much as you want
+[01:21] ashb: mikeal: hmmm perhaps.
+[01:22] ashb: (to the wya of using apt)
+[01:22] ashb: tbh, needing libs is related to the 'how to configure/compile native plugins' and is a whole other issue
+[01:22] mikeal: so you can specify those attributes in a way that apt can read them and if they install a package using apt it can be smart enough to pull in it's own deps as well
+[01:23] ashb: is apt that extensible?
+[01:23] ashb: wouldn't it need everything to be converted to .debs?
+[01:23] mikeal: i know that apt uses CPAN when it can
+[01:23] ashb: what?
+[01:23] konobi: it can't
+[01:23] ashb: there are 100s of lib*-perl .debs
+[01:23] mikeal: it doesn't integrate with anything Python because pje kinda gave them the finger
+[01:24] ashb: and a core of debian people who just make new .debs for perl dists
+[01:24] konobi: there's helpers available for you to create .deb's from CPAN... but it's not a "live" thing
+[01:24] mikeal: I've seen it call in to CPAN before
+[01:24] stevestmartin has joined the channel
+[01:24] ashb: i've not but i've never looked
+[01:24] mikeal: hrm…. maybe it was another package manager
+[01:24] konobi: ebuild?
+[01:24] mikeal: nope
+[01:24] konobi: oh... BSDPAN for sure
+[01:24] mikeal: i haven't used ports in a year
+[01:25] mikeal: it might have been that red hat thing
+[01:25] ashb: yum?
+[01:25] mikeal: Mozilla uses CentOS vms for everything :(
+[01:25] konobi: freebsd ports integrate directly into cpan
+[01:25] konobi: (BSDPAN)
+[01:25] mikeal: that might have been it
+[01:25] konobi: once `cpan` installs a module, it registers it in the ports tree along with it's installed files, etc.
+[01:26] ashb: how does it hook in?
+[01:26] ashb: cos that might be useful for homebrew too
+[01:26] mikeal: so, the apt people were asking for features in setuptools specifically to do good integration, I think they do like to integrate with other package managers when possible
+[01:27] ashb: ah
+[01:27] mikeal: homebrew is hawt
+[01:27] ashb: yeah it is.
+[01:27] mikeal: i'm still not using it yet :)
+[01:27] konobi: ashb: it overloads some of the ExtUtils and MakeMaker stuff
+[01:27] ashb: konobi: ah
+[01:27] mikeal: i was so burned by ports that I've been compiling everything by hand 
+[01:27] mikeal: and now i'm just in the habit
+[01:28] ashb: mikeal: homebrew is quite frakly soe much more awesomer (yes, thats right) that ports its beyond reason
+[01:28] mikeal: ports routinely broke the linkers for my compiler on OSX
+[01:28] mikeal: over and over again
+[01:28] mikeal: and everytime it did i had to re-install XCode, which somehow takes up more HD space everytime you install it over itself
+[01:28] konobi: ashb: http://lists.freebsd.org/pipermail/freebsd-questions/2003-November/025929.html
+[01:29] mikeal: it's a big bucker of fail and I'm scared of anything that resembles it now
+[01:29] mikeal: s/bucker/bucket
+[01:29] ashb: mikeal: try homebrew. 1) you can put it anywhere
+[01:29] ashb: 2) dont like it, blow away the root you installed it to, and thats it
+[01:30] mikeal: i've heard that annoying things happen if you don't stick it in /usr/local
+[01:30] ashb: some formulas might not work
+[01:30] ashb: but thats cos most people leave it in /usr/local
+[01:30] isaacs: re: putting homebrew anywhere... UNLESS you care about erlang and spidermonkey, which i know you do, mikeal 
+[01:30] ashb: but most do work now
+[01:31] isaacs: you must put it in /usr/local
+[01:31] mikeal: haha
+[01:31] ashb: is that cos erlang's js binding's config is wrong?
+[01:31] isaacs: ashb: i dunno why it is, actually
+[01:31] isaacs: i think it's spidermonkey's fault, but i could never get erlang to work out of ~/.homebrew/ either
+[01:31] mikeal: didn't it also have issues finding icu
+[01:31] mikeal: ?
+[01:31] isaacs: mikeal: so, yeah, i did have that issue when i built couchdb by hand.
+[01:31] ashb: isaacs: i've had no problens using spidermonkey from random dir all over the place
+[01:32] isaacs: but i think that's cuz the homebrew couchdb formula has some kinda --icu-prefix=blerg thing on the ./configure
+[01:32] mikeal: so, i think it's only an issue when you're compiling couching from a source checkout, cause I think that $ brew install couchdb, is suppose to work
+[01:33] isaacs: but i'm lazy, so just ln -s'ed all the .so files in
+[01:33] mikeal: couching, yeah, time for a nap
+[01:33] isaacs: mikeal: it does work, but only if you have brew in /usr/local
+[01:33] isaacs: couch isn't the problem there, but some of the deps fail for odd reasona
+[01:33] isaacs: i posted a bug, and mxcl said "that's why you should install to /usr/local"
+[01:34] isaacs:  /o\
+[01:34] ashb: bad max. no cookie
+[01:34] mikeal: hehe
+[01:34] ashb: remind me to smack him upside the head next time i see him
+[01:34] isaacs: hehe
+[01:34] isaacs: it works great in /usr/local, though.  i just had to copy some stuff into the bin folder that was already in there.
+[01:34] ashb: hmmm. more work on my pdoc port to JS now i think
+[01:35] ashb: the one thing i really like is its way of only having symlinks into /usr/local/bin etc
+[01:35] ashb: the actualy files for a bew live in /usr/local/Cellar/$pkg/$ver/bin/ etc
+[01:35] ashb: was a nice idea
+[01:37] ashb: inimino: whats zero-width-pos-lookahead in PEG again?
+[01:38] RayMorgan has joined the channel
+[01:39] RayMorgan has joined the channel
+[01:39] ashb: ah &
+[01:40] isaacs: ashb: that's the GoboLinux style.
+[01:40] isaacs: ashb: i'm doing that with npm, too
+[01:40] ashb: makes sense
+[01:40] isaacs: the idea is to keep the files in a folder structure that is easy to manage, and then link them into a folder structure that is easy to use.
+[01:41] ashb: i thought about if the 'main' file shouldn't just be symlinked in and have require('./') reslove that relative to the actualy path of hte symlink target
+[01:41] ashb: people didn't seem to linke that idea tho
+[01:42] BryanWB has joined the channel
+[01:44] pigdude has joined the channel
+[01:45] gianni has joined the channel
+[01:49] sztanphet has joined the channel
+[01:52] jashkenas has joined the channel
+[01:52] jashkenas has left the channel
+[01:58] mikeal has joined the channel
+[02:00] JimBastard has joined the channel
+[02:03] ashb: inimino: you really need to work on the friendly-ness of your PEG
+[02:06] isaacs: github's branches page is neat
+[02:06] ashb: is that new?
+[02:07] jashkenas has joined the channel
+[02:07] isaacs: yeah
+[02:07] ashb: oh BRanch List
+[02:07] ashb: nice
+[02:07] charlenopires has joined the channel
+[02:07] isaacs: http://github.com/ry/node/branches
+[02:15] pigdude: node is cool!
+[02:30] CIA-77: node: 03Benjamin Thomas 07master * rde15214 10/ (doc/api.txt lib/sys.js test/simple/test-sys.js): 
+[02:30] CIA-77: node: Make the output of sys.inspect a lot more compact.
+[02:30] CIA-77: node: See:
+[02:30] CIA-77: node: http://groups.google.com/group/nodejs/browse_thread/thread/ac060521e27fef65
+[02:30] CIA-77: node: By default now, sys.inspect doesn't recurse more than two times. Pass
+[02:30] CIA-77: node: in null as the third parameter to make it recurse indefinitely. - http://bit.ly/9HjGHy
+[02:33] arlolra has joined the channel
+[02:36] ryah: arlolra: your readdir patch isn't passing the test for me
+[02:37] arlolra: ryah: what's the error?
+[02:38] ashb: "prefer the Haskell-style 
+[02:38] ashb: comma in front" eurgh :)
+[02:38] ashb: ryah: have you seen the semi-colon in front style of coding? (not for JS obviously)
+[02:40] ashb: http://perl.4pro.net/pcs.html i think
+[02:43] konobi: WTF
+[02:43] ryah: arlolra: 
+[02:43] ryah: AssertionError: ["are","empty","files","for","just","testing.js","these"] deepEqual ["are","dir","empty","files","for","just","testing.js","these"] at Object.<anonymous> (/Users/ryan/projects/node/test/simple/test-readdir.js:20:8) at Module._loadContent (node.js:966:21) at node.js:994:20 at node.js:595:25 at node.js:1055:9
+[02:44] ryah: ashb: nice
+[02:44] ashb: ryah: the different ther ofcouse is every line starts with punctioation so there is no differentiation
+[02:45] dnolen has joined the channel
+[02:45] ryah: i think people do that in haskell too
+[02:45] BryanWB has joined the channel
+[02:46] ashb: lucikly(?) that would be totally meaningless in JS
+[02:46] ashb: right i think thats the grammar done, now i just need to walk this tree...
+[02:47] arlolra: ryah: i see
+[02:47] ryah: arlolra: missing dir?
+[02:47] ryah: arlolra: i think cause git doesn't like empty dirs
+[02:47] arlolra: ryah: dir is an empty dir
+[02:47] arlolra: just put something in it
+[02:47] ashb: touch .gitignore ?
+[02:48] arlolra: yup
+[02:48] jashkenas: ashb: which grammar is this?
+[02:48] ashb: jashkenas: oh, nothing complex, just for PDoc
+[02:48] jashkenas: pdoc on node?
+[02:48] ryah: i hope i can get away with my comma in front style :)
+[02:48] ashb: on any commonJS probably
+[02:49] ryah: probably everyone will hate me
+[02:49] ashb: ryah: its unconventional, but i can see the reasones for it
+[02:49] jashkenas: ashb: that's fantastic -- are you changing the output or is it going to be a pdoc clone?
+[02:49] arlolra: ryah: passing now?
+[02:49] ashb: my first instinct was certainly 'eurgh'
+[02:49] ryah: ashb: i've been doing it already in the docs
+[02:49] ashb: jashkenas: like most of my projects, i want it ot be reusable
+[02:49] ashb: so there will be lots of intermediate reps to tweak and play with
+[02:50] kriskowal_ has joined the channel
+[02:50] ashb: such as http://github.com/evilstreak/markdown-js/
+[02:50] jashkenas: ashb: so you're doing a straight ECMA parser?
+[02:50] ashb: (which i needed to parse the docs and suck like)
+[02:50] ryah: arlolra: yeah
+[02:50] ashb: jashkenas: nah, cheating and just looking for /**
+[02:50] jashkenas: ashb: oh, much more sensible.
+[02:51] ashb: jashkenas: yeah - it doesn't really need a full on parser
+[02:52] ashb: once i've got the comments parsed out and in an IR, i'm tempted to work on a command line programm like perldoc
+[02:52] ashb: tho i should do the HTML rendering first as thats what i want first
+[02:52] CIA-77: node: 03arlolra 07master * r3497da3 10/ test/simple/test-readdir.js : Decoupled readdir test. - http://bit.ly/bj0hYX
+[02:54] ryah: arlolra: thanks
+[02:54] arlolra: np
+[03:00] CIA-77: node: 03Ryan Dahl 07master * rc219571 10/ doc/api.txt : Use more beautiful object syntax in docs - http://bit.ly/d45vSn
+[03:01] ashb: ryah: so do you actually think its nicer, or you prefer it since you can't have trailing commas?
+[03:01] ryah: ashb: i think it's nicer
+[03:01] ryah: easier to read
+[03:01] ashb: fair enough
+[03:01] ashb: i thinky you're wrong of course :D
+[03:02] bentomas has joined the channel
+[03:02] ryah: i do it also in C: http://github.com/ry/http-parser/blob/8243fddd178d382cbb4efbd4ad1308adb4b42ab6/test.c#L80
+[03:02] ashb: and people say perl is like line noise
+[03:02] ashb: shesh
+[03:02] ashb: ;)
+[03:03] bentomas: ryah: I take it you decided against require.resolve?
+[03:03] ryah: man - the most annoying thing about node-repl is when i type { hello: 'world' } and get "..."
+[03:04] ryah: bentomas: oh - no - i just forogt about it
+[03:04] ashb: require.resolve just resolving to a filename?
+[03:04] bentomas: yeah
+[03:04] jashkenas: ryah: have you considered getting rid of the exception-means-multiline-bit in the REPL?
+[03:05] ryah: jashkenas: ?
+[03:06] jashkenas: ryah: nm
+[03:06] ryah: git pull &&  NODE_PATH=lib rlwrap ./node bin/node-repl
+[03:06] ryah: type 'process'
+[03:06] ryah: really nice output now
+[03:07] ryah: of course, far too much output :) but it looks nice
+[03:08] bentomas: ryah: I'm interested in maybe trying to get readline support for node-repl.  Is that something you want to do and if not do you have any suggestions about where to start learning how to do that?
+[03:09] ashb: bentomas: its dead easy
+[03:09] ashb: its like 4 functions
+[03:09] ryah: bentomas: http://www.delorie.com/gnu/docs/readline/rlman_41.html
+[03:09] ashb: http://github.com/ruediger/flusspferd/blob/master/programs/flusspferd.cpp#L659-684
+[03:09] ryah: bentomas: need to becareful to use libedit and not readline
+[03:10] ryah: i'm not sure if they are any different in these async functions
+[03:10] ryah: hopefully not
+[03:10] bpot has joined the channel
+[03:10] bentomas: ahh, c++, my nemesis.  alright, I'll give it a try.  can't promise anything
+[03:10] ashb: oh i didn't realise there was async versions
+[03:10] ashb: bentomas: rl is straight C
+[03:10] ashb: there are a couple more functions to set it up to use history file
+[03:10] bentomas: ahh, c, my other nemesis 
+[03:10] ashb: :)
+[03:11] ryah: bentomas: i'd like an interface process.stdio.openEditLine()
+[03:11] ryah: bentomas: or maybe process.stdio.open('edit')
+[03:11] ryah: not sure
+[03:11] ryah: bentomas: it's not trivial - you have to feed data carefully to libedit
+[03:12] bentomas: well, maybe I'll let someone else tackle that one
+[03:12] ryah: yeah
+[03:12] ryah: i'm going to work on stdio in the near future - it should probably wait until after that
+[03:13] ryah: bentomas: really nice work on sys.inspect - it looks great
+[03:13] bentomas: thanks, just tried to do what you asked :)
+[03:14] ryah: single quoted strings in js are totally under appriciated
+[03:14] bentomas: agreed, I prefer them greatly
+[03:19] mumrah: where is the Promise stuff documented?
+[03:20] bentomas: mumrah: there is no longer any Promise stuff built into Node
+[03:20] Tim_Smart: Promises got pwnt
+[03:20] mumrah: heh
+[03:20] mumrah: so i should just have a callback stack?
+[03:21] mumrah: or something like that
+[03:21] creationix has joined the channel
+[03:21] ryah: mumrah: http://gist.github.com/310562
+[03:21] Tim_Smart: Or return a event emitter
+[03:22] Tim_Smart: I'm working on a server driven by an EventEmitter
+[03:22] Tim_Smart: its awesome
+[03:30] creationix has joined the channel
+[03:36] sztanpet has joined the channel
+[03:38] inimino: ashb: not totally meaningless... I use leading semicolons occassionall in JavaScript
+[03:40] isaacs has joined the channel
+[03:41] bentomas has left the channel
+[03:44] inimino: occasionally, even
+[03:47] joshbuddy has joined the channel
+[03:47] joshbuddy has joined the channel
+[03:48] BryanWB has joined the channel
+[03:52] bentomas has joined the channel
+[03:53] bentomas: inimino: do you use Object.create ?
+[03:53] jashkenas has left the channel
+[03:54] stephenlb: Object.create ?
+[03:55] inimino: bentomas: not really, I tend to avoid inheritance at all in JavaScript
+[03:55] inimino: I think Object.create is kind of marginally more elegant than 'new'
+[03:56] bentomas: ahh, I knew you had an opinion on it :)  can you tell me about how you usually do things? I'm interested in learning some new javascript programming styles
+[03:56] bentomas: why is Object.create kind of marginally more elegant than new?
+[03:57] stephenlb: ACTION wait's to see if eloquent is referenced.
+[03:57] inimino: `new` is basically a Java feature grafted onto a Smalltalk object system... it's just ugly
+[03:57] inimino: hehe
+[03:57] inimino: `eloquent
+[03:57] gbot2: Eloquent JavaScript is a comprehensive introductory Web-based book with examples and a built-in interpreter.  http://eloquentjavascript.net/index.html
+[03:57] stephenlb: heh
+[03:58] inimino: (but maybe a little too introductory for these kinds of questions)
+[03:58] inimino: it does have a pretty good treatment of the OO features of JavaScript and how I tend to think about them
+[03:58] bentomas: I'll check it out.  I'm okay with introductory
+[03:58] BryanWB: creationix, hey dude, awesome Do tutorial! really enjoyed it. hope to experiment more w/ it today
+[03:58] inimino: I usually don't use prototypes, or method calls at all
+[03:59] bentomas: you don't use prototypes?  So you do all "functional" style programming?
+[03:59] ashb: with O.create new isn't the only way of messing with prototypes
+[03:59] ashb: but prototypes are funny at times
+[03:59] inimino: bentomas: yes, pretty much
+[04:00] bentomas: hmmm
+[04:00] inimino: bentomas: though I have done some fun things lately with closures simulating a more pure Smalltalk-style OO system
+[04:00] creationix: BryanWB: Thanks
+[04:00] bentomas: I've never used Smalltalk
+[04:01] inimino: the key is that the only thing you can do is send messages to objects
+[04:01] inimino: so they really provide true encapsulation
+[04:01] creationix: inimino: and then you can simulate method_missing and friends no problem
+[04:01] inimino: creationix: right, exactly
+[04:01] bentomas: can you give me an example?  so obj.send('do something')
+[04:01] bentomas: ?
+[04:02] inimino: object("send", "do something")
+[04:02] bentomas: doesn't that mean all objects have to be functions?
+[04:02] inimino: yes
+[04:02] ashb: functions are objects anyway
+[04:02] bentomas: right
+[04:03] inimino: functions are objects but this way all objects are functions
+[04:03] inimino: it's not something I'd ever want to use everwhere
+[04:03] creationix: inimino: have you gotten much feedback on your new continuable library?
+[04:03] inimino: but there are places where it's really interesting and seems to be nice
+[04:03] creationix: Do just hit 100 followers a couple of hours ago, I think there is interest in the style
+[04:04] BryanWB: creationix, the style is very intuitive
+[04:04] inimino: creationix: I haven't heard anything yet, not sure if anyone has seen it :)
+[04:04] bentomas: unfortunately, GitHub is a little more conducive to code browsing I think
+[04:05] inimino: probably
+[04:07] inimino: so with closures-as-objects, there are two things you can't do:
+[04:07] inimino: you can't mutate any state of the object except by passing messages to it
+[04:07] inimino: and you can't test it with `instanceof` or the like (except to determine that it is indeed a function)
+[04:08] mumrah has left the channel
+[04:08] bentomas: well, what's stopping you from naming your original function so instanceof would work?
+[04:08] inimino: those are features
+[04:08] bentomas: ahh :)
+[04:08] inimino: those are what make it closer to the Smalltalk style
+[04:09] bentomas: well, it sounds interesting
+[04:09] creationix: inimino: out of curiosity, what's your functional background? ocaml, haskel, something-else?
+[04:09] inimino: creationix: Haskell's the only one I really used seriously
+[04:09] creationix: someone commented on the "Do" article saying continuables are like monads
+[04:09] guan has joined the channel
+[04:09] inimino: well, I guess Scheme if you consider that a functional language
+[04:10] inimino: creationix: they are a monad in disguise (shh)
+[04:10] creationix: I've heard scheme is the same thing as JavaScript, but with different syntax
+[04:10] creationix: never used it myself, so I don't know
+[04:10] inimino: pretty true
+[04:11] inimino: I use JavaScript very much like Scheme
+[04:11] creationix: If you just pretend that it doesn't look like c and treat it like scheme, it will flow better, I hear.
+[04:11] inimino: yeah
+[04:12] inimino: the code I write even started to look a little like Scheme :)
+[04:12] creationix: speaking of, I need to convert node-persistence to functional style.  The object oriented style isn't working well for async stuff
+[04:13] inimino: there are two things Haskell has going for it that JavaScript doesn't, with this kind of thing
+[04:13] inimino: one is the type system, type inference, and a type-checking compiler
+[04:13] inimino: and the other is having a compiler
+[04:13] creationix: true, my background is ocaml, and types are everything there
+[04:14] creationix: once you code compiles, it probably works
+[04:14] inimino: once I introduced Either with continuables I'm getting into stuff that has a runtime penalty, which wouldn't (as much) in a compiled language
+[04:14] creationix: yep
+[04:14] inimino: of course for async stuff there's plenty of play anyway when it comes to performance...
+[04:15] inimino: but some of the stuff I'd like to do with JavaScript really requires type checking and a compiler
+[04:15] creationix: we should make a superset language that does compile time type checking
+[04:15] creationix: but runs on the js runtime
+[04:15] inimino: yeah, definitely
+[04:16] creationix: jashkenas is getting coffeescript pretty polished.  It's a good ruby/python style version of JS
+[04:16] inimino: with the continuables and stuff I've been playing with Haskell types (which are basically H-M types)
+[04:16] inimino: and I'm finding out where the rough edges are mapping JavaScript onto those
+[04:16] creationix: I can imagine
+[04:17] inimino: lots of superset types
+[04:17] Tim_Smart: <3 Coffeescript
+[04:18] Tim_Smart: It makes a few assumptions though, hindering performance in some areas
+[04:18] inimino: yeah coffeescript looked like a nice Ruby-in-JavaScript
+[04:19] Tim_Smart: More of a Javascript-in-Ruby :/
+[04:19] inimino: it would be nice to have something in the more FP direction
+[04:19] creationix: I started a minimalistic one called Jack.  I tried to stay true to functional and prototypal style javascript semantice
+[04:19] ashb: creationix: enough projects called Jack
+[04:19] ec: ’sup all
+[04:19] ec: oh, creationix, we never talked.
+[04:19] inimino: hm, I think I might have seen some early syntax samples of Jack
+[04:19] ec: creationix: (just popped by and saw your nick, heh)
+[04:19] creationix: ec: sup
+[04:20] ec: back in Ruby, you?
+[04:20] RayMorgan has joined the channel
+[04:20] creationix: been scrambling to pay bills and pass my classes today
+[04:20] creationix: my new job doesn't pay me till April
+[04:20] ec: |-:
+[04:21] inimino: ah, bills :)
+[04:21] creationix: I know, if I got paid for all the hours I spent playing with JS I'd be set
+[04:22] inimino: hehe
+[04:22] bentomas has left the channel
+[04:22] inimino: well if you got some ideas for a minimalist fp-like language let me know, maybe we can build something simple
+[04:23] creationix: fp-like?
+[04:23] inimino: I don't want to do something complicated because I figure it'll take some experience to get right
+[04:23] creationix: oh, functional
+[04:23] creationix: have you looked at paws
+[04:23] adamv has joined the channel
+[04:23] inimino: heh
+[04:23] creationix: it's pretty mind warping, but I like the control flow
+[04:23] inimino: ec: have I looked at Paws?
+[04:23] ec: lmfao
+[04:23] ec: ACTION giggles quietly
+[04:24] ec: that’s… pretty golden
+[04:24] ec: creationix: inimino’s been in since the very start
+[04:24] creationix: that shows how tired I am
+[04:24] creationix: I think I knew that
+[04:24] ec: creationix: cf. http://github.com/elliottcable/Paws.js/blob/Master/README.markdown#readme
+[04:25] inimino: anyway yeah, I think the control flow is pretty cool
+[04:25] ec: I suggest everyone in here stop whatever they are doing, take a deep breath, turn their speakers up or break out the *good* headphones… and listen to http://listen.grooveshark.com/#/s/Scherzo+No+1+in+B+minor+Op+20/zfiD0
+[04:25] creationix: inimino: http://github.com/creationix/jack/blob/master/control_flow.jack
+[04:26] creationix: nothing fancy there, almost coffeescript like
+[04:26] creationix: but I'm proud of this one: http://github.com/creationix/jack/blob/master/data_types.jack
+[04:26] ec: Heh, Paws has subscripted base literals
+[04:26] ec: ACTION 1-up’s
+[04:26] JimBastard: i was about to say creationix  you should talk to jashkenas
+[04:26] creationix: native smart interpolated strings and built-in inheritance objects
+[04:27] ec: 1755223215₈
+[04:27] creationix: yeah, I was supposed to write the coffeescript in coffeescript compiler.  I got about half way and had to take a break.  Since then jashkenas did laps around my implementation
+[04:27] ec: oh, and can bring scope into strings if you like
+[04:27] JimBastard: oofa
+[04:27] ec: i.e. `foo = 2; print(“the number is foo”)`
+[04:28] ec: creationix: ‘left trimmed to match closing triplet’
+[04:28] ec: creationix: realllllly not a fan of that. Screws up the visual flow if you’re forced to indent it that way.
+[04:29] inimino: ooh, heredoc
+[04:29] creationix: no, that's the point, you can indent it all you want and the content is preserved
+[04:29] creationix: you should read the google caja page linked in my comment
+[04:30] ec: incorrect:
+[04:30] ec: if it’s pulled into the indentation level of the closing (or, for that matter, opening) quote, you can never indent *the content itself*
+[04:30] ec: which you will probably want to do
+[04:30] creationix: sure you can, just indent the content but not the quotes
+[04:30] ec: i.e. http://gist.github.com/315406
+[04:30] BryanWB: can coffeescript effortlessly link to other js libraries?
+[04:31] creationix: only doesn't work for one-liners, but then why use heredoc
+[04:31] creationix: BryanWB: yep
+[04:31] inimino: oh, this is quasi-quotation
+[04:31] BryanWB: so it just change js's syntax w/out breaking any compatibility?
+[04:31] creationix: it compiles to pure js
+[04:31] inimino: yeah I read about this proposal on es-discuss, it seemed nice
+[04:31] creationix: the browser doesn't know any better
+[04:31] inimino: you implemented the quasi-quotation?
+[04:31] ec: inimino: what proposal?
+[04:32] ec: also, quasi-quotation? what?
+[04:32] creationix: inimino: only about half of it
+[04:32] BryanWB: creationix, but i can write a program w/ coffeescript and reuse all the node libraries seamlessly?
+[04:32] inimino: the proposal for quasi-quotation on the es-discuss list
+[04:32] inimino: ec: ↑
+[04:32] creationix: BryanWB: sure can
+[04:32] BryanWB: wow, here come the rubyists ;)
+[04:32] inimino: as in SQL" some SQL here "
+[04:32] ec: es-discuss?
+[04:32] ec: what?
+[04:33] inimino: `g es-discuss
+[04:33] ec: BryanWB: eh?
+[04:33] gbot2: es-discuss Info Page - https://mail.mozilla.org/listinfo/es-discuss
+[04:33] ec: wtf?
+[04:33] ec: oh, some mozilla thing
+[04:33] BryanWB: ec, most rubyists i know like js but complain about the syntax
+[04:33] BryanWB: and long for ruby prettiness
+[04:33] ec: BryanWB: heh.
+[04:33] ec: BryanWB: I’m an *extremely* hardcore Rubyist. Or, was. Now I’m a JavaScripter.
+[04:33] inimino: creationix: that looks pretty cool
+[04:34] ec: BryanWB: the only real turnoff is the `function(){}` syntax, which I just handle with a preprocessor, similar to all that CoffeeScript or Jack stuff, but much simpler.
+[04:34] creationix: inimino: I think if it's a language primitive then people will use it and it will be the end to sql injection and xss
+[04:34] ec: creationix: oh, and where did you read about Paws? I never got a chance to show it to you, iirc, so what control flows were you referring to?
+[04:34] creationix: sure you did
+[04:35] ec: really? |-:
+[04:35] ec: I wish I had a memory.
+[04:35] creationix: I read through about 10 gists and you explained the syntax to me
+[04:35] ec: hahaha
+[04:35] BryanWB: ec, agreed
+[04:35] inimino: creationix: yes
+[04:36] ec: O_O
+[04:36] inimino: the JavaScript 1.8 lambdas are nice enough
+[04:36] ec: I… I… I was just trying… to write some Ruby… and…
+[04:36] ec: I forgot the syntax for an if statement O-O
+[04:36] ec: I’ve been away too long…
+[04:36] creationix: lol
+[04:36] inimino: function(a,b) a+b
+[04:36] creationix: inimino: oh yeah, those would be nice
+[04:37] inimino: I'll implement a preprocessor that converts all of those moz-isms to straight ES3 eventually
+[04:38] creationix: that shouldn't be hard
+[04:38] creationix: inimino: how do you like prototypal objects?
+[04:38] inimino: it wouldn't be hard
+[04:39] inimino: creationix: like Crockford-style Object.create?
+[04:39] inimino: or Self-style?
+[04:39] creationix: either, just that style of OO
+[04:39] ec: lol Object.create
+[04:39] inimino: it's ok
+[04:39] inimino: I think it's cleaner than `new`
+[04:39] creationix: for sure
+[04:39] ec: fuck yes. I hate new.
+[04:39] creationix: but to tell the truth, I never used the O in OCaml either
+[04:39] ec: murder death etc.
+[04:39] inimino: but I'm not sure inheritance is ever really a win
+[04:40] ec: yeah
+[04:40] ec: I’m all for NÖ d-:
+[04:40] ec: (NOO, Non-Object-Orientation)
+[04:40] inimino: if you had Haskell-style typeclasses, would you ever use any OO inheritance features?
+[04:40] ec: Paws is dat
+[04:40] inimino: I wouldn't
+[04:40] creationix: Haskell types are pretty awesome
+[04:40] creationix: if only the runtime and compiler were faster
+[04:41] inimino: yeah
+[04:41] inimino: well the runtime is pretty fast
+[04:41] inimino: GHC is pretty awesome :)
+[04:41] ec: I need to learn Haskell
+[04:41] creationix: for what all it does, yes
+[04:41] ec: so much on my plate
+[04:41] inimino: if only it ran in the browser, I'd never use anything else
+[04:41] creationix: I believe it
+[04:41] creationix: go ahead port GHX to javascript
+[04:41] creationix: *GHC
+[04:41] ec: ACTION points out that Paws will do all of that, and hopefully be awesomer than Haskell d-:
+[04:41] inimino: heh, that's more work than I'm up for :)
+[04:42] ec: meh port. However, a Haskell interpreter in JS wouldn}t be a bad idea.
+[04:42] inimino: I've got too much on my plate as it is
+[04:42] creationix: simple type inference should be too hard though
+[04:42] inimino: it's been done, someone wrote a PhD thesis on it that I read recently
+[04:42] creationix: heck, I had to write an inference engine for a homework once (that was a fun class)
+[04:42] creationix: PhD? for javascript?
+[04:42] inimino: someone in here linked me to it
+[04:42] inimino: yeah
+[04:43] creationix: now that's cool
+[04:43] inimino: http://pubs.doc.ic.ac.uk/chrisandersonphd/
+[04:43] mikeal has joined the channel
+[04:44] ec: hahah “JS”
+[04:44] ec: a formalization of JavaScript, eh? d-:
+[04:45] creationix: wow, I'm almost tempted to stay in school another 3 years just so I can make something like that and get a PhD for it
+[04:45] creationix: almost, but not!
+[04:45] inimino: hehe
+[04:45] creationix: i think a masters is good enough for now
+[04:45] ec: I’d have to go to school in the first place to do that
+[04:45] ec: can’t be arsed
+[04:45] creationix: mainly I'm in school because I like to teach programming
+[04:45] inimino: I considered going back for maths
+[04:46] ec: I finally forced the ssh-agent to expire my privkey passwords faster
+[04:46] inimino: but CS degrees still seem like a waste of time
+[04:46] ec: which is making me be more conservative in my git push’in d-:
+[04:46] ec: inimino: ditto. *exactly* ditto.
+[04:46] ec: inimino: I’m hoping, after Paws, that I can attend UNCW for (at least) a bachelor’s in mathematics
+[04:46] creationix: inimino: undergrad, yes, I actually enjoy the graduate classes
+[04:47] creationix: if undergrad wasn't a prereq, I'd skip it
+[04:47] ec: inimino: math is just something that is so much easier to learn in school than on your own, unlike computers. not to mention, a math degree == instarespect d-:
+[04:47] inimino: creationix: yeah, if I could walk into a PhD program I'd probably consider it
+[04:47] creationix: well, graduate CS is nothing but mathematic proofs and an algorithm here and there
+[04:47] inimino: ec: yeah, learning on your own is much easier with CS
+[04:48] creationix: I tell everyone, programming !== CS
+[04:48] inimino: creationix: that's true, but I'd just rather focus on the math... it's basically a superset of CS anyway
+[04:48] ec: creationix: not at the universities I’ve seen
+[04:48] ec: creationix: they *call* it CS, but it’ss really basic programming
+[04:49] creationix: CS is a discrete math degree, programming is an art of solving problems with a given set of constraints
+[04:49] creationix: but yeah, you're both write bout undergrad crap
+[04:50] inimino: ec: at the undergrad level, CS is often "learn to code Java in four easy years"
+[04:50] ec: inimino: yes, ARIUEWAIRUA
+[04:50] ec: inimino: makes me so angry
+[04:50] ec: inimino: shows you how angry that makes me, that I was *happy* to find a C++ course. >,>
+[04:50] inimino: heh
+[04:50] creationix: most my teachers allow me to use c instead of java if I want
+[04:50] creationix: I haven't used java in a very long time
+[04:50] ec: lucky.
+[04:50] ec: I just dropped out to avoid the Java.
+[04:51] Tim_Smart: Eww, Java
+[04:51] creationix: actually, when I started my degree 10 years ago, there was no java, it was c++ then
+[04:51] ec: I kept failing courses, because I would get angry and write code that pissed off the teachers in turn.
+[04:51] wil_ has joined the channel
+[04:51] inimino: ec: that's why I advise people strongly against getting CS degrees... just go for maths
+[04:51] creationix: ec: that's part of why I'm still at it 10 years later
+[04:51] ec: yeah, the engineers here get C and C++, but the CS majors have to go through a bunch of classes that use Java instead. It’s hella annoying.
+[04:51] creationix: had to change schools 4 times
+[04:51] inimino: yikes
+[04:51] wil_: is there a large startup cost for ChildProcess in node?
+[04:52] inimino: wil_: it's just like starting any other process
+[04:52] creationix: I'll tell you this, spawning hundreds of child processes in parallel will crash you
+[04:52] inimino: (fork, execve, open some pipes, send some stuff)
+[04:52] Tim_Smart: wil_: It is a reasonably cheap operation, if used sparingly
+[04:53] creationix: really, it depends on what you're comparing the cost to
+[04:53] creationix: it's nothing compared to starting up Rhino, but heavy compared to about everything else in node
+[04:53] inimino: compare it to starting up the same process from the shell
+[04:53] inimino: and consider it to be the same
+[04:54] wil_: hmm, i'm seeing 2x slower than starting up the same process in the shell 
+[04:54] wil_: but only with 2 or more concurrently
+[04:54] Tim_Smart: I generally like to keep all ChildProcesses open that I create
+[04:54] Tim_Smart: then just use it when it is needed
+[04:54] Tim_Smart: stdio is async
+[04:55] creationix: my sqlite3 wrapper uses it and gets a few thousand requests per second
+[04:55] Tim_Smart: wil_: Hmm that should be looked at then
+[04:55] wil_: Tim_Smart: that only works if your process doesn't exit
+[04:55] Tim_Smart: 2x Slower than shell isn't ideal
+[04:55] wil_: what i'm playing with right now is wrapping the image magick command line
+[04:56] ec: :[]
+[04:56] CraigW has joined the channel
+[04:56] creationix: have you tried sys.exec, it may be a little lighter.  I don't know for sure
+[04:56] wil_: i'll put together some tests
+[04:56] creationix: depends on your needs of course
+[04:57] Tim_Smart: wil_: Maybe a good solution is to make a C++ addon for node, not sure if imagemagik has a non-blocking flag however
+[04:57] ec: :<<
+[04:57] fwg_ has joined the channel
+[04:57] wil_: yeah who knows... that sounds like a lot less fun
+[04:57] wil_: ;)
+[04:57] Tim_Smart: haha
+[04:57] inimino: image magick is just a wrapper around a library anyway...
+[04:58] inimino: would make a nice addition :-)
+[04:58] wil_: yeah i thought so...
+[04:59] wil_: well i will have to follow up with this tomorrow
+[05:00] inimino: my PEG project really wants to turn into some kind of AI
+[05:01] steadicat has joined the channel
+[05:03] konobi: wil_: you could always write a little socket daemon that does ImageMagick stuff for you
+[05:03] konobi: (in perl, python, ruby, etc)
+[05:05] guan: or use http://github.com/rbranson/node-ffi
+[05:05] guan: i think it runs things in a separate thread
+[05:06] guan: and imagemagick ought to be thread safe
+[05:07] ec: wtf *is* an ffi
+[05:07] ec: ACTION doesn’t understand
+[05:07] guan: "foreign function interface"
+[05:07] ec: I know the definition
+[05:07] guan: the idea is just that you can call C functions with javascript
+[05:07] guan: what are you asking?
+[05:08] ec: ‘/me doesn»t understand’ ≠ ‘/me doesn’t know’
+[05:08] ec: why do you need an ‘ffi’ to do that?
+[05:08] inimino: ec: uh, how else would you do it?
+[05:08] guan: i think the alternative is to write a wrapper in C++ that exposes javascript functions
+[05:08] guan: with an ffi you don't need to compile anything
+[05:08] ec: I dunno, uh, build against the C library containing the functions
+[05:09] ec: wait, what?
+[05:09] ec: how does that even work?
+[05:09] ec: that’s impossible. o_O
+[05:09] inimino: ec: and then call them from JavaScript how?
+[05:09] guan: not really
+[05:09] ec: how can you get access to something without compiling it?
+[05:09] guan: it's very possible ;-)
+[05:09] guan: dynamic loading magic
+[05:09] guan: you know the call signature
+[05:09] ec: inimino: (whatever the Node API is, I dunno. JavaScript_function.new? fuck if I know how it’s structured)
+[05:09] ec: oh, summat to do with dylibs or whatever? I’ve never dug into that.
+[05:10] ec: I have *no idea* how any of that works; I suppose ‘ffi uses dylib magic’ is an acceptable answer for me to get confused, ignore it, and walk away. heh.
+[05:10] guan: sorry if that wasn't clear, yes, it would only work with dynamic/shared libraries
+[05:10] guan: if you know the call signature, you can just open up the shlib and invoke any function
+[05:11] guan: similar to what the standard dynamic linker does
+[05:11] guan: it's like ctypes for python
+[05:12] jashkenas has joined the channel
+[05:12] ec: Yeah, I have no idea what the ‘standard dynamic linker’ does. I’m new to C as of a few weeks ago.
+[05:12] creationix: wait, we have ffi working in node?!
+[05:12] guan: yes
+[05:12] creationix: with it's own thread pool
+[05:13] guan: ec: so a static linker find the various functions in the libraries and puts them into your binary
+[05:13] [Pwner]John has joined the channel
+[05:13] [Pwner]John: whee
+[05:13] guan: ec: a dynamic linker runs at runtime, locates functions in the dynamic library, and hooks them up with your calls to those functions
+[05:14] guan: ec: an easier way to think about ffi: it's apply() for C functions
+[05:14] creationix: tie that up with libeio custom callbacks and we're got instant binding to anything
+[05:14] ec: I don’t see how it can ‘hook them up to the calls to those functions.’
+[05:14] ec: The calls *go somewhere*. How can it change where they go?
+[05:14] ec: Does it sneak in and change the actual instructions at the memory location of the function?
+[05:15] ec: bleh, this isn’t really a discussion for this channel.
+[05:15] ec: I’ll go wikipedia it when I’m ready. d-:
+[05:15] inimino: :)
+[05:15] inimino: `g wikipedia dynamic linking
+[05:15] gbot2: Library (computing) - Wikipedia, the free encyclopedia - http://en.wikipedia.org/wiki/Library_(computing)
+[05:15] guan: ec: it really depends on the language and platform. but suppose the memory location of the function is stored in variable
+[05:16] ec: speaking in C
+[05:16] creationix: "You can also access just functions in the current process by passing a null", so we can get at v8 internals from js then?
+[05:16] inimino: it can update the location or it could call to a stub function that looks it up, it doesn't really matter
+[05:18] guan: ec: look up relocation table in wikipedia
+[05:19] creationix: crap, it doesn't work, seg fault on test
+[05:19] creationix: maybe it just needs to be updated to latest node?
+[05:19] guan: creationix: does the test with fopen and fclose work for you?
+[05:20] creationix: "node test.js" fails with "Segmentation fault"
+[05:20] creationix: let me try on linux next (was osx 10.6.2)
+[05:20] guan: i tried it with .29 but only a few simple examples
+[05:22] isaacs has joined the channel
+[05:22] creationix: looks like it needs libffi-dev on ubuntu
+[05:22] creationix: hmm, seg fault there too
+[05:24] guan: creationix: is nothing at all working for you or just the null calls? i can run both examples from the readme with .30 on my mac
+[05:24] konobi: creationix: time to get gdb and strace at the ready?
+[05:24] guan: when i see the node-ffi github url i keep thinking that the richard branson wrote it
+[05:24] creationix: never used either
+[05:25] creationix: wohoo, haml-js just hit 100 followers, that makes two of my project to hit three digits in the same day
+[05:26] creationix: guan: works for you, which kernel are you using?
+[05:26] creationix: I'm using 64-bit
+[05:27] guan: default kernel, 32-bit
+[05:28] guan: good night everyone
+[05:31] creationix: night
+[05:32] BryanWB_ has joined the channel
+[05:34] creationix: micheil: would it be possible to hook up an ffi engine to libeio custom callbacks
+[05:34] creationix: that would make any sync library async right?
+[05:37] trodrigues has joined the channel
+[05:37] micheil: hmm?
+[05:37] micheil: libeio should only be used for file i/o
+[05:37] micheil: it only has a certain stackspace.
+[05:38] micheil: ffi engine?
+[05:38] creationix: I'm playing with node-ffi
+[05:38] micheil: umm..
+[05:38] creationix: http://github.com/rbranson/node-ffi
+[05:38] micheil: link?
+[05:38] micheil: actually, we do need just a generic events interface
+[05:38] creationix: maybe libev, I still don't know the differences that well
+[05:39] micheil: ryah_away: there's something that could be a GSoC project!
+[05:39] micheil: libeio deals with filesystem i/o
+[05:39] micheil: libev deals with events
+[05:39] creationix: I think all ffi would need is a simple thread pool
+[05:41] micheil: http://software.schmorp.de/pkg/libev.html
+[05:41] micheil: also http://software.schmorp.de/pkg/liblzf.html
+[05:41] Tim_Smart: #schmorp for IRC
+[05:41] kriskowal has joined the channel
+[05:42] ec: This is so freaking annoying
+[05:42] ec: Every language is pissing me off right now
+[05:42] ec: all I can do is compare all of them to Paws in my head while I’m writing. |-:
+[05:42] ec: I keep going DAMMIT THIS WOULD BE SO UNNECESSARY IN PAWS
+[05:43] kriskowal: just wrote a variant of fs.read/write that uses my copy of the net2 Buffer internally.  read(fd, buffer, start, stop).  i'll take a stab at getting the callback to work.
+[05:44] micheil: ryah_away: is there currently much of an interface provider for libev in node?
+[05:45] creationix: kriskowal: that's cool
+[05:45] micheil: ryah_away: it'd be great to be able to do: do_async(method, callback, args...);
+[05:45] micheil: in c
+[05:46] Tim_Smart: ec, have you tried coffeescript?
+[05:46] ec: lol
+[05:46] ec: that’s just JavaScript, dude.
+[05:46] ec: it’s not the syntax that bugs me. I’m working in Ruby at this particular moment, you don’t really get better than that re: syntax.
+[05:46] ec: it’s the semantics of, well, everything.
+[05:46] ec: all the conceptual complexities
+[05:47] Tim_Smart: ah
+[05:47] micheil: ec: every language is it's own entity, it's not right to force something to behave / look like something else.
+[05:47] ec: micheil: exactly
+[05:47] creationix: ec: go prolog
+[05:47] ec: creationix: lol.
+[05:47] micheil: if you're going to do something like that, then make it a compiler and give it extremely new syntax, eg, Sass to CSS
+[05:48] ec: micheil: going to do something like what?
+[05:48] ec: micheil: wait, what are you talking about? I think I missed part of the conversation…
+[05:48] joshbuddy has joined the channel
+[05:48] micheil: if you're going to try and impose another language on to an other language make a compiler
+[05:48] creationix: paws?
+[05:48] Tim_Smart: http://code.google.com/p/paws-library/
+[05:48] Tim_Smart: I think
+[05:49] creationix: ec: you gotta rename it now :P
+[05:49] ec: micheil: uhm…
+[05:50] ec: micheil: Paws is nothing like that. It’s a completely new language, with its own semantics, syntax, preprocessor, parser, interpreter(s), and compiler
+[05:50] ec: micheil: one of the *interpreters* is written in JavaScript, but it doesn’t ‘impose another language’ on it in anyway
+[05:51] micheil: okay, then that's fine
+[05:51] ec: lol
+[05:52] micheil: just sayin' y'know?
+[05:52] ec: Yeah, I completely agree. Objective-J, RubyCocoa, things like that generally make me angry for exactly those reasons
+[05:52] ec: though CoffeeScript seems a lot less evil; it’s the same language, not trying to impose any *other* language on it…
+[05:53] creationix: though macruby is cool, it stays pretty true to ruby, just changes the backend
+[05:53] ec: … instead of being borne out of a “I’m too lazy to truely learn <language X>, so I’m going to make it feel like my home language instead!” mindset, it seems to be borne of “I love <language X>, so I’m going to try to make it better, without changing *what it actually is*”
+[05:53] ec: which is a lot more okay, to me, than the former
+[05:57] sudoer has joined the channel
+[06:00] kriskowal: ryah_away let me know if you'd like me to make a branch with Buffer file.readInto and file.writeFrom
+[06:01] mikeal has joined the channel
+[06:02] kriskowal: i think i could clean it up and make it merge-able
+[06:04] steadicat has joined the channel
+[06:06] mikeal1 has joined the channel
+[06:08] cedricv has joined the channel
+[06:09] onar has joined the channel
+[06:09] creationix_ has joined the channel
+[06:10] mattly has joined the channel
+[06:11] ec: This is really, really sad. I’ve forgotten everything I knew about basic Ruby o_o
+[06:12] BryanWB_: what do people have against prototypal oop? it seems like so many want to force classed-based oop on js
+[06:13] kriskowal: BryanWB_ prototypical inheritance is pretty inflexible compared to many other type systems.
+[06:14] chakrit1 has joined the channel
+[06:14] BryanWB_: kriskowal, maybe that's a good thing ;)  keeps people from creating insanely complicated mosaics of object hierarchies
+[06:14] kriskowal: it can be a good thing, not just for complexity
+[06:15] ec: uhhhh
+[06:15] ec: inflexible?
+[06:15] kriskowal: but it also reduces code reuse, or causes code reuse patterns to be inefficient
+[06:15] ec: are you high, kriskowal?
+[06:15] ec: I mean, depends what you’re comparing it to…
+[06:15] ec: but if you’re comparing it to C-flavoured strict typing, or classist OO such as Ruby’s, then I think you must be high.
+[06:15] BryanWB_: kriskowal, anyways good night ;) get some sleep.  i am off to gym
+[06:16] ec: if you’re referring to Haskell’s type system… well, I]ve heard inimino rage about how awesome it is, and I don’t know it, so maybe you’re right.
+[06:16] ec: But, in general, prootoOO is certainly one of the more flexible, useful type systems
+[06:16] kriskowal: what are you comparing it to
+[06:17] ec: s/I\]ve/I’ve/
+[06:17] kriskowal: i am comparing it to python, ruby, java, and c++, which each are more flexible in different ways, which in each case leads to different caveats
+[06:17] ec: … each of those are classist OO. Which is invariably *less* flexible than prototypal OO.
+[06:18] ec: I have the feeling you completely don’t understand prototypal OO; true prototypal OO is a *superset* of the functionality of classist OO. A classist system is just a prototypal system, wherein there are some ‘unprivelaged’ instance objects that aren’t allowed to have children.
+[06:18] micheil: kriskowal: what do writeFrom and readInto do?
+[06:18] ec: (also, in some such systems, the ‘classes’ aren’t exposed in the way the ‘unpriv’ objects are)
+[06:18] kriskowal: ec i'm going to defer to your expertise on this one and talk to micheil
+[06:18] ec: hahah okay man
+[06:19] ec: sorry if I sounded angry; I just *really get pissed* when people act classist at me d-:
+[06:19] kennethkalmer has joined the channel
+[06:19] ec: I love JavaScript’s type system like a brother, and I hate to see it misunderstood, ignored, or hacked-over with some half-arsed classist abstraction
+[06:19] kriskowal: micheil: they use a Buffer as a byte allocation store and read into and write from
+[06:20] kriskowal: they decouple the decoding/encoding from the byte read/write
+[06:34] dekz has joined the channel
+[06:41] Tim_Smart: What is the cleanest way of 'cloning' a variable in Javascript?
+[06:42] micheil: umm..
+[06:42] micheil: not sure
+[06:42] Tim_Smart: nodejs_v8: Object.getOwnPropertyNames(Object)
+[06:42] nodejs_v8: Tim_Smart: ["getOwnPropertyNames", "arguments", "length", "create", "name", "keys", "prototype", "getOwnPropertyDescriptor", "caller", "getPrototypeOf", "defineProperty", "defineProperties"]
+[06:42] dekz_ has joined the channel
+[06:43] Tim_Smart: Hmm I think this might have what I'm after http://javascript.crockford.com/prototypal.html
+[06:44] spoob has joined the channel
+[06:45] mattly has joined the channel
+[06:45] Tim_Smart: nodejs_v8: var test = {old:123}; var test2 = Object.create(test); test.new = 321; test2
+[06:45] nodejs_v8: Tim_Smart: Exception: SyntaxError: Unexpected token new
+[06:45] Tim_Smart: nodejs_v8: var test = {old:123}; var test2 = Object.create(test); test.newer = 321; test2
+[06:45] nodejs_v8: Tim_Smart: {"old": 123, "newer": 321}
+[06:46] Tim_Smart: >.>
+[06:46] kennethkalmer has joined the channel
+[06:46] spoob: http://translate.google.ru/translate?js=y&prev=_t&hl=ru&ie=UTF-8&layout=1&eotf=1&u=http://sysoev.ru/prog/v8.html&sl=ru&tl=en
+[06:47] spoob: Article that reckons V8 isn't suitable for servers
+[06:48] Tim_Smart: spoob: That article fails, because many people here have run awesome servers with node.js, which uses v8
+[06:49] spoob: The points in the articles can be avoided, so it's like criticising bugs that can be worked around
+[06:49] spoob: I did find some of the points interesting though, as I hadn't known those problems needed to be avoided
+[06:49] kriskowal: how do we avoid the halt on malloc fail problem?
+[06:50] micheil: we don't currently
+[06:50] micheil: which is why my work on getting a glob working is failing
+[06:50] Tim_Smart: spoob: Also remember the event loop is handled by node, rather than v8 javascript
+[06:51] Tim_Smart: Not sure what implications that has on performance however
+[06:51] spoob: I didn't know Node had its own event loop either
+[06:51] Tim_Smart: yeah most of node is c++
+[06:52] Tim_Smart: uses libev
+[06:52] micheil: Tim_Smart: c**
+[06:52] micheil: not c++, iirc
+[06:52] spoob: seems like an easy modification to make malloc return error codes?
+[06:53] spoob: i knew about libev, I just thought that Node was bridging events through to V8's event loop
+[06:54] Tim_Smart: It might be, but I didn't think it was
+[06:54] spoob: maybe node has it's own event loop and feeds through to V8's run loop
+[06:54] Tim_Smart: micheil: Node is c++
+[06:54] Tim_Smart: I thought
+[06:55] Tim_Smart: whats c**?
+[06:55] spoob: the Node code I've looked at has been C++, and V8 is C++
+[06:55] micheil: Tim_Smart: hmm.. I didn't think so, libev and libeio are both C
+[06:55] Tim_Smart: micheil: libev and libeio are, but you can reference c libraries in c++
+[06:55] micheil: hmm.. I'm not sure then
+[06:55] Tim_Smart: .cc files are c++ usually
+[06:56] Tim_Smart: and gcc is a c++ compiler
+[06:56] Tim_Smart: wait no
+[06:56] Tim_Smart: I'm confusing myself
+[06:56] Tim_Smart: .cc files are c++ though
+[06:59] jed has joined the channel
+[07:12] joshbuddy has joined the channel
+[07:12] joshbuddy has joined the channel
+[07:14] kriskowal: ryah_away would you like to bring libiconv into the node deps for full encoding support?  any thoughts on this.  the api is pretty clean looking and could be implemented with Buffer bindings
+[07:15] kriskowal: not sure what your thoughts are on making it an external or static dependency.
+[07:16] konobi: unicode is available directly from v8, no?
+[07:16] kriskowal: in any case, i could make a branch and bring it in too, if you wouldn't mind me bringing buffer in
+[07:16] kriskowal: v8 handles ascii and utf-8
+[07:17] kriskowal: i'm not sure about v8, but most impls store unicode as ucs-16, which is an incomplete code set
+[07:18] kriskowal: in any case, libiconv can handle most transcoding tasks
+[07:19] joshbuddy has joined the channel
+[07:19] joshbuddy has joined the channel
+[07:20] Tim_Smart: Object.getOwnPropertyNames(Function)
+[07:20] kennethkalmer has joined the channel
+[07:20] Tim_Smart: nodejs_v8:  Object.getOwnPropertyNames(Function)
+[07:20] nodejs_v8: Tim_Smart: ["arguments", "length", "name", "prototype", "caller"]
+[07:27] joshbuddy has joined the channel
+[07:27] joshbuddy has joined the channel
+[07:28] joshbuddy has joined the channel
+[07:28] joshbuddy has joined the channel
+[07:28] qFox has joined the channel
+[07:29] dekz has joined the channel
+[07:30] micheil_mbp has joined the channel
+[07:33] onar_ has joined the channel
+[07:47] BryanWB has joined the channel
+[07:51] kriskowal has joined the channel
+[07:54] nsm has joined the channel
+[07:59] kennethkalmer has joined the channel
+[08:06] felixge has joined the channel
+[08:06] felixge has joined the channel
+[08:19] teemow has joined the channel
+[08:37] micheil: hmm.., it'd be cool to do something in node where we can have a list of modules in the environment
+[08:38] micheil: so that we could do something like: if(env.moduleAvailable("node.crypt")) { ... use node-crypt ... } else { ... use fallback ... } 
+[08:38] micheil: or something
+[08:38] micheil: any thoughts?
+[08:42] felixge has joined the channel
+[08:42] felixge has joined the channel
+[08:43] Tim_Smart: what happens when you require a non-existing module?
+[08:43] Tim_Smart: ACTION goes and tries
+[08:44] fwg: nodejs_v8: require("bullshit")
+[08:44] nodejs_v8: fwg: Exception: ReferenceError: require is not defined
+[08:44] fwg: eh
+[08:44] fwg: nodejs_v8: process
+[08:44] nodejs_v8: fwg: Exception: ReferenceError: process is not defined
+[08:44] Tim_Smart: micheil: You can catch that error with an try {} catch {}
+[08:44] fwg: or use async
+[08:45] micheil: well, that's what I mean, you're not actually requiring it, just checking if it's available
+[08:45] micheil: I mean, yeah, you can use something like try/catch, but there could be a more elegant method
+[08:45] Tim_Smart: micheil: Ah ok. So a function that iterates over the PATH's and sees if is available
+[08:45] micheil: yeah
+[08:46] micheil: eg, require.possible(module, ok_callback, err_callback);
+[08:46] micheil: (yes, it needs the division in the callbacks)
+[08:46] fwg_: maybe use require.resolve
+[08:47] micheil: ACTION isn't up-to-date as to what that actually is
+[08:47] Tim_Smart: well, you would keep it with the current pattern: check(module, function (available) {})
+[08:47] Tim_Smart: then pass true / false
+[08:47] micheil: okay then
+[08:48] fwg_: eh, resolve hasnt landed yet
+[08:49] Tim_Smart: personally I like how they do it in python
+[08:49] Tim_Smart: they just try catch it
+[08:49] micheil: okay then
+[08:49] Tim_Smart: and load the fallback in the catch
+[08:49] micheil: I just thought it'd be something cool to get some discussion over
+[08:50] Tim_Smart: or throw error etc
+[08:50] jespern has left the channel
+[08:50] Tim_Smart: yeah well, when you think about it, a try catch does exactly what you are after, without the overhead of an extra check
+[08:50] fwg_: ok, resolve returns undefined if the module wasnt found
+[08:51] Tim_Smart: -----^
+[08:51] fwg_: ^^
+[08:53] Tim_Smart: Right, now that I have a bit of spare time, I'm going to play with Coffeescript for the first time
+[08:53] Tim_Smart: I feel like a kid with a new toy ^^
+[08:58] unomi: coffeescript does look pretty sexy
+[08:58] unomi: does it incur a ruby dependancy?
+[08:58] Tim_Smart: Ah not sure
+[08:59] unomi: or was that the self-compiling milestone?
+[08:59] Tim_Smart: nope it doesn't
+[08:59] Tim_Smart: The compiler is written in Javascript >.>
+[08:59] Tim_Smart: you can embed the compiler in a webpage
+[09:00] Tim_Smart: and have <script type="text/coffee"></script> and it will compile it
+[09:00] zmoog has joined the channel
+[09:00] unomi: it kind of feels like the same theme as scala / clojure etc on jvm
+[09:01] unomi: pure functional programming on a ecmascript engine? ;)
+[09:01] Tim_Smart: Hmm you need cake to install it?
+[09:01] Tim_Smart: I know there is a portable version
+[09:03] Tim_Smart: nm, it compiles by itself
+[09:04] Tim_Smart: Only dependency is node.js
+[09:08] BryanWB: unomi, no coffeescript  afaict is just prettier js, while scala/clojure are entirely new languages
+[09:09] BryanWB: which means u can use other js libs seamlessly w/ coffeescript
+[09:10] micheil: you can interop between coffeescript and js, although, coffeescript isn't javascript
+[09:10] micheil: they use totally different syntaxes and one requires cross-compilation
+[09:11] BryanWB: ACTION stands corrected
+[09:19] felixge: does anybody know the logic of the new test/* structure?
+[09:19] felixge: pummel? simple? internet?
+[09:30] caolanm has joined the channel
+[09:53] tbassetto has joined the channel
+[09:56] pyrotechnick has joined the channel
+[09:58] Tim_Smart: You would think Coffeescript would use the native Javascript switch statement http://jashkenas.github.com/coffee-script/#switch
+[10:03] Tim_Smart_ has joined the channel
+[10:13] mAritz has joined the channel
+[10:14] tbassetto has joined the channel
+[10:15] tbassetto has joined the channel
+[10:23] dsturnbull has joined the channel
+[10:24] dsturnbull: hey - i
+[10:24] dsturnbull: i'm use setInterval to fire off some code, and want to block the function return until it gets to a certain state
+[10:25] dsturnbull: i thought promises would do this but they're gone in 0.1.30
+[10:26] Tim_Smart: what do you mean by block? Gist it maybe?
+[10:27] dsturnbull: it's basically setInterval(function() { steps += 1 }, interval) and i want to ensure 250 steps occurred
+[10:28] dsturnbull: the problem is i'm using jspec and it checks the steps var instantly
+[10:33] dsturnbull: seems like i'd be better off writing a synchronous setInterval for the test
+[10:39] mAritz: how would you do a synchronous setInterval? faking it with while(1)? :D
+[10:41] dsturnbull: yeah
+[10:41] Tim_Smart: :L Why not check the steps in the setInterval function?
+[10:42] Tim_Smart: if (250 <= steps) nextStep();
+[10:43] mAritz: we don't even know what you are trying to accomplish with this. give us a gist and we'll (hofeully) be able to help.
+[10:43] mAritz: or do you understand it tim?
+[10:46] dsturnbull: the code is what i typed before
+[10:47] piranha has joined the channel
+[10:48] dsturnbull: i'm not sure how to wait for a promise to emit success if promises are gone from node
+[10:55] Tim_Smart: Use an EventEmitter instead
+[10:55] Tim_Smart: or just simply call a function
+[10:56] Tim_Smart: or callback
+[10:59] dsturnbull: ah so
+[11:05] paulca has joined the channel
+[11:15] pyrotechnick has joined the channel
+[11:17] mAritz: i really don't see what the problem here is.
+[11:17] mAritz: is this what you want to do: var interval = setInterval(function () { ++i; if(i === 250) { clearInterval(interval); doSomething(); }, intervalTime);
+[11:17] mAritz: ?
+[11:17] mAritz: if so: why not just do it like that?! no need for overcomplicating it.
+[11:20] dsturnbull: more like, sp = new Sp(); sp.loop(250); sp.step.should.eql 250
+[11:26] mAritz: for?!
+[11:28] dsturnbull: testing
+[11:29] Tim_Smart: gah you are trying to force node to do something it wasn't designed to do... blocking calls
+[11:30] Tim_Smart: anything such as timers etc have to be async. Not sync api exists for timers in node
+[11:30] Tim_Smart: *no sync
+[11:31] fwg_: i guess the test framework is sync_
+[11:33] pyrotechnick has joined the channel
+[11:50] mAritz: no, i didn't mean "for what?" i meant "why not use for(i=0;i<=250;i++)?"
+[12:07] charlenopires has joined the channel
+[12:12] happyelephant has joined the channel
+[12:17] maushu has joined the channel
+[12:17] xla has joined the channel
+[12:17] maushu: What the heck is forEach?
+[12:18] maushu: I'm trying to make haml-js work and its giving me errors because of that.
+[12:21] maushu: Ah, found it: http://www.tutorialspoint.com/javascript/array_foreach.htm
+[12:37] alex-desktop has joined the channel
+[12:42] stepheneb has joined the channel
+[12:45] Spot_: Wow.. I absolutely do not know what's wrong with this now
+[12:51] felixge has joined the channel
+[12:58] micheil: give an error message then
+[13:22] felixge has joined the channel
+[13:22] felixge has joined the channel
+[13:22] Tim_Smart: Did a port of one of my Userscripts in Javascript to Coffeescript. Can see comparison here http://gist.github.com/315694
+[13:31] kjeldahl has joined the channel
+[13:47] kennethkalmer has joined the channel
+[13:59] kennethk_ has joined the channel
+[14:00] Spot_: micheil: hehe, there is no error msg
+[14:00] kriszyp has joined the channel
+[14:01] micheil: oh, okay then :)
+[14:01] Spot_: micheil: This is an ongoing issue that was discussed in here quite a bit yesterday
+[14:01] micheil: okay, I was about yesterday, but anyway :)
+[14:02] Spot_: Ah, then you already know there is no error msg, good.
+[14:04] micheil: oh man. typo'd that, didn't I? ** I wasn't about yesterday
+[14:07] Spot_: ohh ok
+[14:07] Spot_: :)
+[14:08] Spot_: Have this issue with this server responding with everything perfectly, but not closing the connection. JimBastard decided it had to be that I was not closing the connection, but I verified that every request is being closed. But the browser still hangs there for a good 20-40 seconds before dropping the connection.
+[14:10] micheil: hmm.. are you setting a content-length?
+[14:10] Spot_: yes
+[14:10] micheil: and what are you doing about keep-alive connections?
+[14:11] Spot_: Why would the browser be doing any keep alive at all?
+[14:12] n8o has joined the channel
+[14:13] Spot_: After exhaustive tests, it is exactly 60 seconds that it hangs
+[14:13] tbassetto has joined the channel
+[14:15] gf3 has joined the channel
+[14:16] mAritz: i've had that very same issue with cometd in jetty when i tried the examples in opera. never seriously tried to resolve it though
+[14:16] Spot_: but this is not a streaming server at all
+[14:16] Spot_: it reads files off the disk, hands them back and closes the connection
+[14:17] joshbuddy has joined the channel
+[14:17] joshbuddy has joined the channel
+[14:17] rhys__ has joined the channel
+[14:18] Spot_: http://gist.github.com/314864
+[14:18] Spot_: that's the whole thing
+[14:18] Spot_: with the exception of a few utility stuff
+[14:20] bentomas has joined the channel
+[14:20] bentomas: Spot_: can you post /servers/node-modules/node-utilities as well? I can't get it to run...
+[14:21] jed__ has joined the channel
+[14:22] Spot_: bentomas: Sure, but no judging on it.. just threw it together without much thought :P
+[14:22] bentomas: no judgement, as long as you don't judge any of my horrible debugging suggestions :)
+[14:22] Spot_: http://gist.github.com/315736
+[14:23] Spot_: bentomas: Suggestions are what I'm looking for, as long as you believe me when I say I've already tried something (sans-JimBastard :P )
+[14:24] bentomas: is compress this: http://github.com/waveto/node-compress
+[14:24] davidsklar has joined the channel
+[14:24] Spot_: yes
+[14:25] Spot_: and  http://github.com/jfd/optparse-js is the other
+[14:26] Spot_: brb... restroom run
+[14:29] bentomas: Spot_: and what does your "conf" look like?
+[14:29] maushu: Anyone knows of a graphics library? Or at least a small command line app that does the same? I want to mostly resize (thumbnails), crop and glue images.
+[14:31] bentomas: Spot_: so far I have that I need this: http://gist.github.com/315743  but I don't know what I need in those...
+[14:37] Booster has joined the channel
+[14:40] Spot_: bentomas.. .the conf is pretty simple.. sec
+[14:40] bentomas: Spot_: what does a "valid request" look like?
+[14:40] bentomas: url-wise
+[14:40] Spot_: {
+[14:40] Spot_:     "system" : {
+[14:40] Spot_:         "port" : 9999
+[14:40] Spot_:     },
+[14:40] Spot_:     "paths" : {
+[14:40] tisba has joined the channel
+[14:40] Spot_:         "repository" : "/usr/riot/code/[SCOPE]/skins/[SKIN]/css"
+[14:40] Spot_:     },
+[14:40] Spot_:     "defaults" : {
+[14:40] Spot_:         "scope" : "stable",
+[14:40] Spot_:         "skin" : "legacy"
+[14:40] Spot_:     }
+[14:40] Spot_: }
+[14:40] Spot_: sec
+[14:40] Spot_: http://css.spot.sb.napalmriot.com:4512/?s=legacy&cb=42&q=common.css,layout.css
+[14:40] Spot_: that is the one i'm usign right now actually
+[14:40] Spot_: *using
+[14:41] bentomas: okay
+[14:43] tbassetto1 has joined the channel
+[14:44] bentomas: okay, so the problem is that you are setting the content-length header before you gzip
+[14:44] bentomas: so if gzip is turned on the content length is too long
+[14:44] bentomas: so it is waiting for more data
+[14:44] bentomas:    content = ( _gzip ? gzipData( _content ) : _content );
+[14:44] bentomas:    options['Content-Length'] = content.length;
+[14:44] bentomas: on line around 230 in sendResponse
+[14:44] bentomas: I change it to that and it no longer hangs for me
+[14:44] Spot_: ahhhh yes
+[14:45] Spot_: that would be a problem
+[14:45] Spot_: duh
+[14:46] Spot_: dude!
+[14:46] Spot_: I love you!
+[14:46] Spot_: Thank you!!!
+[14:46] Spot_: :)
+[14:47] bentomas: you bet! glad its working now!
+[14:47] Spot_: what is your github username?
+[14:47] bentomas: bentomas
+[14:47] Spot_: ahh.. sneaky!
+[14:47] Spot_: :)
+[14:48] bentomas: yeah, I try to make it hard for people to connect my different online accounts
+[14:48] Spot_: lol
+[14:48] Spot_: ok
+[14:48] Spot_: following
+[14:48] Spot_: Thanks again!
+[14:48] Spot_: Seriously
+[14:48] Spot_: very much
+[14:48] bentomas: of course!
+[14:49] benjamin___ has joined the channel
+[14:49] benjamin___ has left the channel
+[14:49] bentomas has left the channel
+[14:51] bentomas_ has joined the channel
+[14:51] bentomas has joined the channel
+[14:52] dnolen has joined the channel
+[14:52] bentomas: Anyone have some good recommendations for IRC clients on OS X? I've been using Adium but am interested in trying something else...
+[14:53] tbassetto1: Colloquy?! But the "/away" function is broken
+[14:55] Spot_: bentomas: I've been using xchat, which I think there is a binary for osx
+[14:55] Spot_: oh, actually no
+[14:56] Spot_: only windows and linux
+[14:56] Spot_: sorry 
+[14:56] bentomas: no worries, I should really just switch to linux
+[14:56] Spot_: I'm sure there is a package of birtchx for osx :)
+[14:56] Spot_: *bitchx
+[14:56] Spot_: actually no
+[14:57] bentomas: and I just tried colloquy but it kept saying that my username was already taken, and I don't want any _ in my name
+[14:57] Spot_: but there is a fbsd package
+[14:57] Spot_: might compile on osx? :P
+[14:57] Spot_: bentomas: But you are currently using your username right now...  :P
+[14:57] bentomas: I wasn't patient enough to ride it out
+[14:57] bentomas: well, I logged out!
+[14:57] Spot_: ohh haha
+[14:58] bentomas: I obviously don't care that much
+[14:58] bentomas: I guess
+[14:58] tbassetto: irssi in the Terminal ?
+[14:58] brandon_beacher has joined the channel
+[14:58] Spot_: Well if you try and succeed in compiling bX on osx please let us know. I'm curious
+[15:00] micheil: bentomas: colloquy is what I use, and it's pretty good
+[15:01] bentomas: alright, I'll give it another try... tonight... Need to get some work done!
+[15:01] bentomas has left the channel
+[15:03] micheil has joined the channel
+[15:07] paulca has joined the channel
+[15:08] Booster has joined the channel
+[15:15] atcrabtree has joined the channel
+[15:25] pmuellr has joined the channel
+[15:25] cloudhead has joined the channel
+[15:30] mattly has joined the channel
+[15:51] alexiskander has joined the channel
+[16:03] bryanl has joined the channel
+[16:07] kennethkalmer has joined the channel
+[16:09] binary42 has joined the channel
+[16:14] jed_ has joined the channel
+[16:32] ryah_away: does anyone have a log() function which prints the current time nicely?
+[16:34] atcrabtree has joined the channel
+[16:37] kriszyp: did node switch the default transfer-encoding recently?
+[16:38] kriszyp: and will node properly chunk the response if I include a transfer-encoding: chunked header in the response?
+[16:45] kriszyp: let me reword my question, how do I do chunked transfer encoding with node? :)  Without a content-length I can't seem to get anything but transfer-encoding: identity
+[16:46] aguynamedben has joined the channel
+[16:46] bpot has joined the channel
+[16:49] mahemoff has joined the channel
+[16:55] adamv has joined the channel
+[16:56] felixge: kriszyp: I don't think node switched
+[16:56] felixge: kriszyp: chunked is default, but it gets disabled if you set a content-length header
+[16:57] felixge: kriszyp: are you running behind some proxy / nginx ?
+[16:58] ryah: kriszyp: don't include the content-length and it will be chunked
+[17:03] kennethkalmer has joined the channel
+[17:06] Gla has joined the channel
+[17:06] Gla: who created nodejs?
+[17:06] kriszyp: ok, my bad... for some reason safari reports chunked as identity it seems
+[17:06] kriszyp: and the problem was something else
+[17:06] Gla: and who maintains it?
+[17:06] kriszyp: thanks for the help
+[17:07] ryah: Gla: me
+[17:07] Gla: figured
+[17:07] Gla: you know Michael Carter?
+[17:07] ryah: not personally
+[17:07] Gla: are you guys working together or did you build it yourself?
+[17:08] ryah: he is responsible for js.io
+[17:08] Gla: right, and orbited
+[17:08] ryah: it's seperated from node
+[17:08] Gla: yea, he mentioned nodejs to me the other day
+[17:08] Gla: I thought you might be working with him
+[17:10] ryah: he's contributed 2 patches
+[17:10] Gla: ah alright
+[17:11] Gla: where are you located?
+[17:11] ryah: sf
+[17:12] Gla: oh , well that's nice
+[17:12] Gla: what are you up to tonight? I'll be up there with him
+[17:12] Gla: he lives there, I'm in Palo Alto
+[17:12] Gla: going to a dinner -> company party 
+[17:12] ryah: i'm going to the couchdb party
+[17:12] Gla: oh
+[17:12] Gla: I'm going to the remail acquisition party
+[17:12] Gla: couchdb sucks, you should go to this one :)
+[17:13] ryah: :)
+[17:13] beppu: what are the couchdb guys celebrating?
+[17:13] ryah: drinking? i don't know
+[17:13] beppu: heh
+[17:13] mattly has joined the channel
+[17:15] Gla: ryah: pm
+[17:24] morgan: the couchDB party is an office warming party
+[17:30] dnolen has joined the channel
+[17:31] RayMorgan has joined the channel
+[17:32] voodootikigod_ has joined the channel
+[17:36] joshbuddy has joined the channel
+[17:36] joshbuddy has joined the channel
+[17:41] pyrotechnick has joined the channel
+[17:49] Gla has left the channel
+[17:52] dandean has joined the channel
+[18:02] stephenlb has joined the channel
+[18:06] felixge has joined the channel
+[18:06] felixge has joined the channel
+[18:07] tmpvar has joined the channel
+[18:07] tmpvar: hello
+[18:10] morgan has joined the channel
+[18:11] mjr_ has joined the channel
+[18:11] keeto has joined the channel
+[18:14] jcrosby has joined the channel
+[18:20] orlandov: does anyone have an example of using threads within node to deal with some necessarily synchronous stuff?
+[18:32] eikke has joined the channel
+[18:36] mikeal has joined the channel
+[18:39] piranha has joined the channel
+[18:41] piranha has joined the channel
+[18:45] isaacs has joined the channel
+[18:48] ryah: orlandov: yeah - i do getaddrinfo in a thread
+[18:50] ryah: orlandov: http://github.com/ry/node/blob/a97fdf5c39c7b7736fbe48a72b0993808e6f5818/src/node_net2.cc#L1071-1221
+[18:50] ryah: orlandov: that's using the eio thread pool
+[18:53] atcrabtree has joined the channel
+[18:53] maritz has joined the channel
+[18:56] aho has joined the channel
+[18:58] paulca_ has joined the channel
+[18:58] charlenopires has joined the channel
+[19:00] arlolra has joined the channel
+[19:09] BBB has joined the channel
+[19:11] drostie has joined the channel
+[19:12] kriskowal has joined the channel
+[19:15] maritz: wow. what's wrong with tj? he may write good enough code, but his comments (in github) look like they come from a 14-year-old. 
+[19:16] maritz: (if you're here tj: i don't mean to insult you, since i do respect your work on express and some other stuff. but you should work on your abilities to communicate efficiently.)
+[19:17] jashkenas has joined the channel
+[19:17] jashkenas has left the channel
+[19:18] Booster has joined the channel
+[19:21] orlandov: maritz: what do you mean? comments in express look okay to me?
+[19:23] ako has joined the channel
+[19:34] atcrabtree has left the channel
+[19:41] steadicat has joined the channel
+[19:41] fictorial has joined the channel
+[19:47] maritz: not in-code comments. discussions and pms and such
+[19:47] maritz: http://github.com/ry/node/commit/9ad7539cf9c36edf4b014adb1ce979f578de0aa1#comments
+[19:53] joshbuddy has joined the channel
+[19:53] joshbuddy has joined the channel
+[19:54] isaacs has joined the channel
+[20:00] binary42_ has joined the channel
+[20:04] kriskowal has joined the channel
+[20:13] ollie has joined the channel
+[20:24] CIA-77: node: 03Zoran Tomicic 07master * rb299582 10/ src/node.cc : Edit PrintHelp() text - http://bit.ly/cGLvVK
+[20:24] CIA-77: node: 03arlolra 07master * r724ccf1 10/ (31 files in 4 dirs): Tests on common port. - http://bit.ly/aoSGNg
+[20:26] ashb: ryah: in the latest binary, was hte range method something you wanted or not?
+[20:27] ashb: cos as far as i can make out, x.range(5) === x[5+idx]
+[20:27] ashb: i.e. i can't see the point of it
+[20:29] JimBastard_ has joined the channel
+[20:29] JimBastard_: GITHUB YARG
+[20:29] JimBastard_: error: unable to create temporary sha1 filename ./objects/95: No space left on device
+[20:29] JimBastard_: FFFFFFUUUUUUUUU
+[20:29] ashb: have you used your quota up?
+[20:29] stephenlb: heh
+[20:30] micheil: no, the partition is reporting itself as full
+[20:30] micheil: they're working on it now
+[20:30] ryah: ashb: yeah
+[20:31] ashb: ryah: point of it is?
+[20:31] ryah: ashb: because i'd like to allocate, say a big block, say 16kb 
+[20:31] ryah: then have many connections recv into it
+[20:31] ryah: say the first connection gets 200 bytes
+[20:31] ashb: doesn't the the copy ctor which does CoW acheive the same?
+[20:32] ryah: connection.emit('data', bigBlock.range(0, 200))
+[20:32] ryah: it shouldn't do COW
+[20:32] ashb: yeah
+[20:32] ashb: that just occured to me
+[20:32] ashb: k makes more sense now
+[20:33] ryah: so basically expose memory pools to js
+[20:34] ashb: yeah. and what do oyu do when you get to end end?
+[20:34] ryah: when the bigBlock is all used up, i'll drop my global reference to it - and let it be GCed when all the connections have lost refs
+[20:34] ashb: you'd have to do a copy there?
+[20:35] ashb: i.e. the last connection only fits the first X bytes in that blob
+[20:35] ryah: ?
+[20:35] ashb: i.e. you only have 5 bytes (or some arbitrary ammount) left in bigBlob
+[20:36] ashb: and its 1) not enough to complete the headers/request, and 2) its less than the data available
+[20:36] ryah: then i just read 5 bytes in
+[20:36] ryah: and emit that
+[20:36] ashb: then emit the next chunk, ok
+[20:37] ashb: and the next layer up will have to do the buffering
+[20:37] ryah: probably i'd have a threshold though - at which point i'll stop using the bigBlob - if there is less than, say, 128 bytes on there i'll just dump it
+[20:37] ryah: just to avoid small recv
+[20:37] ashb: yeah sure, but its always going to hit the case where its not big enough. that or you end up with even higher churn
+[20:37] ryah: yeah - the next layer always needs to do their own buffering if they need that
+[20:37] ryah: not all applciations need buffering though
+[20:38] ashb: thats actually one thing that the boost asio library has nice
+[20:38] ashb: it has a concept of a buffers  object
+[20:38] ryah: if you have some nice state machine parser, for example
+[20:38] ashb: which is a collection of buffers
+[20:38] ashb: that presents the underlying data like its one buffer
+[20:38] ashb: at least thats what i think it does
+[20:38] ashb: i'm not sure on the specifics :)
+[20:39] mjr_: Is there a way for JS to manage output buffering currently?
+[20:39] ashb: you mean flush stdout? or similar?
+[20:39] ashb: or to a socket?
+[20:39] mjr_: I mean if I do response.write() to an http client, and that client is reading very slowly, does it all just queue up forever?
+[20:39] ryah: i mean - if it works well. i'm worried about using such abstractions. i often run into the situation where i need much less than the library provides - and so it's just overhead
+[20:40] ashb: there's a drain event (or there was)
+[20:40] ashb: which was fired when there was no longer any data queued to send
+[20:40] ryah: mjr_: what happens is write() will return false if it could not flush the data you gave it
+[20:41] ryah: that data will be buffered internally by node (in userspace) and written out to the socket when it can
+[20:41] ryah: if you want to be notified of when node's write buffer has been flushed, you should listen for the 'drain' event
+[20:41] ryah: then you can try to write again
+[20:41] mjr_: OK, that's good to know.
+[20:42] ryah: at least this is how it should be working - you may run into bugs
+[20:42] mjr_: But I want to limit the amount of data that I've got queued up for write to a slow client.
+[20:42] ryah: yeah - if you're sending a 200mb file you don't want to queue that all in memory
+[20:42] ryah: :)
+[20:42] mjr_: Right
+[20:43] ashb: ryah: so your use of range doesn't actually require the old portion to still be accessible in the old blob, does it
+[20:43] mjr_: especially if it isn't a file, but some other stream of data that is expensive to produce.
+[20:43] ryah: ashb: no the original blob can be GCed, actually
+[20:43] ashb: ryah: and i mean it could do something like. ptr += len; length -= len;
+[20:43] ryah: ashb: the underlying data won't be freed until all ranges are gone though
+[20:44] ashb: yeah
+[20:44] ashb: just thinking about/around this
+[20:45] ashb: not sure that idea makes sense mind
+[20:45] ryah: ashb: here is an example http://github.com/ry/node/blob/16e32c8fd969847719d0b612439197c470b5eb67/lib/net.js#L68-72
+[20:45] ryah: well that's where it gets allocated, you'll have to jump around the code to see how its used
+[20:46] ryah: btw in this .range() is called .slice()
+[20:46] ashb: yeah i i've got a handle on your use case
+[20:46] ashb: that makes more sense
+[20:46] ashb: tho of course there's the issue that Array#slice creates a new copy
+[20:46] ashb: (naming things is hard)
+[20:46] ryah: yeah that's why kris wanted to rename it
+[20:47] ashb: #sub_blob :)
+[20:47] ashb: under_scores_in_names_are_cooler
+[20:47] ashb: etc etc
+[20:50] piranha has joined the channel
+[20:55] mjr_: So I guess we'd need some sort of buffer high/low water mark event.
+[20:56] mjr_: Which is too many layers deep for me to want to try and figure out myself.
+[21:20] konobi: ryah_away: had a look at doing bdb bindings at all?
+[21:21] pavel_ has joined the channel
+[21:21] pavel_ has left the channel
+[21:21] pavel_ has joined the channel
+[21:21] konobi: ryah_away: http://search.cpan.org/~mlehmann/BDB-1.87/BDB.pm
+[21:22] pavelz: Anyone from toronto here?
+[21:23] konobi: take off, ya hoser
+[21:23] pavelz: /wjpos konobi 
+[21:23] pavelz: lol
+[21:23] aguynamedben has joined the channel
+[21:24] konobi: pavelz: not toronto... think much much more west =0)
+[21:25] pavelz: heh cool, looking to give a small talk on node.js. Looking for a place somewhere around, there is a few interested people :)
+[21:27] ryah_away: konobi: nope
+[21:28] ryah_away: konobi: thanks for the link though
+[21:30] jcrosby has joined the channel
+[21:41] keeto has joined the channel
+[21:49] hecticjeff has joined the channel
+[21:56] dnolen has joined the channel
+[21:57] eikke has joined the channel
+[21:59] Tim_Smart has joined the channel
+[22:09] mikeal has joined the channel
+[22:13] Spot_: Does fs support a clean method for determining if a file is writable?
+[22:28] ashb: Spot_: the only sure fire of knowing that is actually writing
+[22:28] Spot_: ashb: fun
+[22:28] Spot_: thanks
+[22:28] kriskowal: Spot_ like ashb said, if you check whether you can write then actually begin writing, there's a race condition
+[22:29] kriskowal: the file can become unwritable between the check and the open
+[22:29] ashb: and even once you've opened, you can run out of disk space etc.
+[22:30] kriskowal: but if you're looking to provide information to a user in a GUI, there's fs.stat to get the permissions flags, and it's easy enough (albeit a bad idea) to expose the C access function
+[22:30] kriskowal: which has not been done yet
+[22:32] gwoo has joined the channel
+[22:34] kriskowal: ryah_away let me know whether you would want a patch that integrates a Buffer based on yours.  i've got a version plus fs.readInto and fs.writeFrom methods
+[22:40] kriskowal: ryah_away there's also a problem with DecodeWrite i can patch—it returns the buffer length instead of the actual read byte-count; i'm not sure whether that function is being used though.
+[22:41] fwg_ has joined the channel
+[22:45] dnolen has joined the channel
+[23:16] bryanl has joined the channel
+[23:22] kriskowal_ has joined the channel
+[23:23] gf3 has joined the channel
+[23:23] mikeal has joined the channel
+[23:28] stephenlb has joined the channel
+[23:32] mattly has joined the channel
+[23:35] morgan: Hmmm, CouchDB party starts early....
+[23:35] JimBastard_: I NEVER GOT MY PLANE TICKET
+[23:35] JimBastard_: i guess i'll have to pour a little of my 40 on the corner for our fallen RDBMS friends
+[23:36] morgan: heh
+[23:36] morgan: I'm just glad their in Oakland, usually these tech parties are in Palo Alto/Mountain View, SF at best
+[23:36] mikeal: it's at 4
+[23:36] mikeal: but i'm drinking already
+[23:37] creationix has joined the channel
+[23:37] morgan: This is a 10 bike ride from my house
+[23:37] mikeal: as soon as I tapped the keg I just thought about it oxidizing 
+[23:37] unomi has joined the channel
+[23:37] morgan: mikeal, nice, thinking I should get on that too
+[23:37] JimBastard_: i have daily tech parties at my house
+[23:37] morgan: what's on tap?
+[23:37] JimBastard_: usually blunts and redbull
+[23:37] mikeal: Allagash White
+[23:37] JimBastard_: but blue moon is always good
+[23:38] JimBastard_: aight bbl peace
+[23:38] mikeal: also, some single barrell four rose bourbon and builchladdie scotch
+[23:38] morgan: tasty.. probably roll down in about an hour
+[23:38] mikeal: s/rose/roses
+[23:38] morgan: oh very nice, maybe 45 minutes
+[23:38] mikeal: cool
+[23:38] mikeal: the weather just broek
+[23:38] mikeal: so i would just leave *now*
+[23:38] morgan: I know, I've been waiting for it to get out grocery shopping
+[23:39] morgan: doing that then going to come downtown
+[23:39] mikeal: i usually go to the berkeley bowl west so i can park underground and never be exposed to the rain :)
+[23:39] morgan: Doesn't work as well on a bike
+[23:40] mikeal: i buy whole chickens and glass bottles of milk so it doesn't work for me to bike to the grocery store
+[23:42] Tim_Smart: That reminds me... lunch....
+[23:43] orlandov: JimBastard: blunts++
+[23:44] lifo has joined the channel
+[23:46] charlenopires has joined the channel
+[23:51] tmpvar: corona and json references
+[23:51] mikeal: haha
+[23:53] tmpvar: jsonPath would work nicely if it had the ability to reference parents.. shame.
+[23:54] mikeal: i don't find jsonPath all that useful
+[23:54] mikeal: if it's a dynamic language you can just pass an array of attribute and the lookup is much simpler
+[23:55] tmpvar: im sure there are use cases.. such as mine heh
+[23:55] mikeal: what are you using it for?
+[23:56] mikeal: i also don't like domain specific languages in general
+[23:56] tmpvar: trying to build out a flow based programming type system with node
+[23:57] tmpvar: ive got the basics working (blackboxes).. but i really want/need composite structures
+[23:57] tmpvar: and since i'm using json for defining the flows, it requires some semblance of parent references
+[23:58] mikeal: i did something kind of like this
+[23:58] tmpvar: oh?
+[23:58] mikeal: when i implemented commonjs modules for couchdb
+[23:59] mikeal: the require() method you give to a module needs to be aware, in some way, of it's place in the tree
+[23:59] tmpvar: yes

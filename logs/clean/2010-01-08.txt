@@ -1,0 +1,774 @@
+[00:00] <felixge> mikeal: I still don't get how its related to a pure in-memory scenario
+[00:00] <kriszyp> I just meant it for faster searches
+[00:00] <felixge> if you're not ever reading stuff from disk other than to load the whole db
+[00:00] <felixge> kriszyp: on the keys, right?
+[00:00] <kriszyp> according to his benchmarks, it can upwards of 1000 times faster than iterating over an array
+[00:00] <kriszyp> right
+[00:01] <mikeal> you don't read your db?
+[00:01] <mikeal> hehe, i totally thought I was in #couchdb this whole time
+[00:02] <mikeal> i saw a btree discussion and just assumed
+[00:03] <felixge> mikeal: hah :)
+[00:03] <felixge> kriszyp: "it surprisingly was not the fastest one while implemented in Javascript"
+[00:04] <felixge> kriszyp: maybe I'm reading the benchmark wrong
+[00:05] <felixge> mikeal: the discussion started with this: http://github.com/felixge/node-dirty/blob/master/lib/dirty.js
+[00:05] <mikeal> ahh
+[00:05] <kriszyp> I am not sure I follow what he is saying
+[00:05] <mikeal> in memory queue
+[00:06] <isaacs> felixge: rather than time how long it takes to fetch 10M docs, you should time how many docs you can fetch in 1s
+[00:06] <mikeal> someone, not me, should write bindings for one of the many C btree impelmentations 
+[00:06] <isaacs> and then divide by elapsed time, rather than just assuming it was actually 1s
+[00:07] <mikeal> yeah, i would be more concerned with concurrent performance than sequential performance
+[00:07] <felixge> isaacs: good point
+[00:07] <felixge> isaacs: how do I know how many documents I have to seed in the db before that? :)
+[00:07] <isaacs> felixge: around the <100ms range, your benchmark can be off by orders of magnitude of the machine hiccups or the GC kicks in
+[00:07] <isaacs> felixge: well, more than 10M, apparently ;)
+[00:07] <felixge> isaacs: I did test with higher values to see if there was a slow down
+[00:08] <felixge> but yeah, not with 100 mio. yet
+[00:08] <felixge> will need to do that
+[00:08] <isaacs> you can also loop through a few times.
+[00:08] <isaacs> read them all, then read them all again, etc.
+[00:08] <felixge> isaacs: nice, let me try that
+[00:08] <isaacs> make it an endurance race rather than a sprint
+[00:09] <isaacs> you could also try this: test writes for 10s, and see how many documents you wrote, then test reading for 1s and see how many you read.
+[00:10] <felixge> isaacs: read/write seems to be 3 magnitudes apart, so flushing to disk would take forever
+[00:10] <kriszyp> so what time did you discuss the module issue, isaacs? or did you guys resolve it?
+[00:10] <felixge> but I could end the benchmark before it finishes
+[00:11] r11t has joined the channel
+[00:11] <isaacs> felixge: yikes! yeah, that'd be a problem.
+[00:12] <felixge> isaacs: Filtered 32700000 docs in 1002 ms 	(32634731 per sec)
+[00:13] <isaacs> great!  so your 33M r/s is actually pretty accurate.
+[00:13] <felixge> isaacs: http://github.com/felixge/node-dirty/blob/f8fc7698cdd401c868d9e2a98bb47ae3f0d82901/benchmark/filter.js
+[00:13] <isaacs> kriszyp: scrolling back now... just as ec...
+[00:13] <felixge> basically I'm only checking the time every 100.000 docs
+[00:13] <felixge> isaacs: I'll try with 1mio docs now
+[00:14] <felixge> Filtered 32000000 docs in 1027 ms 	(31158715 per sec)
+[00:14] <felixge> you're probably running out of memory before you reach > 100 mio records
+[00:15] <felixge> so it should be good for the amount of docs its designed for
+[00:15] <isaacs> kriszyp: started at [22:37] in http://nodejs.debuggable.com/2010-01-07.txt
+[00:18] <kriszyp> long discussion
+[00:18] <kriszyp> (re require.paths)
+[00:19] <kriszyp> is it still goign to be fixed?
+[00:19] <isaacs> kriszyp: as soon as we can figure out what "fixed" means, sure ;)
+[00:19] <kriszyp> heh
+[00:19] <isaacs> i implemented it like narwhal on a branch, but it caused some problems with the file and posix modules, and i dind't have it in me last night to work it all out.
+[00:20] <isaacs> for now, though, require.paths MUST contain only absolute fully-resolved paths.
+[00:20] <kriszyp> I don't mind it just working like it used to in node
+[00:20] <kriszyp> like 0.1.23
+[00:20] <isaacs> i don't think that's changed...
+[00:20] <kriszyp> hmm, it used to work for me
+[00:21] <isaacs> i'm curious about that, because i did change the path module pretty recently, but i don't *think* it would've affected that.
+[00:22] <isaacs> kriszyp: can you verify that this matches the case you're saying worked in 1.23? http://github.com/isaacs/node/commit/a4e6a2bbd02b758f487cb796d5eb1b9319af7ca1
+[00:25] <bentomas> felixge: have you had a chance to work on Promise stuff at all?
+[00:25] <bentomas> (not to nag, I'm just really looking forward to them being done!)
+[00:26] <felixge> bentomas: I lost steam after looking at kriskowal's work on the event.js module for narwhal
+[00:27] <felixge> I like some of it, but I'm wondering if its an overkill in terms of abstraction
+[00:30] <tav> felixge: here's the standalone repo you wanted http://github.com/tav/nodelint.js =)
+[00:31] <tav> ^ hope that's what you meant... ?
+[00:32] <felixge> tav: yeah, awesome! :)
+[00:32] <isaacs> seeing something show up in tweetie immediately after it comes up in here makes me irrationally tickled.
+[00:32] <isaacs> it's like i'm living in the future.
+[00:32] <felixge> :)
+[00:32] <isaacs> .oO( OMG! they're the same person!! ... wait i knew that already... )
+[00:33] <kriszyp> fwiw, I used kriskowal's events module for, but I have reverted back to the "promise" module I wrote for narwhal
+[00:33] <kriszyp> it is much lighter weight (and faster)
+[00:34] <kriszyp> I could add the addCallback and addErrback to make it more back-compat with node, if you are interested in using it in node
+[00:34] <felixge> kriszyp: yeah, that would make it easier to port
+[00:35] <felixge> performance is actually a good topic
+[00:35] <kriszyp> k
+[00:35] <felixge> but I guess promises will always be relatively slow
+[00:35] <felixge> for example I would never create a promise for each 'set' in dirty
+[00:35] <felixge> callback passing seems much better there
+[00:35] <kriszyp> well, my module is about 30-40 times faster for raw promise creation and fulfillment than kriskowal's
+[00:36] <kriszyp> and since we use promises for some pretty fast operations in node (lots of stat operations are going to cached at the os layer, and never hit the disk, for example)
+[00:36] <kriszyp> you could be doing enough promise calls that perf is of some importance
+[00:38] <kriszyp> anyway, the current process.Promise is pretty flawed, almost unusable, if you do an addCallback after a promise is fulfilled it doesn't do anything. the main point of promises is to abstract away time, and it fails to do that
+[00:39] <isaacs> kriszyp: would it be possible to build a promise library that fixes these flaws, but built on top of EventEmitter only?
+[00:39] <kriszyp> well, thats what kriskowal was trying to do
+[00:39] <felixge> kriszyp: I think the lowest level apis in node should not return promises
+[00:39] <kriszyp> I though ryah_away had mentioned that he felt that was a mistake though
+[00:39] <kriszyp> felixge: agreed
+[00:40] <felixge> kriszyp: well, I'd be more than willing to port your version or work on a patch together with you
+[00:40] <felixge> the only aspect of promises I care about at this point is error handling
+[00:40] <kriszyp> ok, cool
+[00:40] <kriszyp> do you want configurable error handling?
+[00:41] <felixge> I think promises that don't have an error handler attached by no later than the next event loop should throw an exception
+[00:41] <kriszyp> I don't know where we left errors after our last discussion...
+[00:41] <felixge> no, I want the default behavior I just mentioned
+[00:41] <felixge> I think its the way to go
+[00:41] <bentomas> i do as well
+[00:41] <felixge> ryan said he will add / accept a patch for process.deferr
+[00:41] <kriszyp> hmm, let me think about that...
+[00:41] <felixge> which would be setTimeout(fn, 0) - but efficient
+[00:41] <felixge> that's how error handling should be done
+[00:42] rtomayko_ has joined the channel
+[00:42] <felixge> kriszyp: I'm not sure how well it would work with addCallback() itself giving out a new promise so
+[00:42] <kriszyp> what about having a timeout for setting the error handler (like I had suggested), but having the default timeout value be 0 (so it would behave like you suggest)?
+[00:42] <felixge> if you add the error handler there it keep the main promise from erroring out
+[00:42] <felixge> kriszyp: I don't think you should get more than 1 event loop cycle
+[00:43] <felixge> if you need more, add an errback right away, give a new promise to the user and error out on that one once you are sure
+[00:43] <felixge> kriszyp: I couldn't see myself to ever use a timeout
+[00:43] <felixge> I can't use a timeout with try...catch either
+[00:43] <felixge> :)
+[00:43] <kriszyp> ACTION thinking
+[00:45] r11t_ has joined the channel
+[00:45] <kriszyp> is there anyway to run code immediately after the current event is processed, or would you have to dig into the event loop code to implement it exactly that way?
+[00:46] <felixge> kriszyp: not sure what you mean?
+[00:46] <kriszyp> to change the state of the promise for how it handles errors
+[00:46] <felixge> give me an example
+[00:46] <felixge> I'm not following
+[00:46] <felixge> sorry
+[00:47] <kriszyp> well how does a promise know whether to catch the error or not? How does it determine if it still in the same turn in which it was created?
+[00:48] <kriszyp> ok, I guess if the callbacks are always called in a later turn, than we can assume that if the error osmhandler isn't 
+[00:49] <kriszyp> sorry, if the error isn't handled than it should throw...
+[00:49] <felixge> yes
+[00:49] <kriszyp> I'll see if it can implement that in my promise module...
+[00:49] <kriszyp> I think that does make sense...
+[00:50] <bentomas> kriszyp: I would be forever grateful!
+[00:51] <kriszyp> now if I do promise = new Promise(); promise.reject(new Error())  (or promise.errback(new Error()) than that would not immediately throw an error, because the turn is not over yet, and an error handler could be added later, but errors that are thrown by callbacks could immediately be left unhandled and show up as uncaught errors
+[00:52] <kriszyp> are stack traces in node created on Error construction or when they are thrown? Does retrowing an error affect the stack trace?
+[00:54] <kriszyp> anyway, I'll see what I can do, I think this is doable. And I have a lot of code that uses promises, so it should get some good testing... :)
+[00:54] <felixge> : )
+[00:55] <felixge> cool
+[00:55] <felixge> I'll help testing reviewing as well
+[00:55] <kriszyp> yeah, and thanks for the good ideas...
+[00:55] <bentomas> three cheers for kriszyp!
+[00:59] <isaacs> kriszyp: the stack trace on the error is created when you call new Error() 
+[00:59] <kriszyp> k, that's good
+[01:04] hassox has left the channel
+[01:18] charlenopires has joined the channel
+[01:21] <bentomas> well, i got a require.resolve working, but I'm going to wait for the require business to settle down before suggesting it
+[01:21] <isaacs> bentomas: that's a good idea.
+[01:21] <isaacs> ACTION feeling the same way about module.setExports
+[01:26] <elliottcable> hrm
+[01:26] <elliottcable> I wonder how I can shift output to the end of the current line. Hrm…
+[01:29] <bentomas> elliotcable: I'd think you'd need to know how wide the terminal was...
+[01:29] <elliottcable> yeah, poking around
+[01:29] <elliottcable> I don’t want to take this far as Ncurses
+[01:29] <elliottcable> I don’t have the time to rewrite Nfoiled in JS d-:
+[01:30] <isaacs> ncurses, nfoild ngain!
+[01:30] <elliottcable> isaacs: you just quoted my README: http://github.com/elliottcable/Nfoiled#readme
+[01:30] <elliottcable> isaacs: lol
+[01:31] <isaacs> haha
+[01:31] <isaacs> elliottcable: gmta!
+[01:31] <elliottcable> lol
+[01:32] <isaacs> or, i guess, in this case, immature punsters think alike...
+[01:32] <elliottcable> d--:
+[01:43] soveran has joined the channel
+[01:43] <elliottcable> I think I’m going to do a percival binary
+[01:44] <elliottcable> as well as an HTML file (/ht whoever was originally talking about that)
+[01:44] RJ2 has joined the channel
+[01:54] technowe_ has joined the channel
+[01:54] <technowe_> hey has anyone gotten the node-mongodb lib to compile
+[01:54] robrighter has joined the channel
+[01:55] <technoweenie> oh i guess scons is required
+[01:57] <felixge> Alright, dirty 1.0 is pretty much done. Will add some docs tomorrow :)
+[01:58] <felixge> http://github.com/felixge/node-dirty if anybody wants to play with it tonight
+[01:58] <felixge> ACTION goes to bed
+[02:10] cloudhead has joined the channel
+[02:26] <elliottcable> I think the object diffing and inheritance printing would be really nice for poking into some of the stuff
+[02:29] mikeal has joined the channel
+[02:31] scudco has joined the channel
+[02:36] jed has joined the channel
+[02:37] <CIA-78> node: 03Ryan Dahl 07master * r75e6c39 10/ (3 files): 
+[02:37] <CIA-78> node: Upgrade http-parser
+[02:37] <CIA-78> node: Fixes \n problem that psanford <pms.mail@gmail.com> reported. - http://bit.ly/8LUyEx
+[02:39] tav has joined the channel
+[02:50] soveran has joined the channel
+[03:01] <tlrobinson> ashb: i'm not sure the way you described how narwhal handles require.paths.push(".") is correct. i'm pretty sure it does mean cwd
+[03:02] <tlrobinson> i think the major difference between narwhal's module path resolution and other commonjs is relative *identifiers* like "./foo"
+[03:03] pjb3 has joined the channel
+[03:05] <tlrobinson> if i have "/main.js" which contains "require.paths.push("."); require("foo");" and /home/tlrobinson/foo.js, and my cwd is /home/tlrobinson, if i run "narwhal /main.js" it will work
+[03:24] <isaacs> tlrobinson: so, you're saying that the require.paths are resolved relative to the cwd when you call narwhal, not relative to the module doing the requiring?
+[03:25] <tlrobinson> isaacs: right
+[03:25] <isaacs> interesting.
+[03:26] <tlrobinson> same as ruby, i think
+[03:26] <tlrobinson> but ./ in a module id is relative to the requiring module's id
+[03:26] <tlrobinson> not the requiring module
+[03:26] <tlrobinson> ...'s path
+[03:27] <tlrobinson> which i think is different than most other CJS implementations
+[03:27] <tlrobinson> i'm not sure which is more "correct"
+[03:37] jakswa has joined the channel
+[03:52] eddanger has joined the channel
+[03:57] <isaacs> tlrobinson: interesting.
+[03:57] <isaacs> it IS a bit odd.
+[03:57] <isaacs> i was saying to ashb before, i mean, isn't there at LEAST an 800-message flamewar about this?
+[03:57] <isaacs> i find it so hard to believe that bikeshed this colorful just slipped past #commonjs
+[03:58] <isaacs> (speaking tic, a little, but srsly, nothing?)
+[04:01] <deanlandolt> isaacs: flamewar? oh come on ;)
+[04:10] rictic has joined the channel
+[04:11] <isaacs> deanlandolt: sorry, i mean.... "very reasonable analysis of all sides of an issue, and perfectly polite explanations of why one anothers' ideas are rubbish"
+[04:12] <deanlandolt> isaacs: heh...more like it
+[04:17] dnolen has joined the channel
+[04:22] rictic has joined the channel
+[04:25] cloudhea has joined the channel
+[04:40] <isaacs> kriszyp: you do seem to have a talent for finding bugs.
+[04:40] <isaacs> this stat thing is wacky
+[04:53] benw has joined the channel
+[04:54] benw2 has left the channel
+[04:54] benw2 has joined the channel
+[05:04] <benw2> Hi, I'm trying to build node.js on Tiger, having the same _backtrace linker problem as discussed in this thread: http://groups.google.com/group/nodejs/browse_thread/thread/96f1085917a806c9/682bdda271126bbe?lnk=gst&q=651477#682bdda271126bbe
+[05:05] binary42 has joined the channel
+[05:08] eddanger has joined the channel
+[05:08] <benw2> Anyone had success building node on Tiger?
+[05:11] Booster has joined the channel
+[05:11] <benw2> Oh... the V8 homepage says it supports 10.5 Leopard only.
+[05:12] <benw2> I guess I should bite that bullet.
+[05:15] hassox has joined the channel
+[05:18] mikeal has joined the channel
+[05:39] mikeal has joined the channel
+[05:41] richter has joined the channel
+[05:44] tlockney_ has joined the channel
+[05:48] micheil has joined the channel
+[05:58] mynyml has joined the channel
+[06:02] ffs has joined the channel
+[06:05] jakswa has joined the channel
+[06:12] jtoy has joined the channel
+[06:17] mikeal has joined the channel
+[06:22] <jakswa> thanks to whoever mentioned Douglas Crockford in the logs, it led me to a digital copy of his book:  JavaScript:  The Good Parts
+[06:22] <jakswa> about halfway through
+[06:26] jamiew has joined the channel
+[06:36] bentomas1 has joined the channel
+[06:39] <bentomas1> jakswa: where is that?
+[06:40] <bentomas1> ahhh!  found it!
+[06:40] <bentomas1> http://my.safaribooksonline.com/9780596517748?portal=oreilly&cid=orm-cat-readnow-9780596517748
+[06:47] <jakswa> think that's only a preview. i'll link a torrent if there's no objections.
+[06:48] <jakswa> *if there's no objections?
+[06:48] <bentomas1> well, I was able to read a few chapters there
+[06:48] <bentomas1> (though I didn't try all of them)
+[06:49] rictic has joined the channel
+[06:49] <bentomas1> ooop, you're right.  
+[06:53] micheil has joined the channel
+[06:56] mattly has joined the channel
+[06:58] bentomas1 has left the channel
+[07:04] mikeal has joined the channel
+[07:19] r11t has joined the channel
+[07:21] jakswa has left the channel
+[07:21] jakswa has joined the channel
+[07:34] micheil has joined the channel
+[07:46] sveimac has joined the channel
+[07:50] qFox has joined the channel
+[07:52] brosner has joined the channel
+[07:53] brosner has left the channel
+[07:53] <jakswa> someone's messing with me, or this book has several broken example problems that I've had to fix
+[07:55] <jakswa> it's a good way to learn, but it's making me worried...
+[07:55] <jakswa> ACTION shrug
+[07:57] <jakswa> like this javascript module example...
+[07:57] <jakswa> it has an elementary error at the end of it
+[07:57] <jakswa> that I spent half an hour figuring out (I thought I had the concepts confused):  http://pastebin.com/m5ed494b
+[07:58] <jakswa> taken straight from book
+[07:58] <jakswa> (or my copy of it)
+[07:59] <jakswa> ACTION thinks everyone is asleep
+[08:14] <qFox> jakswa> it's either assuming the methods are setters but is in fact overwriting the method by a string in line 25/26?
+[08:14] <qFox> or it just made a blatant mistake, with the same outcome
+[08:15] <jakswa> exactly, line 25/26... I was staring at the innards of it wondering what the heck was wrong...
+[08:15] <qFox> i would expect unique to be '0'
+[08:15] <jakswa> yep, kept printing out 0
+[08:15] <qFox> :)
+[08:15] <qFox> ahwell. easy fix
+[08:16] <jakswa> yep... glad I stuck with it, and eventually found it... I was getting scared that it was going over my head.
+[08:17] simoncpu has joined the channel
+[08:31] felixge has joined the channel
+[08:34] <jakswa> oh yeah i forgot, that code also messed up by assigning the return of the function, not the function (I had to remove the '( )' on line 23.
+[08:35] mikeal has joined the channel
+[08:50] scudco has joined the channel
+[09:02] brosner has joined the channel
+[09:16] teemow has joined the channel
+[09:16] binary42_ has joined the channel
+[09:35] johan-s has joined the channel
+[09:46] hassox has joined the channel
+[10:06] teemow has joined the channel
+[10:18] simoncpu_ has joined the channel
+[10:19] rednul__ has joined the channel
+[10:20] <jakswa> so I've been having this idea for a random website project and i need random strangers' feedback.
+[10:20] <jakswa> here's my pitch:
+[10:21] <jakswa> Voice Transcriptions Gone Wrong (the name is in progress)
+[10:21] <jakswa> if anyone has used a voicemail transcription service like google voice or youmail, you might know where this is going
+[10:22] felixge has joined the channel
+[10:22] <jakswa> because they tend to mess up alot, and sometimes your transcriptions are misleading, or way off, or hilarious...
+[10:23] <jakswa> anyways, it'd just be a small setup to accept submissions and display them on the front page... but I'm at a loss for good website ideas...
+[10:26] keeto has joined the channel
+[10:31] <elliottcable> Took till mid-November of last year…
+[10:31] <elliottcable> but it’s finally, *finally* done.
+[10:31] <elliottcable> http://github.com/elliottcable/poopy.js/commit/966eba9c9eb026fd5cfcd8c20e6f546dcf695550
+[10:31] <elliottcable> Time to pull the changes back in, woohooo!
+[10:32] <elliottcable> `from.package()`, the last component, is complete ^_^
+[10:39] rednul_ has joined the channel
+[10:41] <jakswa> asdf
+[10:42] <jakswa> ACTION did not mean that.
+[10:50] felixge has joined the channel
+[10:58] <ashb> tlrobinson: ah makes more sense. i got the impressions from somewhere in here yesterday that '.' was different. my bad
+[11:00] <tlrobinson> ashb: yeah only in module ids, not require.paths
+[11:01] <ashb> kk
+[11:06] <elliottcable> tlrobinson: Hey, ’sup
+[11:06] <elliottcable> tlrobinson: you want a chance to get back at me for slighting your code, feel free to rail on this, now that I’ve finished it d-: http://github.com/elliottcable/poopy.js/commit/966eba9c9eb026fd5cfcd8c20e6f546dcf695550
+[11:07] <elliottcable> tlrobinson: even if you’re too turn-the-other-cheek for that, you may still be interested; it’s my replacement for the CommonJS `require()`, so it’s a bit relevant to you
+[11:18] jakswa has joined the channel
+[11:33] spoob has joined the channel
+[11:59] kriszyp has joined the channel
+[12:34] <ashb> felixge: http://fleetdb.org/ might be of interest to you
+[12:35] <ashb> oh you can't embed it in process tho. nm
+[12:58] hassox has joined the channel
+[12:58] unom1 has joined the channel
+[13:08] intellectronica has left the channel
+[13:17] alex-desktop has joined the channel
+[13:18] DamZ has joined the channel
+[13:39] sveimac has joined the channel
+[13:41] charlenopires has joined the channel
+[13:49] <felixge> ashb: I looked at it, it looks very nice
+[14:02] sveimac has joined the channel
+[14:07] Booster has joined the channel
+[14:17] megamark16 has joined the channel
+[14:19] soveran has joined the channel
+[14:19] <megamark16> Is anyone aware of any node.js web host providers with preinstalled/preconfigured node.js instances?
+[14:24] binary42 has joined the channel
+[14:32] davidsklar has joined the channel
+[14:38] rolfb has joined the channel
+[14:38] <jan____> megamark16: that's an unlikely scenaario
+[14:44] robrighter has joined the channel
+[14:54] <megamark16> do you think there would or could be a market for such a service?
+[14:55] dks_ has joined the channel
+[14:55] alexiskander has joined the channel
+[14:56] <inimino> megamark16: certainly not yet
+[14:58] <megamark16> why do you think that is?
+[15:00] bentomas has joined the channel
+[15:01] <spoob> because people who would run Node also run their own virtual machines instead of preinstalled web services
+[15:04] <megamark16> has anyone used any of the web frameworks available (such as express, coltrane, etc)?
+[15:05] <megamark16> and is anyone actually running a production website on node.js, or is it just about how fast it is for test pages? :)
+[15:07] <dks_> i'm justing using it for some experimenting
+[15:08] <megamark16> yeah, I've seen a lot of experimenting blog posts and examples out there, I wonder if anyone is actually building a website with it, and if not, what would it take to get there?
+[15:08] <dks_> the whole pure event based paradigm talkes some time to get use to
+[15:09] <megamark16> I bet!  
+[15:10] <megamark16> I haven't even gotten started, just lots of reading, and it looks like a major mental shift
+[15:10] <dks_> The hello world examples are easy, but when i started added complex db interaction, it was not so trivial anymore
+[15:10] <dks_> still looking for the best software patterns to deal with this.
+[15:12] <megamark16> do we need a full application framework, something like Express (web framework) + tmpl-node (templating) + some sort of ORM to really boost node.js into the mainstream?
+[15:13] <megamark16> I hate to sound like a fanboy, but I really enjoy the Django framework because there's a common path from Hello World to a full website, with plenty of room for customization
+[15:13] <megamark16> would something like that be good or bad (or even possible) for node.js?
+[15:14] <dks_> personally I like some type of pipeline/XML web framework.  
+[15:14] <inimino> megamark16: sure, that's what the frameworks are aiming for
+[15:15] <megamark16> so I guess it's just too early to tell than?
+[15:15] <inimino> megamark16: but in your analogy, node isn't Django, it's Python
+[15:15] <inimino> to tell what?
+[15:15] <spoob> yeah, maybe the event based model will suck when trying to do bigger projects. Still trying things out
+[15:16] <inimino> no, it just needs better abstractions than we have
+[15:16] <inimino> but it may never be for everyone
+[15:16] <megamark16> "to tell" wasn't really what I meant
+[15:16] <megamark16> "to jump in without some heavy personal investment" is perhaps more what I meant :)
+[15:16] mynyml has joined the channel
+[15:17] <inimino> ah
+[15:17] <inimino> yes, that it is
+[15:17] <spoob> the ideas are good enough that they're going to be used one way or another, so you may as well learn them
+[15:17] <mediacoder> megamark16: there are some webframeworks out there..some mroe interesting than others.. but there wont be a "general approach" or one single webframework..
+[15:17] <megamark16> gotcha
+[15:18] <inimino> it's conceivable that there could be
+[15:18] <inimino> it's just not clear yet what that would be
+[15:18] <jan____> megamark16: jsconf.com is runnig node in production
+[15:18] <spoob> it's too easy to write your own framework in Node for there to be the One way, like Rails has become for Ruby or Django for Python
+[15:19] <inimino> hopefully that remains the case, competition is good
+[15:19] <jan____> erm http://jsconf.us that is
+[15:20] <megamark16> thanks Jan, that's helpful
+[15:20] <inimino> in a year or two I imagine there will be no more than three serious contenders
+[15:21] <mynyml> is there a known issue with process.watchFile() triggering twice?
+[15:22] <mynyml> https://gist.github.com/1642eb0047a2da21afcc
+[15:23] <spoob> there was a problem with posix.stat() failing to work after repeated calls, then needing process.loop to restart the queue. That might be a related bug
+[15:25] <mynyml> spoob: sounds possible; it only triggers twice after repeated calls
+[15:25] <spoob> in that conversation before, the conclusion was that it was a possible issue with the libeio updates and to refer it to the guy writing it
+[15:26] <mynyml> do you know if its fixed on master and not on the latest release? otherwise I'll submit a bug report
+[15:26] <mynyml> oh i see
+[15:27] <spoob> ask kriskyz
+[15:27] <mynyml> upstream bugs suck
+[15:27] <spoob> kriszyp sorrry
+[15:29] micheil_mbp has joined the channel
+[15:34] <micheil_mbp> jsconf use fu.js
+[15:38] <dks_> is there any web framework that tries to emulate page rendering like on the client side.
+[15:40] <inimino> ACTION seems to recall talking someone else out of writing one
+[15:41] <dks_> interesting. Would love to be abe to do: $("#error").text("Invalid value entered");
+[15:41] <mediacoder> anyone tried johns env-js?
+[15:42] <dks_> I did in the past. It then relied on Java.
+[15:42] <dks_> It used the rhino-java binding to access the Java dom object.
+[15:43] <mediacoder> ah, ok
+[15:45] <mynyml> dks_: still does
+[15:45] pmuellr has joined the channel
+[15:47] <dks_> Hoped for someone writing a native javascript  XML/HTML5 parser with dom api
+[15:47] <dks_> then i could also use jquery at the server side.
+[15:48] <dks_> one cool thing would be bringing  the chrome dom code into node.js
+[15:49] <mynyml> dks_: i've been looking for a standalone DOM implementation for a pretty long time (~1 year), and I'm not the only one. It's seriously lacking.
+[15:49] <mynyml> dks_: it's not an easy problem though, mostly because of browser faithfullness
+[15:49] <mynyml> java's htmlunit is the closest i've found
+[15:50] <mynyml> but i'd much rather it be in C or js or ruby
+[15:51] <dks_> I would already be happy if a common subset was supported.
+[15:52] <ashb> you want a pure JS one? seems like a lot of effort
+[15:52] <mynyml> ashb: why's that?
+[15:53] <ashb> cos there are already some good XML parsers with HTML parsing out there
+[15:53] <mynyml> i'm talking about a DOM implementation
+[15:54] <deanlandolt> mynyml: far as i know a good amount of dom behavior cannot be implemented in es3
+[15:54] <dks_> ideally it should be able to parse XML and HTML5 and provide a DOM api
+[15:54] <deanlandolt> nor es5
+[15:55] <deanlandolt> you'd need catchalls and some other stuff...there are proposals on the table for esharmony
+[15:55] <ashb> deanlandolt: dont need catchalls for the XML DOM api
+[15:55] <ashb> can't think of where you do for the HTML DOM api either
+[15:56] <spoob> commonjs is an effort somewhat along those lines. they're mainly server side javascript, but also have an interest in simulating client side
+[15:56] <ashb> spoob: you dont have to tell me and dean that - we are heavily involved commonjs in bikeshedding :)
+[15:56] <deanlandolt> indeed :)
+[15:57] <ashb> if you do want to write one: http://github.com/ashb/DOM-Tests
+[15:57] <ashb> might be of some use
+[15:57] <deanlandolt> ashb: really? i'll take your word for it...i guess you just need them for host object crap
+[15:57] <spoob> ah right, I usually stand off to one side and make suggestions about what colour to paint the shed. :)
+[15:58] <dks_> how difficult would it be to include the chrome DOM implementation in node.js 
+[15:58] <ashb> very i imagine
+[15:58] <ashb> it wouldn't tie well into the async-ness
+[15:58] <ashb> and would require you to pull in all the rendering code too
+[15:59] <ashb> in theory it might be possible, but its probably easier to just bind an existing xml parser
+[16:00] <dks_> probaly you are right.
+[16:00] <dks_> I would however imaging that the DOM implementation and render engine and separated.
+[16:02] <mynyml> rumor has it that j resig has tried to extract the dom implementation out of gecko. it was so tied in that he gave up
+[16:03] <dks_> hmmm, that is not very hopefull.
+[16:04] <mynyml> that leads me to agree with ashb, that it's probably easier to write it from scratch
+[16:04] <mynyml> like htmlunit
+[16:04] <ashb> http://www.jezuk.co.uk/cgi-bin/view/arabica
+[16:04] <ashb> has most/all of the DOM levle 2 core already done
+[16:05] <ashb> and works with 4 of the most common XML libraries
+[16:05] <inimino> ashb: you need them for things like collections that are indexable by name
+[16:05] kriszyp has joined the channel
+[16:06] <technoweenie> orlandov: dang, thanks for fixing my node-mongo compilation issue so fast
+[16:06] <ashb> inimino: oh like document.forms etc?
+[16:07] <inimino> yes
+[16:07] <technoweenie> hey is there a good node.js host like heroku or google app engine?  
+[16:07] binary42 has joined the channel
+[16:09] <inimino> DOM is a pretty poorly designed API and as a means of generating HTML quite inefficient... not to mention adding jQuery on top
+[16:09] <inimino> I think there are much better approaches on the server
+[16:09] <ashb> jquery/sizzle is a nice way of selecting
+[16:09] <ashb> horrible way of generating tho yeah
+[16:09] <ashb> inimino: the main advatnage is code sharing
+[16:11] <inimino> ashb: yes, it's just that I've get to see an app where there was any real benefit to be gained from sharing code between the thing that generates the HTML, and the thing that modifies the existing page
+[16:11] <inimino> ashb: I think it's something that sounds like a good idea until you try to think of use cases, and then there really aren't any
+[16:11] <ashb> when JS is disabled you run it on the server
+[16:12] <inimino> wouldn't your initial HTML page be built for progressive enhancement anyway?
+[16:12] <ashb> perhaps. wouldn't it be easier if oyu didn't have to think about it hto
+[16:13] <inimino> I guess if people are loading everything using JavaScript...
+[16:13] <inimino> perhaps
+[16:15] felixge has joined the channel
+[16:15] <spoob> even if you render it server side, the javascript actions and most of the coding would be broken client-side
+[16:16] <inimino> yes
+[16:16] <technoweenie> damn, the sample node.js app sets a 2s timeout! i just thought it was extremely slow
+[16:17] <spoob> it's actually extremely fast
+[16:17] <inimino> the DOMs rendered with JavaScript don't correspond to the non-JavaScript version of the page, in any app I've ever seen
+[16:18] <technoweenie> yea i see that now, feel dumb for missing that in the code
+[16:19] <spoob> it is an attractive idea though, nearly everyone wants to do it that way to start with
+[16:19] <technoweenie> no this is good, simulate rails cgi speeds :)
+[16:20] <technoweenie> it's a great 2nd example though, ab -n 100 -c 50 took almost 4s exactly
+[16:20] <spoob> technoweenie; seriously, you should look up how fast nodejs is... :)
+[16:20] <technoweenie> yea i was getting about 5k r/s, pretty impressive
+[16:21] <spoob> you should be getting around 20k r/s?
+[16:21] <technoweenie> really?
+[16:21] <rolfb> what?
+[16:22] <spoob> http://four.livejournal.com/1019177.html
+[16:22] <technoweenie> oh wait i only ran 5k requests
+[16:22] <rolfb> haha
+[16:22] <rolfb> good one
+[16:23] <technoweenie> well i dont care about raw benches too much
+[16:24] <spoob> those numbers aren't in req/sec, so I don't know how many you should be getting at the momen
+[16:24] <spoob> so what do you get when you try 20,000/sec?
+[16:25] <technoweenie> ab -n 50000 -c 100 gave me 445.46 :(
+[16:26] <technoweenie> interesting, -c 1000 crashed node.js with '(libev) select: Invalid argument'
+[16:26] <spoob> there are some current problems with libeio in nodejs at the moment
+[16:27] <spoob> at 1000, that sounds close to 1024 so you might be hitting a kernel limit
+[16:27] <technoweenie> yea i think so, it crashes pretty immediately
+[16:27] <spoob> you could recompile Linux (?) with more file handles
+[16:27] <technoweenie> i'ts all good, i'm just here to play w/ mongo
+[16:29] dnolen has joined the channel
+[16:31] <megamark16> so I'm running Ubuntu Karmic Koala and i'm unable to compile Node, I seem to be missing some files
+[16:31] davidsklar has joined the channel
+[16:31] <megamark16> if I just wanted to setup a quick virtual machine and install node on that, are there some linux distros out there that will compile it out of the box?
+[16:33] rictic has joined the channel
+[16:33] <dks_> I use Ubuntu and got it compiled.
+[16:34] <megamark16> did you have to do anything special?
+[16:34] <dks_> I remember having to install some extra c++ stuff.
+[16:34] <dks_> What is the error message you are getting ?
+[16:35] <megamark16> I'm missing "execinfo", "gnutils >= 2.5.0", "header port.h", and "header sys/event.h"
+[16:35] <mynyml> megamark16: i just compiled the latest release on karmic too, all went well
+[16:36] <megamark16> stink!  What's wrong with my computer? :(
+[16:36] <megamark16> mynyml: did you need extra libs?
+[16:36] <mynyml> megamark16: apt-get install buildessentials ?
+[16:36] <mynyml> megamark16: i guess i already had them from previous compiles
+[16:37] <megamark16> yeah, I've got buildessentials
+[16:37] <mynyml> mediacoder: build-essential, sorry
+[16:37] <mynyml> megamark16 actuall ^^
+[16:38] <mynyml> but yeah, i can't think of what else it would be
+[16:38] <megamark16> I found a tutorial that tells me to install libc6-dev-i386 and lib32stdc++6
+[16:38] <megamark16> but I can't find those
+[16:39] <ashb> then that tutorial is wrong
+[16:40] <dks_> I also don't have sys/event.h (and the other ones).
+[16:40] <mynyml> megamark16: the repos have libc6-dev
+[16:40] <dks_> But this is no errror.  Just a message from configure
+[16:40] <jan____> dks_: can you paste your config.log
+[16:41] <megamark16> wait, what?  I just ran it again and it worked!
+[16:41] <megamark16> I hate phantom issues :(
+[16:42] <megamark16> but thanks everyone for your encouragement!
+[16:42] <dks_> great!!!
+[16:42] <mynyml> underpants gnomes
+[16:43] <technoweenie> is there a standard for packaging?  i see require.paths
+[16:43] <jan____> profit
+[16:43] martint-t has joined the channel
+[16:43] <technoweenie> i symlinked my git clone of node-mongodb to ~/.node_libraries/node-mongodb, then m = require('node-mongodb/mongodb') seemed to work fine
+[16:43] <mynyml> technoweenie: http://nodejs.org/api.html#_modules
+[16:45] <technoweenie> ah index.js i see
+[16:48] dks_ has joined the channel
+[16:53] eddanger has joined the channel
+[17:04] dks_ has joined the channel
+[17:07] RayMorgan has joined the channel
+[17:13] jed_ has joined the channel
+[17:19] dks_ has joined the channel
+[17:20] <inimino> uh, is require('./foo') currently broken?
+[17:21] eddanger has joined the channel
+[17:23] <inimino> http://www.pastie.org/771720
+[17:23] <inimino> I'm pretty confident this used to work
+[17:26] <inimino> require.paths=['.']; require('test'); then works... yuck
+[17:26] <ashb> it sohuld work i think
+[17:27] <ashb> it does for hippo anyway :D
+[17:28] <inimino> ashb: which should work, the one that currently works, or the one that doesn't?
+[17:28] <ashb> the paste
+[17:28] <ashb> logically it makes sense to me
+[17:29] <inimino> ok, yeah I tend to agree
+[17:31] <erichocean> inimino: wanted to recommend the book "Elements of Programming" by Alexander Stepanov and Paul McJones
+[17:31] <erichocean> dense read
+[17:31] <erichocean> but truly beautiful code/ideas
+[17:33] <inimino> ah, I've seen it mentioned before
+[17:34] <inimino> erichocean: looks good, maybe I'll do this once I finish SICP
+[17:34] <erichocean> wow, yeah, that'd be like switching cultures
+[17:35] <inimino> it looks like it's rather C++ oriented, so yeah
+[17:35] <erichocean> well, Stepanov designed the STL
+[17:35] <erichocean> but I get the impression he doesn't like C++
+[17:36] <erichocean> it's just the only thing out there that can even illustrate in a concrete way what he's doing
+[17:36] <inimino> ah, wow
+[17:36] <inimino> yeah, I got the impression whoever had designed the STL wouldn't
+[17:37] <erichocean> I'm slowly converting over his code into LLVM assembler
+[17:37] <inimino> I learned C++ long ago but never really learned the STL
+[17:37] <erichocean> which is a little like writing erlang, since it's SSA based
+[17:37] <inimino> actually C++ was the first language I learned, which is one of the reasons I can so strongly recommend not learning C++ as a first language...
+[17:37] <erichocean> yeah
+[17:38] <inimino> I think it's good to start from some simpler model
+[17:38] <erichocean> well, I would argue that what's taught in Elements *is* a simpler model
+[17:39] <erichocean> but not the way Alex teaches it
+[17:39] <inimino> either the C or MMIX end, or the lambda calculus or Scheme end
+[17:39] <inimino> well, I meant for an introduction
+[17:40] <erichocean> right, so Elements would be on the C/MMIX end
+[17:40] <inimino> I guess introducing STL to beginners would be a bad idea
+[17:40] <erichocean> but expressed using algebra
+[17:40] <erichocean> (which I like it)
+[17:40] <erichocean> s/which/why/
+[17:41] <inimino> ah
+[17:41] <inimino> yeah, sounds good
+[17:41] <technoweenie> looks like a lot of these node libs expect to be loaded in the local dir 
+[17:42] <inimino> it's probably either this or the Knuth after SICP
+[17:42] <technoweenie> i've just been symlinking an index.js and symlinking the dir to ~/.node_libraries
+[17:44] <inimino> erichocean: what's your impression of LLVM?
+[17:44] <erichocean> I like it a lot
+[17:44] <erichocean> still evolving
+[17:45] <inimino> I've kind of been looking for an excuse to learn it but it's unlikely I'll find anything that would be practical
+[17:45] <erichocean> I've build a bunch of strategies for visualizing SSA code that makes it pretty simple for me to work with
+[17:45] <erichocean> to me, it's C without the ambiguity
+[17:45] <ashb> SSA?
+[17:45] <erichocean> and full type checking
+[17:45] <erichocean> LLVM
+[17:46] <erichocean> when I'm working with a new C library, I'll convert to LLVM first so that I can see the control flow
+[17:46] bentomas has joined the channel
+[17:46] <erichocean> (you also find lots of bugs on error-handling paths this way)
+[17:47] <inimino> erichocean: that sounds great, actually
+[17:47] <ashb> v8 uses its on JIT/IR doens't it?
+[17:47] <inimino> C with type-checking and less ambiguity
+[17:47] <erichocean> v8 has no IR
+[17:47] <erichocean> it goes straight from JS to machine code
+[17:48] <erichocean> what's cool is that you can visualize an SSA tree using regular expressions
+[17:48] <ashb> really straight from JS to insts, or is there an IR/AST tree?
+[17:48] <erichocean> where each block is a "character" in the regex
+[17:48] <erichocean> ashb: no IR/AST
+[17:49] <erichocean> in the regex formulation, you can see all the loops, optional areas, etc.
+[17:49] <erichocean> in a clean, linear presentation
+[17:49] <erichocean> on a complicated piece of code, you might have a half-dozen regexes to describ the 6 main paths through the code
+[17:49] <erichocean> of course, those 6 are regexs, so they match whole classes of paths
+[17:50] <erichocean> anyway...
+[17:50] <inimino> hm, interesting
+[17:50] <inimino> so the terminals of the regex represent hunks of code?
+[17:50] <erichocean> yes
+[17:50] <erichocean> basic blocks in LLVM terminology
+[17:51] <inimino> interesting idea
+[17:51] <erichocean> any state machine can be visualized like that, rather than a graph
+[17:51] <erichocean> I find it eaier
+[17:52] <inimino> yeah, I've never actually done that, but it seems like it could be useful
+[17:52] <orlandov> technoweenie: np! :)
+[17:52] sudoer has joined the channel
+[17:53] <inimino> I guess I could make an LLVM backend for my parser generator, that'd be somewhat practical
+[17:54] <inimino> then if you ran that through such a visualization, it'd be almost like going in reverse back to the grammar
+[17:54] <technoweenie> hey orlandov your examples assume i have the mongodb.js file in my app's path.   i wonder if libraries such as yours should start creating index.js files instead, and assume that we symlink it to our ~/.node_libraries path
+[17:54] <erichocean> inimino: I'd just do a dot output
+[17:54] <technoweenie> has anyone started a node package system?  
+[17:54] <orlandov> technoweenie: oh yeah, perhaps. i haven't really thought that far ahead nor do i know much about that stuff tbh
+[17:55] <orlandov> but i agree in theory it should be neater
+[17:55] <technoweenie> orlandov: same here, i'm about an hour into my node.js experience :)
+[17:55] <erichocean> grail is what I use for the reverse regex stuff
+[17:55] <orlandov> woot
+[17:56] <inimino> erichocean: ah, from the regexes, so you get something like a DFA diagram?
+[17:56] <erichocean> http://www.csd.uwo.ca/Research/grail/
+[17:56] <inimino> grail?
+[17:56] <erichocean> you can go both directions with it
+[17:56] <erichocean> simple command line programs
+[17:56] <erichocean> http://www.csd.uwo.ca/Research/grail/.man/index.html
+[17:57] <technoweenie> writing code like this is such a mind fuck
+[17:57] <erichocean> http://www.csd.uwo.ca/Research/grail/.man/fmtore.html
+[17:59] scudco has joined the channel
+[17:59] <orlandov> technoweenie: hah, tell me about it!
+[18:00] <inimino> erichocean: ah
+[18:00] <orlandov> i will say it it gets more natural the more you do it
+[18:03] bry has joined the channel
+[18:04] voodootikigod_ has joined the channel
+[18:05] jakswa has joined the channel
+[18:08] ericflo has joined the channel
+[18:09] <bentomas> technoweenie: about a node package manager, there is http://github.com/visionmedia/kiwi/
+[18:10] <technoweenie> eh
+[18:10] <technoweenie> http://github.com/visionmedia/kiwi/blob/master/lib/kiwi.js clearly not ready :)
+[18:11] <technoweenie> thanks though i'll watch that :)
+[18:12] <bentomas> yeah, it says that in the README too. but you just asked if anyone had started :)
+[18:14] <orlandov> bentomas: i'm not sure if i'm doing something wrong, but i don't see any substantial code in kiwi
+[18:14] <orlandov> maybe that's what they mean by coming soon i guess :)
+[18:15] <bentomas> hmmm… I just found it today and meant to keep an eye on it.  I didn't look at the source… figuring I'd wait.
+[18:15] <bentomas> sorry it isn't as helpful as I'd hoped!
+[18:15] <orlandov> ACTION has hope
+[18:15] <jakswa> ACTION slides into the room, wiggles his spirit fingers, and then hops back out of sight.
+[18:17] <technoweenie> does Fictorial hang out in here
+[18:17] <technoweenie> author of the redis node client
+[18:17] <bentomas> sometimes, yeah
+[18:17] shillcock has joined the channel
+[18:19] richtaur has joined the channel
+[18:20] stephenlb has joined the channel
+[18:35] brosner has joined the channel
+[18:43] robrighter has joined the channel
+[18:47] rictic has joined the channel
+[18:56] rtomayko has joined the channel
+[19:04] isaacs has joined the channel
+[19:07] lattice1 has joined the channel
+[19:11] eviltwin has joined the channel
+[19:14] <jakswa> which is easier:  storing "data" into a database like couchDB, or just writing that data to a txt file in json format, and writing/reading it when the server stops/starts??
+[19:15] <jakswa> ACTION has his first node server sending and receiving JSONP stuffs!  Burry niiice.
+[19:15] <bentomas> jakswa: depends on what your goals are.  writing to a file is really easy, and doesn't require any external libraries.  but couchDB makes replicating easy.
+[19:15] <bentomas> but may I suggest felixge's dirty: http://github.com/felixge/node-dirty
+[19:16] <bentomas> it is sort of a compromise between the two.  it stores it in a file, but allows you to write views
+[19:16] <bentomas> (no replication though)
+[19:16] rictic has joined the channel
+[19:17] <jakswa> o neat, i'll check that out
+[19:20] <technoweenie> there are also node libraries for redis, mongodb, and tokyo tyrant
+[19:22] <erichocean> redis is nice (I recommend)
+[19:24] <kriszyp> are there any libraries for direct access to tokyo cabinet? (instead of going through tyrant)
+[19:28] <isaacs> ryah: how would you feel about renaming path.filename to path.basename, and adding support for stripping the extension?
+[19:28] <isaacs> i'm so used to how it works in bash and sh, it's a mild confusing to me every time
+[19:30] <isaacs> bentomas: i like path.extname
+[19:30] <isaacs> seems like it could be simplified slightly to: path.substr( path.length - path.lastIndexOf(".") ); though
+[19:33] <bentomas> isaacs: thanks!  yeah, I think you are right!  though that also strips the ".", which isn't consistent with ruby or python (the two libraries I looked at)
+[19:34] <bentomas> (sorry languages)
+[19:34] <isaacs> bentomas: no, it doesn't.
+[19:34] <bentomas> hmmm… I just ran it and it does for me… (in Safari's web inspector at least)
+[19:35] <bentomas> I'll try it in node...
+[19:35] <isaacs> oh, wait, a sec..
+[19:35] <isaacs> hehehe
+[19:35] <bentomas> *twiddles thumbs while virtual machine boots up*
+[19:35] <isaacs> copied the wrong thing, just a minute...
+[19:36] <bentomas> this works for me: path.substr( path.length - path.lastIndexOf(".") -1 );
+[19:37] <isaacs> right, unless there's no .
+[19:37] <bentomas> nope, still works fine for me.  returns an empty string
+[19:38] <isaacs> node> f.substr( f.length - f.lastIndexOf(".") - 1 )
+[19:38] <isaacs> "bar/baz.html"
+[19:38] <isaacs> sorry, node> f = "foo/bar/baz.html"
+[19:38] <isaacs> "foo/bar/baz.html"
+[19:38] <bentomas> how strange:
+[19:39] <bentomas> node> "test".substr("test".length - "test".lastIndexOf('.') -1);
+[19:39] <bentomas> ""
+[19:39] <bentomas> node> "test.html".substr("test.html".length - "test.html".lastIndexOf('.') -1);
+[19:39] <bentomas> ".html"
+[19:39] <isaacs> 4 - (-1) - 1 = 4
+[19:39] <isaacs> it's only a coincidence
+[19:39] <isaacs> because "test" is 4 chars
+[19:39] <isaacs> and so is "html"
+[19:40] <bentomas> ahh!  stupid test!
+[19:40] <bentomas> thanks :)
+[19:40] <isaacs> so, yeah, you want f.substr(f.lastIndexOf(".")), unless that's -1, in which case you want ""
+[19:41] <isaacs> so i'm left with this:
+[19:41] <isaacs>   exports.extname = function (path) {
+[19:41] <isaacs>     var lastDot = path.lastIndexOf(".");
+[19:41] <isaacs>     return lastDot === -1 ? path.substr( lastDot ) : "";
+[19:41] <isaacs>   };
+[19:41] <isaacs> which is effectively identical to yours, so i'll use yours instead ;)
+[19:41] <bentomas> :) I'm okay with either!
+[19:43] <isaacs> wonder why there's no extname in bash
+[19:44] <bentomas> that does seem to be a strange omission...
+[19:45] LuigiMontanez has joined the channel
+[19:49] isaacs_ has joined the channel
+[19:50] lvmike has joined the channel
+[19:51] jed_ has joined the channel
+[20:00] jcrosby has joined the channel
+[20:02] teemow has joined the channel
+[20:05] micheil has joined the channel
+[20:22] DamZ has joined the channel
+[20:28] n8o has joined the channel
+[20:33] <jakswa> ACTION needs a host for all his node experimenting.  He's tired of typing in "localhost"...
+[20:34] mjard has joined the channel
+[20:35] <richtaur> this at least means less typing: 127.0.0.1 l
+[20:35] <richtaur> ;)
+[20:40] <technoweenie> yea it'd be awesome if we could run these on something like heroku
+[20:40] <technoweenie> joyent has something for javascript apps i think
+[20:41] megamark16 has left the channel
+[20:41] n8o has joined the channel
+[20:45] isaacs has joined the channel
+[20:46] robrighter has joined the channel
+[20:46] <isaacs> richtaur, jakswa: 0.0.0.0 is even less
+[20:46] <isaacs> or add "127.0.0.1 x" to your hosts file
+[20:46] <isaacs> and then go to http://x/
+[20:46] dnolen has joined the channel
+[20:53] <inimino> I think that was the implication of "127.0.0.1 l"
+[20:53] <bentomas> hah, I thought the "l" in that statement was an exclamation point.
+[20:53] <bentomas> apparently I need to change my font...
+[21:01] <isaacs> i used to use "s" for "sistertrain-lm", but it got annoying not being able to copy and paste to other people
+[21:07] dks_ has joined the channel
+[21:07] isaacs_ has joined the channel
+[21:12] adam has joined the channel
+[21:12] Guest96104 has left the channel
+[21:13] jcrosby has joined the channel
+[21:13] asolove has joined the channel
+[21:17] robrighter_ has joined the channel
+[21:18] robrighter_ has joined the channel
+[21:33] jamiew has joined the channel
+[21:33] jamiew has left the channel
+[21:41] <ryah> isaacs: basename - sure
+[21:42] <isaacs> ryah: great.  patches on the list.
+[21:42] <ryah> isaacs: stripping extension - also okay. didn't someone send a patch already for that?
+[21:42] <isaacs> didn't see it
+[21:42] <isaacs> bentomas: sent a patch for extname, which got me thinking about it
+[21:47] sixtus42 has joined the channel
+[21:47] <sixtus42> re
+[21:52] yesudeep has joined the channel
+[21:55] jed has joined the channel
+[22:04] charlenopires has joined the channel
+[22:09] bry4n has joined the channel
+[22:18] grantmichaels has joined the channel
+[22:18] alexiskander has joined the channel
+[22:53] drewolson has joined the channel
+[22:53] charlenopires has joined the channel
+[22:54] <drewolson> hey all, i'm trying to require libxmljs and i'm getting an error: Error: Cannot find module 'libxmljs'.
+[22:54] <drewolson> it is in my project's (or the repl's) root dir
+[23:00] <inimino> drewolson: it needs to be in require.paths
+[23:00] <inimino> or, rather... needs to be in a directory that is in require.paths
+[23:00] <drewolson> inimino: is '.' in require.paths by default?
+[23:00] bry has joined the channel
+[23:01] <drewolson> ah, guess not :)
+[23:01] <drewolson> inimino: excellent, that did the trick, thanks
+[23:02] <inimino> np
+[23:03] alexiskander has joined the channel
+[23:07] r11t has joined the channel
+[23:10] bryanl has joined the channel
+[23:16] LuigiMontanez has joined the channel
+[23:28] LuigiMontanez has joined the channel
+[23:28] eddanger has joined the channel
+[23:29] LuigiMontanez has joined the channel
+[23:33] sudoer has joined the channel
+[23:46] sixtus42 has joined the channel
+[23:52] bry has joined the channel
+[23:59] Yuffster has joined the channel

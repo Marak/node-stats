@@ -1,0 +1,572 @@
+[00:06] jamiew has joined the channel
+[00:07] mikeal has joined the channel
+[00:11] soveran has joined the channel
+[00:17] <micheil> hmm... true
+[00:17] <micheil> isaacs: do you have some test caes for these methods?
+[00:19] <micheil> does anyone know of something similar to irb for node?
+[00:36] <micheil> isaacs: http://github.com/isaacs/node/commit/cbfdc57bda72ce5493ca35712d596005918d107a#comment_39321
+[00:37] <cloudhead> micheil: node-repl
+[00:37] <cloudhead> except you need rlwrap to make it useable
+[00:39] <micheil> uhhh... okay
+[00:40] <micheil> ACTION wait's for macports to be done
+[00:41] <micheil> cloudhead: nice stuff!
+[00:42] <cloudhead> yeh
+[00:42] <micheil> it doesn't support arrow key navigation though :(
+[00:42] <cloudhead> its a bit clunky yea
+[00:43] mahemoff has joined the channel
+[00:43] <micheil> oh well, thanks for sharing, none-the-less
+[00:46] <isaacs> micheil: there are a few cases where we need to do a toString(), i think
+[00:47] <isaacs> but i guess Array::join() does that anyhow, huh?
+[00:47] <micheil> hmm..
+[00:47] mikeal has joined the channel
+[00:47] <micheil> i think so
+[00:47] sudoer has joined the channel
+[00:47] <micheil> ACTION just deleted his test code..
+[00:47] <isaacs> also, it does need to do the exports.resolve()
+[00:48] <micheil> isaacs: I'm sorta rewriting parts of the code with another project I'm doing
+[00:48] <micheil> oh, yeah, whoops, put the array normalizer back in, my bad there.
+[00:48] <isaacs> yeah Array.prototype.join.call(arguments, "/")
+[00:48] <isaacs> that works fine
+[00:49] <isaacs> so:
+[00:49] <isaacs>   exports.join = function () {
+[00:49] <isaacs>     return exports.normalize(Array.prototype.join.call(arguments, "/"));
+[00:49] <isaacs>   };
+[00:49] <micheil> http://github.com/isaacs/node/commit/cbfdc57bda72ce5493ca35712d596005918d107a#comment_39324
+[00:49] <micheil> yeah
+[00:50] <isaacs> not normalizeArray, since it's not an array, but yeah
+[00:50] <micheil> ACTION is moving on to analyising normaliePath now
+[00:50] <isaacs> calling normalizeArray on a string is a weird thing
+[00:50] <micheil> woah, I misspelt that, didn't I?
+[00:51] <micheil> normalizeArray would surely be a normal think for those into Objective-J
+[00:51] <micheil> (sorry, just had to throw that out there.)
+[00:51] <micheil> ;P
+[00:51] <micheil> umm.. how about normalizePath()
+[00:51] <micheil> which is really what it's doing
+[00:52] <isaacs> micheil: it's silly to put path in the name, since it's in the path module already
+[00:52] <isaacs> require("path").normalizePath?
+[00:52] <micheil> oh, true
+[00:53] <isaacs> path.normalize is fine, i think
+[00:53] <micheil> no, actually. path.normalise, just becasue I speak english.
+[00:53] <micheil> *because
+[00:53] <micheil> =P
+[00:53] <isaacs> oh, like, old timey euro english?
+[00:53] <isaacs> not the new hot american english?
+[00:54] <micheil> isaacs: I'm an aussie, not a euro boy.
+[00:54] <isaacs> micheil: i'm from the usa, so afaik, australia is in europe.
+[00:55] <micheil> isaacs: good point, I'm just having a dig.. ;p
+[00:55] <isaacs> it's in central europe, between germany and italy.  and there are kangaroos.
+[00:56] <inimino> heh
+[01:00] <micheil> I don't know why, but I find the current Assert module really tacky.. I mean, rather then just printing the error and continuing, it just goes kablam!
+[01:01] <micheil> isaacs: http://twitter.com/miksago/status/6845181398
+[01:02] <isaacs> var sys = require("sys"), a = require("assert"); for (var i in a) { exports[i] = function () { var r; try { r = a[i].apply(this, arguments) } catch (ex) { r = ex; sys.error("Assertion failure: "+ex.message); } finally { return r } } }
+[01:02] <isaacs> micheil: put that in "niceassert.js" and you're done
+[01:03] <isaacs> personally, i find the stack trace rather nice.
+[01:05] <inimino> that's what failed assertions are /supposed/ to do
+[01:08] <isaacs> micheil: heh, thanks for not attributing.  i'd hate for someone to actually think i didn't know where australia was.
+[01:08] <micheil> isaacs: I've got another patch
+[01:08] <isaacs> it's in an ocean somewhere, right?
+[01:09] <isaacs> micheil: k, what's that?
+[01:09] <micheil> cbfdc57bda72ce5493ca35712d596005918d107a
+[01:09] <micheil> erm
+[01:09] <micheil> http://github.com/isaacs/node/commit/cbfdc57bda72ce5493ca35712d596005918d107a#comment_39325
+[01:09] <isaacs> ah, i see it now
+[01:09] <micheil> ignore the exports.var normalize
+[01:09] <micheil> that's a pasting error.
+[01:09] <isaacs> yeah, explicit pasting
+[01:09] <micheil> the rest works
+[01:10] <micheil> but that should be a little quicker
+[01:10] <micheil> it's also tidier imo.
+[01:11] <isaacs> well, parts.shift() is out, and testing the assignment isn't good.
+[01:12] <isaacs> can't mutate the argument, and you might have ["foo", "", "bar"] which should be normalized to "foo/bar", but your code will do just "foo" because when it hits the empty item, it'll abort.
+[01:13] <micheil> hmm..
+[01:13] <isaacs> also, shift() isn't relevantly faster than just comparing a number.
+[01:13] <micheil> so it does.. hmm..
+[01:14] <isaacs> speaking of which, i don't handle empty dirs here.
+[01:14] <micheil> lol
+[01:17] <isaacs> http://github.com/isaacs/node/commit/83b0b7ff960b6f2e83f0d27f3168ed9572d98545
+[01:17] <micheil> righteo.. almost fixced
+[01:18] <isaacs> also, it doesn't matter where the "var" statement is in teh fn, just that it's in the fn
+[01:18] <micheil> pretty much the same now: http://github.com/isaacs/node/commit/83b0b7ff960b6f2e83f0d27f3168ed9572d98545#comment_39326
+[01:18] <isaacs> oh, wait, that's borked.  broke initial slash dirs.
+[01:19] <isaacs>  /foo/bar is "", "foo", "bar"
+[01:19] <micheil> that needs to be an else if I think
+[01:19] <isaacs> no it doesn't
+[01:19] <isaacs> the continue skips over the rest of the loop
+[01:21] <isaacs> http://github.com/isaacs/node/commit/935acb7427c9cc68221f9cd0ace7dbc5159ee0bb
+[01:22] <micheil> http://github.com/isaacs/node/commit/83b0b7ff960b6f2e83f0d27f3168ed9572d98545#comment_39327
+[01:22] <isaacs> is there a way to do bigger diffs on github?  ie, more than just one commit?
+[01:22] <micheil> mine works fine there
+[01:22] <micheil> use the else if
+[01:22] <isaacs> micheil: that's equivalent to mine.
+[01:22] <isaacs> what's the advantage of the else if?
+[01:23] <isaacs> it's the same logic path?
+[01:23] <micheil> it's more strict, won't let the stray path through
+[01:24] <isaacs> what do you mean by "more strict"?
+[01:24] <micheil> well, it just looks better too
+[01:25] <micheil> just to note, I'm testing using:
+[01:25] <micheil> var tryTest = normalize(["", "test", "..", "test2", "test3", ".", "test", "", "test4"]);
+[01:25] <micheil> => test2,test3,test,test4
+[01:26] <isaacs> yeah, my latest update would keep the initial "" element
+[01:26] <isaacs> otherwise /foo/bar turns into "foo/bar"
+[01:26] <micheil> ah
+[01:26] <isaacs> which is wrong
+[01:26] micheil has left the channel
+[01:26] micheil has joined the channel
+[01:26] <micheil> uh
+[01:26] <micheil> what just happened to colloquy.. it just close the channel
+[01:26] <micheil> umm..
+[01:27] <micheil> yeah, true that was wrong
+[01:27] <isaacs> micheil: it does that.
+[01:27] micheil has left the channel
+[01:28] micheil has joined the channel
+[01:28] <micheil> righteo, patched mine
+[01:29] <micheil> 935acb7427c9cc68221f9cd0ace7dbc5159ee0bb
+[01:29] <micheil> erm
+[01:29] <micheil> http://github.com/isaacs/node/commit/935acb7427c9cc68221f9cd0ace7dbc5159ee0bb#comment_39328
+[01:29] <isaacs> micheil: ok, well, if we're in agreement about the functionality and just debating prettiness, then i think that means we're done here.  thanks for your help.
+[01:29] <micheil> heh, true
+[01:30] <micheil> just remember that path has a string method normalize
+[01:30] <isaacs> you should pretty much be using path.join() for most things, anyhow
+[01:30] <isaacs> that'll take any two paths and return a new clean path.
+[01:31] <micheil> true
+[01:31] <micheil> actually, it'll take X paths
+[01:31] <isaacs> oh, right
+[01:31] <isaacs> any number of paths.
+[01:31] <isaacs> > 0
+[01:32] <micheil> :P
+[01:33] <micheil> uh, does uri_parse work?
+[01:34] <micheil> it's been a while since I've done regexp's so I'm probably just reading it wrong
+[01:35] <isaacs> micheil: according to my tests, yeah
+[01:35] <micheil> isaacs: btw, http://github.com/Miksago/node.js-testkit
+[01:35] <micheil> it's no where near a code review yet, but I think it's showing value
+[01:36] <isaacs> that's good.  everyone should build a test framework at some point in their lives :)
+[01:36] <micheil> isaacs: it's mainly to try and replace mjsunit and such
+[01:37] <micheil> sane testing for node.
+[01:37] <isaacs> now that i learned about "make test", i'm sort of liking whatever it is that we have.
+[01:37] <isaacs> writing tests for it is great.  just name the file test-blarg.js, and then throw an error if it fails.
+[01:37] <isaacs> then make test runs everything.
+[01:37] <micheil> isaacs: yeah, make test works for node testing, but not for testing stuff built with node
+[01:38] <micheil> ACTION <3's Makefiles
+[01:40] <micheil> bbl.
+[01:41] hornbeck has joined the channel
+[01:49] PowerToExt has joined the channel
+[02:05] micheil has joined the channel
+[02:11] <micheil> hm.
+[02:18] sudoer has joined the channel
+[02:21] jtoy has joined the channel
+[02:22] <cloudhead> anyone got a reliable isA() function?
+[02:24] <micheil> isA()?
+[02:24] <micheil> as in isArray?
+[02:24] <cloudhead> yea
+[02:24] <cloudhead> but for all types
+[02:24] <cloudhead> so
+[02:24] <cloudhead> isA(Object)
+[02:24] <cloudhead> etc
+[02:24] <micheil> oh
+[02:25] <micheil> dojo toolkit has a fairly split up version
+[02:26] <micheil> you'd just need to do: return Object === Expected || Object instanceOf Expected
+[02:26] <micheil> or something
+[02:26] <inimino> cloudhead: what do you need that instanceof doesn't do?
+[02:27] <cloudhead> inimino: "hello" instanceof String // false
+[02:28] <inimino> of course, it's not an object
+[02:28] <cloudhead> there you go : )
+[02:28] <cloudhead> I don't care about the implementation
+[02:28] <cloudhead> I want to know if it behaves like a string
+[02:28] <cloudhead> and looks like a string
+[02:28] <inimino> so... you want typeof instead?
+[02:29] <inimino> typeof x == 'string', then
+[02:29] <cloudhead> typeof [] // object
+[02:29] <inimino> that's why isArray implementations exist
+[02:29] <cloudhead> yeh
+[02:30] <cloudhead> I'm looking for a function which takes an argument, being the type you want to check it with
+[02:30] <cloudhead> so a combination of all the isX functions
+[02:30] <inimino> :/
+[02:30] <inimino> ok
+[02:30] <cloudhead> might just combine them myself
+[02:30] <micheil> This is duck typing.
+[02:30] <jan____> cloudhead: http://javascript.crockford.com/remedial.html
+[02:30] jamiew_ has joined the channel
+[02:30] <inimino> I consider that a really hideous and anti-JavaScript API, but whatever
+[02:31] <jan____> well, is has reliably type detection functions
+[02:31] <jan____> *reliable
+[02:31] <inimino> yeah, that typeOf is probably a slightly better idea
+[02:32] jan____ has left the channel
+[02:32] jan____ has joined the channel
+[02:32] <jan____> janfail, what was your reply?
+[02:32] <cloudhead> jan____: thanks, that's perfect
+[02:33] <jan____> inimino: ^-
+[02:33] <inimino> I said:
+[02:33] <inimino> yeah, that typeOf is probably a slightly better idea
+[02:33] <jan____> thansk
+[02:33] <jan____> apparently, I shouldn't use this keyboard
+[02:33] <inimino> what's wrong with it?
+[02:34] <jan____> I think it is me and the late hour
+[02:34] <inimino> :)
+[02:43] PowerToExt has joined the channel
+[02:45] <isaacs> cloudhead: i did something like that once upon a time for a querystring module
+[02:45] <isaacs> check out "is" in http://github.com/isaacs/querystring.node.js/blob/master/util.js
+[02:45] <isaacs> it's not doing instanceof, though
+[02:46] <isaacs> mostly, it was to determine that "foo" is a string, and so is new String("foo")
+[02:46] <isaacs> (where the second typeof's as "object")
+[02:48] <inimino> I hope you don't have any new String() in your own code...
+[02:49] <cloudhead> isaacs: thanks, will check it out
+[02:49] <isaacs> you could also check yui's "Lang" module. http://github.com/yui/yui3/blob/master/src/yui/js/yui-lang.js
+[03:08] <elliottcable> fffffffffffff
+[03:08] <elliottcable> I fly out some time tomorrow
+[03:08] <elliottcable> I have no idea what time, or on what flight
+[03:08] <elliottcable> I can’t reach Travelocity (who never sent me any confirmation data on my e-mail addy), nor any of the airlines I think my flight may be with, because they all have wait timesmeasured in hours.
+[03:09] <elliottcable> was on hold with Travelocity for 3.5 hours, only to have my call dropped O_O;
+[03:10] <inimino> o_O
+[03:11] jed has joined the channel
+[03:15] <elliottcable> fffff
+[03:15] <elliottcable> and I haven’t slept in quite a while. Trying to not fall out of my chair at this goddamned slow jazz hold music
+[03:18] <elliottcable> Finally got through to Alaska Airlines… they don’t have me registered for any flights o.o
+[03:29] sudoer has joined the channel
+[03:31] jtoy has joined the channel
+[03:42] Connorhd has joined the channel
+[03:43] dnolen_ has joined the channel
+[03:45] micheil has left the channel
+[03:47] micheil has joined the channel
+[03:50] scudco has joined the channel
+[03:55] jed has joined the channel
+[03:59] micheil has joined the channel
+[04:05] micheil has joined the channel
+[04:33] PowerToExt has joined the channel
+[04:49] isaacs has joined the channel
+[04:59] micheil has joined the channel
+[05:16] chakrit has joined the channel
+[05:21] jamiew_ has joined the channel
+[05:29] idris has joined the channel
+[05:36] idris has left the channel
+[05:44] mikeal has joined the channel
+[06:17] ryanmcgrath has joined the channel
+[06:33] brandon_beacher has joined the channel
+[06:36] erichocean_ has joined the channel
+[06:39] jspiros has joined the channel
+[06:57] RayMorgan has joined the channel
+[07:01] bentomas has joined the channel
+[07:11] keeto has joined the channel
+[07:33] soveran has joined the channel
+[07:37] mikeal has joined the channel
+[07:55] binary42 has joined the channel
+[07:58] scudco has joined the channel
+[08:28] ryanmcgrath has joined the channel
+[08:29] <ryanmcgrath> Dunno who's awake in here, but I'm interested in some feedback in this web framework (I know everyone's probably seen this a dozen times by now ;P) I've been working on...
+[08:29] <ryanmcgrath> http://github.com/ryanmcgrath/luno
+[09:09] aurynn has joined the channel
+[09:54] sixtus42 has joined the channel
+[10:06] mikeal has joined the channel
+[10:29] micheil has joined the channel
+[10:36] sixtus42 has joined the channel
+[10:39] Biscuits has joined the channel
+[10:42] hassox has joined the channel
+[10:43] <hassox> hallo
+[10:45] ryanmcgrath has joined the channel
+[10:49] <ryanmcgrath> Ah, wow, I had to drive someone to the airport, totally missed anything anybody said to me before. x_o;
+[11:13] felixge has joined the channel
+[11:15] saikko has joined the channel
+[11:25] micheil has joined the channel
+[11:29] sixtus42 has joined the channel
+[11:33] sixtus42 has joined the channel
+[11:48] chakrit has left the channel
+[12:20] <elliottcable> lol
+[12:35] sixtus42 has joined the channel
+[12:42] bryanl has joined the channel
+[12:55] <elliottcable> felixge!
+[12:55] <felixge> elliottcable: ?
+[12:55] <elliottcable> ACTION shrugs
+[12:55] <elliottcable> am at the airport, and *extremely* bored
+[12:58] <felixge> elliottcable: I just added node head to the hombrew formula
+[12:58] <felixge> http://github.com/felixge/homebrew/commit/b4d3dc2bfd489469947142b2673acb5386030da4
+[12:58] <elliottcable> felixge: Um, that’s not how it works
+[12:58] <felixge> didn't update to 0.1.22 - that release is broken
+[12:58] <elliottcable> felixge: head is only for when you don’t have a stable package
+[12:59] <felixge> elliottcable: doesn't say that on the brew wiki
+[12:59] <felixge> elliottcable: I actually think that it is how it works
+[12:59] <felixge> because if I do "brew install node" it will use the tar
+[12:59] <felixge> if I do "brew install node -h" it will use git
+[13:04] <elliottcable> Ah, the -h flag must be new
+[13:04] <elliottcable> felixge: ^^
+[13:04] <elliottcable> felixge: I’ve been working in Homebrew for a long time; I haven’t kept up with the latest features.
+[13:04] <elliottcable> felixge: Hell, the DLS methods syntax is new to me, I’m used to ivars.
+[13:22] <micheil> homebrew looks useful
+[13:26] <elliottcable> micheil: it’s great.
+[13:26] <micheil> cool
+[13:31] sixtus42_ has joined the channel
+[13:32] sixtus42_ has joined the channel
+[13:44] saikko has joined the channel
+[14:11] micheil has joined the channel
+[14:28] <elliottcable> Hah, that’s pretty slick.
+[14:28] <elliottcable> http://gist.github.com/260502
+[14:28] <elliottcable> Those 6 lines allowed me to reduce the rest of my code by about 60%
+[14:28] <elliottcable> #win
+[14:29] <hornbeck> nice
+[14:29] <elliottcable> o7 hornbeck. What’s up?
+[14:29] <hornbeck> not much
+[14:29] <hornbeck> you?
+[14:30] <elliottcable> Hacking at `from`
+[14:30] <elliottcable> sitting in #SEA
+[14:30] <elliottcable> waiting for my plane, still about 3 hours away
+[14:30] <hornbeck> that's always fun
+[14:30] <hornbeck> where you heading?
+[14:31] <elliottcable> Anchorage, aka home.
+[14:31] <hornbeck> ahh
+[14:31] <elliottcable> Been traipsing around the US the last month or so
+[14:32] <elliottcable> RubyConf in SF, then Greensboro, then Wilmington, now Seattle, and finally headed back home
+[14:32] <hornbeck> always fun
+[14:33] <elliottcable> Feynman!
+[14:33] <elliottcable> Shit, I wish I had headphones.
+[14:33] <elliottcable> I was arguing quantum physics and machine sentience with some dude last night.
+[14:33] <hornbeck> nice
+[14:33] <elliottcable> Somehow it carried over to breakfast, and got the dude cooking my omlette involved.
+[14:33] <elliottcable> From there, it deteriorated into religion. Meh >,>
+[14:34] <elliottcable> Moral of this story: Don’t bring the cook at your local 24-hour diner into scientific discussions. He will ruin it for everybody.
+[14:34] <hornbeck> haha
+[14:38] brandon_beacher has joined the channel
+[14:39] brandon_beacher_ has joined the channel
+[14:41] <elliottcable> brandon_beacher: Caught in the reolving door, are we?
+[14:47] eviltwin has joined the channel
+[14:52] soveran has joined the channel
+[14:57] alex-desktop has joined the channel
+[15:02] JimBastard has joined the channel
+[15:02] <JimBastard> ugh
+[15:02] <JimBastard> im stopping at 799 lines for this contest
+[15:02] <JimBastard> i swore i wouldn't go over 800
+[15:02] <JimBastard> sooo many javascripts
+[15:02] <micheil> contest?
+[15:02] <JimBastard> dop.io hackathon
+[15:02] <JimBastard> drop.io
+[15:02] <JimBastard> ugh
+[15:03] <JimBastard> 799 lines of JS in 48 hours make me sleepy
+[15:03] <JimBastard> thank god for mustache.js
+[15:03] <JimBastard> saved me a few hundred lines
+[15:04] <elliottcable> lol
+[15:04] <elliottcable> what contest?
+[15:04] maritz has joined the channel
+[15:05] <JimBastard> drop.io hackathon
+[15:05] <JimBastard> im gonna do a presentation at the corporate offices later today. ill make sure #node.js gets some creds
+[15:06] <JimBastard> ive been bragging about my all JS stack
+[15:06] <elliottcable> … hahaha
+[15:06] <elliottcable> coo
+[15:06] <jan____> JimBastard: you're welcome :)
+[15:07] djangomg has joined the channel
+[15:07] <JimBastard> thanks jan!
+[15:07] <maritz> hi. i just cloned the express framework and wanted to try out the example. however each time i run "node example/app.js" i don't get anything. i have now completely deleted the contents of app.js and written "require('sys'); sys.puts('test');" in it, and it still doesn't give any output at all. my node install still works with other scripts though. what the hell might be going on here?
+[15:07] <JimBastard> mustache.js makes soo much sense
+[15:07] <elliottcable> Mustache.js, eh?
+[15:07] <elliottcable> Lemme guess, clone o defunkt’s templating system?
+[15:07] <jan____> JimBastard: I know! that's why I had to write it
+[15:07] <jan____> elliottcable: yes.
+[15:08] <elliottcable> Now I just need to get our friendly neighbourhood Holm to come write his templating layer in Node.js, and we’ll be all set for templating
+[15:08] <JimBastard> views are gonna get complicated, so let them suport javascripts
+[15:08] <jan____> elliottcable: mustache.js should run in node
+[15:08] <djangomg> Hi folks, wondering if there is an easy way to resize images using nodejs? - just wondering how the framework will size up in terms of other server side coding frameworks that have lots of "batteries included" such as python (of course I realize this framework is very new)
+[15:08] <JimBastard> it does
+[15:08] <JimBastard> yo djangomg maybe use GD or image magick>
+[15:08] <jan____> cool, js ftw
+[15:08] <JimBastard> you could read binary files i guess....
+[15:09] <djangomg> JimBastard: yeah I guess an extension could be written to easily shell out to GD or Magick
+[15:09] <maritz> anyone any ideas about my problem? i'm going to lose my sanity over this :/
+[15:10] <elliottcable> maritz: I don’t use express, dude, sorry.
+[15:10] <JimBastard> i dont like reinventing wheels, im incredbily lazy
+[15:10] <JimBastard> also im pretty drunk
+[15:10] <maritz> at this point it doesn't have anything to do with express, since i deleted the entire file contents
+[15:10] <maritz> i even copied it some place else (my home dir) and it still doesn't work.
+[15:11] <djangomg> my challenge is finding a server side framework that can run on the client side - so having everything in one package with the least amount of dependencies works for me
+[15:11] <JimBastard> node can do that
+[15:12] <JimBastard> ive been using mustache.js + node.js to have templates that can render ast JSON  or HTML framments
+[15:12] <elliottcable> Hah, so awesome.
+[15:12] <elliottcable> http://github.com/elliottcable/poopy.js/commit/82cebc460925e34a4e0919b3b2bb5aee48a24efa#diff-0
+[15:12] <JimBastard> then the client can render the JSON docuemnts as HTML fragments, client-side
+[15:12] <JimBastard> poopy.js?
+[15:12] <djangomg> true - this I know... I'm actually talking about building a p2p distributed network with nodejs as the base
+[15:13] <djangomg> mostly message passing using json between nodes
+[15:13] <elliottcable> JimBastard: http://github.com/elliottcable/poopy.js#readme
+[15:13] <djangomg> rendering content with moustache/templating engine on each client
+[15:14] <JimBastard> yo djangomgn
+[15:14] <JimBastard> are you implementing the BT protocol in node.js?
+[15:15] <JimBastard> caus id give you a cookie and some internet dollars
+[15:15] <djangomg> lol
+[15:15] <JimBastard> thats cool elliottcable
+[15:15] <JimBastard> i see
+[15:16] <JimBastard> im not the biggest fan on the "prototype" keyword
+[15:16] <JimBastard> im more of a singleton guy
+[15:16] <elliottcable> JimBastard: eww.
+[15:16] <JimBastard> lolz
+[15:16] <elliottcable> ACTION is big on true prototypalism.
+[15:16] <elliottcable> Clean, purist prototypal, eventual programming: The holy grail, IMHO.
+[15:16] <elliottcable> What Node.js is bringing us closer to.
+[15:17] <JimBastard> whatever....lazy init + dependentcy injection
+[15:17] <JimBastard> :p
+[15:18] <JimBastard> ive got to warn you , im unusually drunk for a sunday morning ir csession
+[15:18] <elliottcable> lol
+[15:18] <elliottcable> ACTION hasn’t slept more than 5 hours in like 3 days, and is hacking like mad
+[15:18] <JimBastard> ahahaha
+[15:18] <elliottcable> so don’t expect *me* to be al ot *more* coherent.
+[15:18] <elliottcable> a lot*
+[15:18] <JimBastard> i got too tired to code so switched to ppt mode
+[15:19] <elliottcable> Powerpoint mode? o_O
+[15:19] <JimBastard> :p
+[15:20] maritz has left the channel
+[15:21] <micheil> wow... brew is a thing of beauty...
+[15:22] <JimBastard> JimBastard's Law: You cannot write more then 50 lines of production JS per hour for more then 16 hours without going craaaazy
+[15:22] <jan____> JimBastard: awesome grew faster, but that was just filling in blanks.
+[15:22] <elliottcable> micheil: yep.
+[15:22] <elliottcable> JimBastard: lies.
+[15:23] <JimBastard> this was mostly non-framework framework code
+[15:23] <JimBastard> the un-glue
+[15:23] <elliottcable> JimBastard: Well, hm. Actually, I may already be creazy.
+[15:23] <elliottcable> JimBastard: In which case, your law would still hold true.
+[15:23] <JimBastard> huzzah
+[15:23] <elliottcable> anyway, all, time to pack up and go stand in line to check my baggage.
+[15:23] <JimBastard> peace
+[15:23] <micheil> just trying to remove the damn macports now
+[15:24] <elliottcable> micheil: `rm -rf /opt/local`, problem solved.
+[15:24] <elliottcable> but yeah, bbl all.
+[15:24] <elliottcable> When I’m back in Anchorage!
+[15:24] <elliottcable> Alaska… I miss you v.v
+[15:24] <JimBastard> alaskowned
+[15:27] sveisvei has joined the channel
+[15:28] maritz has joined the channel
+[15:30] <maritz> what framework do you think is the best right now and has the best chances to survive? i though express looked rather good, until i saw the authors rant about using semicolons in serverside js in some node commit. now i'm not too confident in his abilities anymore :D
+[15:31] <mediacoder> maritz: hehe, there are a lot out there.. id suggest go modular tho
+[15:31] <mediacoder> like get a routing framework maybe.. and for other tasks get appropriate modules od write them
+[15:31] <maritz> what do you mean "go modular"?
+[15:31] <maritz> oh, ok
+[15:32] <mediacoder> this evolves into your "own" thing :-)
+[15:32] <maritz> maintaining that would require a lot of work though. (if you want to keep all your modules up2date)
+[15:32] <mediacoder> yes, thats right..but also you never know if the framework of chois is being kept up to date
+[15:33] <maritz> the same thing holds true for modules, doesn't it? ;)=
+[15:33] <JimBastard> i would say go with the most popular framework and contribute.....
+[15:33] <micheil> ugh.. that took a while.
+[15:33] <JimBastard> express....
+[15:33] <mediacoder> well, yea, sure ..but it might be easier to replace my currently unmaintained session-module with somebody elses and make some minor api changes
+[15:34] <maritz> mediacoder: that is true.
+[15:34] sixtus42_ has joined the channel
+[15:34] <mediacoder> but yea, visionmedia puts much effort into express, i presonally also dont like the style he uses tho
+[15:36] <maritz> JimBastard: Of course contributing is essential. And I'd pick express. However I cannot contribute in a project where the standard is to omit semicolons and curly braces where ever possible. That would make me die of a brain aneurysm in less than a week.
+[15:36] <JimBastard> yeah i hate that tooo.....
+[15:36] aguynamedben has joined the channel
+[15:37] <JimBastard> im sending inimino a semi-colon key for xmas
+[15:37] <maritz> Besides that, my IDE hates it too and won't tolerate it... :x
+[15:38] <inimino> get an IDE that isn't broken
+[15:38] <maritz> Well... I'll play around with express for a while. When the headaches start, I can reevaluate.
+[15:38] <micheil> JimBastard: I'm sending him a keyboard of semi-colon keys then ;P
+[15:38] michaelk^ has joined the channel
+[15:38] <JimBastard> yeah...technically semi-colons are optional....but id ont believe it
+[15:38] <maritz> Which one would you suggest for javascript?
+[15:39] <micheil> textmate :D
+[15:39] <inimino> I don't use an IDE, but I hear there are a lot to choose from
+[15:39] <inimino> ACTION recommends vim
+[15:39] <JimBastard> no suggestions, im not using a frawework for now....
+[15:39] <maritz> It's not that my ide can't read it or marks it as an error. It's that the auto-format feature will remove some spaces/indents that it shouldn't... :/
+[15:39] <micheil> vim is good if you like configuring stuff
+[15:39] <JimBastard> but notepad for editing ftw
+[15:40] <micheil> maritz: I'm just against no semicolons because it makes debugging easier
+[15:40] <maritz> How?
+[15:40] <micheil> language punctation enhances readablity
+[15:41] <inimino> micheil: that's subjective
+[15:41] <maritz> Yes, misread your msg. Thought you said you are against semicolons. I totally agree. Looking at code without semicolons/braces makes no sense to me. :D
+[15:42] <inimino> (some of us think unneeded syntactic noise reduces readability)
+[15:42] <inimino> in any case, someone's opinion on code formatting is a damn silly reason to use or not use their project
+[15:43] <maritz> Not if you want to contribute to whatever project you use. But I agree, that there are more important factors in making the decision.
+[15:43] <inimino> you need to know the semicolon insertion rules whether you use them or not, so I suggest learning the language syntax and getting over your aesthetic differences
+[15:43] <JimBastard> lolz
+[15:44] <maritz> How come this discussion tends to go in the direction of accusing the opposite of not knowing shit about the language and being an idiot? :D
+[15:46] <inimino> if you can't read code without semicolons, you don't know the ASI rule
+[15:46] <inimino> and that means you don't know the language syntax, and you'll occasionally be bitten by it even if you use semicolons liberally
+[15:46] <JimBastard> no more cuervasasa
+[15:50] <maritz> I really don't know what the ASI rule is. Link/Explanation?
+[16:08] <inimino> maritz: automatic semicolon insertion
+[16:09] <inimino> and I should have said "rules" not rule
+[16:10] <inimino> maritz: the best place to look is the ES5 spec, section 7.9
+[16:12] <inimino> http://www.ecma-international.org/publications/files/ECMA-ST/ECMA-262.pdf
+[16:13] <maritz> I just didn't know what ASI stands for. I know what you're talking about now, but don't see your point for omitting semicolons.
+[16:14] <inimino> maritz: my point in mentioning ASI is that you need to understand it whether you use semicolons in your own code or not
+[16:14] <inimino> the idea that you can just use semicolons and not need to know about ASI is a total red herring
+[16:14] <maritz> And no one said that?!
+[16:15] <maritz> Or where you just stating that, completely unconnected to the "discussion"
+[16:15] <maritz> ?
+[16:18] <JimBastard> cant sleep clowns will eat me
+[16:18] <inimino> maritz: well, if you understand the rules, I would expect you can read the code without 'dying of a brain aneurysm', or even getting terribly confused
+[16:19] <JimBastard> is that when your brain assplodes?
+[16:19] <maritz> It's not that I can't read it. It's that I and a lot of other people find it easier to read. Just because I understand the semantics of french/chinese/japanese, doesn't make it easier for me to read than english.
+[16:20] <maritz> (disclaimer: I actually have no clue about chinese/japanese and only speak a little french. :P )
+[16:21] <inimino> hehe, ok
+[16:23] <maritz> On the same notion: I understand how haikus are build and can read them. However I find it painful to switch lines so often without an implied contextual change. I somehow need to reevaluate whether the last line has anything to do with the current line in most haikus. (I believe this may be a better analogy)
+[16:24] <maritz> Which is not even to say that I can't enjoy haikus. It just takes longer to read them than reading normal text.
+[16:24] <maritz> I hope this made it more clear. :)
+[16:26] <maritz> inimino: Are you visionmedia? Cause I have a question about express. :D
+[16:27] <inimino> I'm not.
+[16:27] <inimino> I haven't even looked at express, actually.
+[16:27] <inimino> but if the indentation is anything like the indentation I use, you won't have to do anything but compare the indentation levels to determine whether one line is a continuation of the previous line or the start of a new statement
+[16:29] <maritz> It's actually a question about internal error handling. I've figured it out by now. :)
+[16:32] sudoer has joined the channel
+[16:38] shfx has joined the channel
+[16:39] dnolen has joined the channel
+[16:40] soveran has joined the channel
+[16:48] shiftb has joined the channel
+[16:56] johan-s has joined the channel
+[17:12] <maritz> wtf? somewhere in the execution of express+haml+foreach undefined is defined as "0" and all hell breaks loose.
+[17:13] <JimBastard> im sorry did you mean mustache.js?
+[17:14] <maritz> no
+[17:15] <jan____> JimBastard: if mustache.js had a budget, I'd hire you for evangelist :)
+[17:16] <maritz> yeah, he got me to read up on it now :D
+[17:17] <JimBastard> mustache.js is like, guess what your views will always have business logic and its gonna be JS
+[17:17] <JimBastard> im cool with that
+[17:17] <JimBastard> mustache.js is getting a shoutout in my presentation later
+[17:17] <jan____> \o/
+[17:18] <maritz> I thought you are drunk? Are you giving a presentation while being drunk or is later late enough that you'll be sober again?
+[17:19] <JimBastard> 404
+[17:19] <JimBastard> i better sober up
+[17:19] <JimBastard> its a 3 day hackathon...how am i suppose to not get drunk and stay up
+[17:21] bryanl has joined the channel
+[17:21] <maritz> okay, good point.
+[17:21] <JimBastard> :p
+[17:31] jchris has joined the channel
+[17:32] isaacs has joined the channel
+[18:19] cloudhead has joined the channel
+[18:27] isaacs has joined the channel
+[18:43] sixtus42 has joined the channel
+[18:44] scudco has joined the channel
+[18:55] binary42 has joined the channel
+[18:59] hassox has joined the channel
+[19:07] michaelk^ has joined the channel
+[19:23] shiftb has joined the channel
+[19:24] maritz has left the channel
+[19:25] felixge_ has joined the channel
+[19:40] aurynn has joined the channel
+[19:44] aurynn has joined the channel
+[19:49] malkomalko has joined the channel
+[20:20] binary42 has joined the channel
+[21:04] mikeal has joined the channel
+[21:08] bryanl has joined the channel
+[21:45] Pilate has joined the channel
+[22:10] bryanl has joined the channel
+[22:18] brandon_beacher has joined the channel
+[22:27] brandon_beacher has joined the channel
+[22:37] hassox has joined the channel
+[22:49] <hassox> good morning lads
+[22:49] <hassox> and ladies
+[22:50] chakrit has joined the channel
+[22:55] <bryanl> hey hassox
+[22:55] <bryanl> chains huh
+[22:55] <hassox> hey bryanl 
+[22:56] <bryanl> i've been investigating it...  trying to find something to try it with
+[22:56] <hassox> there's not much that's been implemented yet hey
+[22:56] <hassox> I want to get a link that does rendering
+[22:56] <bryanl> :)
+[22:56] <hassox> then I can have a decent play
+[22:57] <hassox> did you checkout the examples dir?
+[22:57] <bryanl> yes.  that is all i looked at really
+[22:58] <hassox> I tend to want to have some basic level constraints that I can use to make sure I can re-use stuff
+[22:59] <hassox> so I wanted something that actually suited node before I started sinking time into writing stuff
+[22:59] <hassox> I'm very open to feedback to make it awesome
+[23:10] brandon_beacher has joined the channel
+[23:16] gwoo_ has joined the channel
+[23:17] sixtus42 has joined the channel
+[23:26] isaacs_ has joined the channel
+[23:47] RayMorgan has joined the channel
+[23:48] Hannan_ has joined the channel
+[23:49] felixge has joined the channel
+[23:54] felixge has joined the channel

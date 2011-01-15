@@ -1,0 +1,1390 @@
+[00:00] stepheneb has joined the channel
+[00:03] joshholt has joined the channel
+[00:05] gf3 has joined the channel
+[00:15] kriskowal has joined the channel
+[00:17] BinaryPie has joined the channel
+[00:20] dnolen has joined the channel
+[00:22] Tim_Smart: isaacs: http://github.com/Tim-Smart/node/compare/28d8548...4fa02ec
+[00:24] isaacs: Tim_Smart: rather than doing this.__proto__ = GLOBAL; inside the code, why not just do sandbox = Object.create(global); and then hang stuff on it?
+[00:24] isaacs: eventually __proto__ will disappear, that's why i suggest it
+[00:25] Tim_Smart: isaacs: So you can go `global.test = 123; test === 123`
+[00:25] isaacs: that doesn't work when you extend the sandbox off of global outside the evalcx?
+[00:25] Tim_Smart: sandbox.__proto__ doesn't work
+[00:26] brainss has joined the channel
+[00:26] Tim_Smart: or does Object.create(global)
+[00:26] Tim_Smart: *Object.create(GLOBAL)
+[00:26] isaacs: weird.
+[00:27] Tim_Smart: Object.create() just seems to clone it
+[00:27] Tim_Smart: I'll try again
+[00:27] Tim_Smart: No wait, this !== sanbox
+[00:27] isaacs: well, don't do sandbox = { global : Object.create(GLOBAL) }
+[00:27] isaacs: oh, what's this?
+[00:28] Tim_Smart: *this !== sandbox
+[00:28] Tim_Smart: this has Function etc etc attached to it
+[00:28] dnolen has joined the channel
+[00:28] Tim_Smart: sandbox doesn't
+[00:28] isaacs: right, what's "this"?
+[00:29] Tim_Smart: The actual 'sandbox' context
+[00:29] isaacs: right, but that stuff gets attached when you create the v8::Context
+[00:29] isaacs: what's this branched off of? require-rewrite-wip?
+[00:29] Tim_Smart: yeah, for now
+[00:29] isaacs: kk, lemme poke at it a bit.
+[00:30] Tim_Smart: I'll make a test case that I am using
+[00:30] isaacs: kk
+[00:32] mde has joined the channel
+[00:32] keeto has joined the channel
+[00:33] blakemizerany has joined the channel
+[00:33] isaacs: Tim_Smart: ok, i see it.
+[00:33] bpot has joined the channel
+[00:33] Connorhd has joined the channel
+[00:33] stepheneb has joined the channel
+[00:33] atmos has joined the channel
+[00:33] al3x___ has joined the channel
+[00:33] hassox has joined the channel
+[00:33] cpojer has joined the channel
+[00:33] aho has joined the channel
+[00:33] silentrob has joined the channel
+[00:33] maushu has joined the channel
+[00:33] voodootikigod_ has joined the channel
+[00:33] dgathright has joined the channel
+[00:33] bronson has joined the channel
+[00:33] hober has joined the channel
+[00:33] softdrink has joined the channel
+[00:33] maritz has joined the channel
+[00:33] binary42 has joined the channel
+[00:33] MattJ has joined the channel
+[00:33] siculars has joined the channel
+[00:33] Aduros has joined the channel
+[00:33] Atmoz has joined the channel
+[00:33] kloeri has joined the channel
+[00:33] idoru has joined the channel
+[00:33] inarru has joined the channel
+[00:33] cadorn has joined the channel
+[00:33] beppu has joined the channel
+[00:33] nodejs_v8 has joined the channel
+[00:33] halorgium has joined the channel
+[00:33] emyller has joined the channel
+[00:33] stevebiscuit has joined the channel
+[00:33] mayerbacher has joined the channel
+[00:33] mrd` has joined the channel
+[00:33] webben has joined the channel
+[00:33] jan____ has joined the channel
+[00:33] isaacs: yeah, this !== sandbox, indeed.
+[00:33] steadicat has joined the channel
+[00:33] philippbi has joined the channel
+[00:33] unomi has joined the channel
+[00:33] leifkb has joined the channel
+[00:33] kloeri_ has joined the channel
+[00:33] pavelz has joined the channel
+[00:33] rtl has joined the channel
+[00:33] magcius_ has joined the channel
+[00:33] cloudhead has joined the channel
+[00:33] charlesjolley has joined the channel
+[00:33] stephenlb has joined the channel
+[00:33] kjeldahl has joined the channel
+[00:33] alex-desktop has joined the channel
+[00:33] blazzy has joined the channel
+[00:33] mediacoder has joined the channel
+[00:34] ashb has joined the channel
+[00:34] mattly has joined the channel
+[00:34] hellp has joined the channel
+[00:34] Tim_Smart: isaacs: These are my cases http://gist.github.com/343016
+[00:34] Tim_Smart: stupid net splits >.>
+[00:34] isaacs: srsly
+[00:35] isaacs: hey, can you write this as a standalone module that uses registerExtension to overwrite the default compiler?
+[00:36] isaacs: if you had a node-sandbox module, then you could just do require.registerExtension at the top of the module, and then load a bunch of tests and stuff
+[00:36] Tim_Smart: Yup, is this.require, this, this.exports, this.filename available etc?
+[00:36] Tim_Smart: (inside the registerExtension function that is)
+[00:37] brainss: what is the exports object used for?
+[00:37] isaacs: brainss: it's for exportin
+[00:37] Tim_Smart: Its for shipping the goods
+[00:37] isaacs: Tim_Smart: the registerExtension function is run via module.compile(), so this === module object
+[00:37] isaacs: the optimized sort of scope correction :)
+[00:37] Tim_Smart: wonderful
+[00:38] isaacs: Tim_Smart: there's nothing "special" about the .js compiler function your'e tinkering with now
+[00:38] Tim_Smart: So copy-paste should work fine in this situation
+[00:38] jfd has joined the channel
+[00:38] isaacs: module.js's bootstrapping just assigns it as a defalut
+[00:40] stalled has joined the channel
+[00:41] Tim_Smart: isaacs: Actually, I namespace the 'node globals', so this commit isn't fully securable to a single module
+[00:42] Tim_Smart: and moduleAsandbox.Function !== moduleBsandbox.Function, so I had to make one or two changes to events.js
+[00:43] isaacs: Tim_Smart: i'll pull in your changes to events.js
+[00:43] isaacs: i'm looking over the other stuff now
+[00:43] isaacs: i really want to have the door open to do evalcx separately
+[00:43] isaacs: otherwise i have a strong feeling it might derail this process, which is desparately needed now
+[00:44] isaacs: so that means giving you what you need to do it as a standalone experiment
+[00:44] isaacs: and then we can run through all the edge cases and load up every node program under the sun and so on, and even encourage people to play with it on their own before we make it hte default
+[00:45] isaacs: Tim_Smart: that sound ok to you?
+[00:46] isaacs: it's not so much that it's a big code change as that it's a weird env change
+[00:46] isaacs: i think it's the right way to go, but it's a weird move, so we should investigate a lot
+[00:46] Tim_Smart: Yeah. The only problem cases right now is the whole different context's thing
+[00:47] isaacs: the Function !== Function stuff?
+[00:47] Tim_Smart: yeah, between context's
+[00:47] isaacs: right
+[00:48] Tim_Smart: Yeah, for that reason, some test's are failing. I guess that is a good place to start
+[00:48] isaacs: yep :)
+[00:48] isaacs: failing tests are your best friend.
+[00:49] isaacs: well, second best.
+[00:49] Tim_Smart: :p Things like AssertionError instanceof Error etc fail
+[00:49] Tim_Smart: As AssertionError comes from a different module
+[00:50] softdrink has joined the channel
+[00:51] Tim_Smart: http://github.com/ry/node/issues/#issue/57/comment/127177 is a the main problem for the time being
+[00:52] Tim_Smart: (with the current system)
+[00:52] isaacs: hm.
+[00:53] isaacs: what if you copied ALL that crap into the sandbox?  does it still get overwritten?  or does that defeat the purpose of the sandbox, since I can now do something like Array.prototype.push = somethingEvil?
+[00:54] Tim_Smart: I'm not sure exactly. I guess something else to play with
+[00:56] isaacs: sure
+[00:57] isaacs: i think the evalcx stuff is more a senior thesis project than a sophomore homework assignment.
+[00:57] isaacs: the module rewrite is pretty trivial by comparison, even though it's a lot more lines of code being touched
+[00:58] Tim_Smart: isaacs: Yes, you can overwrite the sandbox instance stuff
+[00:59] isaacs: i think overwriting process.global is not ideal
+[00:59] isaacs: currently, that's the way that you pass globals from cland into jsland
+[01:01] blakemizerany has joined the channel
+[01:03] Tim_Smart: isaacs: OK, cleaned that up
+[01:03] isaacs: i pulled in your events.js change, btw
+[01:04] Tim_Smart: OK cool. I'm just going to go through the instanceof things, and see what are affected
+[01:04] isaacs: Tim_Smart: also, i got in touch with herby.  he hasn't been getting the emails flying back and forth
+[01:05] Tim_Smart: heh
+[01:05] Tim_Smart: weird, I swear we have been CC-ing him
+[01:05] isaacs: oh, we have been
+[01:05] isaacs: but i guess that email address doesn't go to him or something?  i dunno.
+[01:06] isaacs: he said his thoughts in brief about the progress thusfar was that my current impl is still too heavy.
+[01:06] isaacs: which i kinda agree with, i guess.
+[01:07] Tim_Smart: Hmm yeah, that is understandable
+[01:08] Tim_Smart: I just we can start from square one, make the most basic functionality that we need, then build off that
+[01:09] isaacs: yeah.
+[01:09] isaacs: i'm gonna give it a go tomorrow, i think
+[01:09] isaacs: so, basically, there are three things that need to happen: resolve, load, compile.
+[01:09] isaacs: and you need to be able to jump into any of those phases based on scheme or extension
+[01:09] isaacs: and we need to cache predictably, and comply with the modules/1.1 spec
+[01:11] Tim_Smart: yup, I think even if you start with a single require(), with no extras (async etc etc), and then do the other stuff one thing at a time
+[01:11] Tim_Smart: but that might be a bit counter-productive
+[01:11] isaacs: Tim_Smart: well, that's kind what i did, if you look at the commit history
+[01:13] Tim_Smart: Well if we have a couple implementations, then we can cross-review and make a uber implementation haha
+[01:14] Tim_Smart: Well, it would be nice to get herby involved as well
+[01:14] stepheneb has joined the channel
+[01:16] isaacs: yeah
+[01:20] isaacs: Tim_Smart: yo
+[01:21] isaacs: so... require.uncached.
+[01:21] Tim_Smart: It's not part of the spec, is dangerous, I say remove it :p
+[01:21] Tim_Smart: haha
+[01:21] isaacs: require() in general might be faster if we could cache at the resolve/load step
+[01:22] isaacs: but the problem there is that require.paths changes, and i need require("foo") to always be relative to whatever the current require.paths is set to at that moment.
+[01:22] isaacs: this is an edge case that will *definitely* arise eventually when people use modules together with npm, since it does a *lot* of require.paths juggling
+[01:24] Tim_Smart: Yeah, what is the current behaviour for multiple modules with the same name?
+[01:24] isaacs: you get teh cached one, even if require.paths changed
+[01:24] isaacs: the cache is based on the module.id, not the filename
+[01:25] isaacs: that's why i rewrote it
+[01:25] isaacs: :)
+[01:25] Tim_Smart: right, and before cached? Does it pick the first path it finds?
+[01:26] isaacs: so... if you require("foo"), you get the first of  require.paths  X [ foo.js, foo.node, foo/index.js, foo/index.node ]
+[01:26] isaacs: that behavior isn't changing
+[01:26] Tim_Smart: well you could always make the dirname / filename a getter
+[01:27] mjr_ has joined the channel
+[01:27] Tim_Smart: Put some logic in there that checks if it has moved
+[01:27] Tim_Smart: would have to be sync though :(
+[01:27] isaacs: so, i asked about that in the list.
+[01:28] rictic has joined the channel
+[01:28] isaacs: either (a) make the cache responsive to the module.id as well as the require.paths state, or (b) make the cache based on __filename, and do the lookup before retrieving from cache
+[01:29] isaacs: _ry and others weighed in that (a) is too complicated, and even though (b) is a bit slower, it's not so bad, since require() is load-time only
+[01:29] ditesh|cassini has joined the channel
+[01:29] Tim_Smart: Yeah (b) should be fine, except for require.async
+[01:29] isaacs: it's fine
+[01:29] isaacs: i just do the stat async
+[01:30] isaacs: so that's why i did.  it only short-circuits the resolve step when there's only a single absolute module ID stem
+[01:30] Tim_Smart: yeah, just have to have semi-duplicate logic
+[01:30] isaacs: that's why module.js is kinda big.
+[01:30] isaacs: there's a lot of semi-duplicate logic at a few steps
+[01:30] isaacs: but it's not so bad, really
+[01:30] isaacs: it's just that my return statements are like 6 lines instead of 1
+[01:31] isaacs: ohh.... hey... using evalcx means i can't return out of a module.
+[01:31] Tim_Smart: e.g.?
+[01:32] isaacs: http://github.com/isaacs/npm/blob/master/lib/utils/semver.js#L78
+[01:32] cedricv has joined the channel
+[01:32] isaacs: that's very handy
+[01:32] Tim_Smart: gotcha
+[01:32] isaacs: i can do node semver.js to run all the tests, but when i require() it in, i don't get those
+[01:32] Tim_Smart: A additional function wrapper can fix that
+[01:32] isaacs: it's a little bit like perl's __EOF__
+[01:34] Tim_Smart: (until native of doing it is introduced)
+[01:35] markwubben has joined the channel
+[01:35] Tim_Smart: isaacs: #commonjs seems to be discussing module loading atm
+[01:35] isaacs: yeah
+[01:35] isaacs: so, i also do stuff like if (module !== process.mainModule) return;
+[01:35] isaacs: if you have something that should only be run directly
+[01:36] Tim_Smart: isaacs: OK. I'll sneak in a (function() { ... })();
+[01:36] al3x___ has left the channel
+[01:37] isaacs: yeah, i'll just let #commonjs debate it, and then build what they spec if it works for us
+[01:37] isaacs: i like writing code more than writing specs.
+[01:37] isaacs: i'm just happy there are such smart people doing the hard work of naming shit.
+[01:37] isaacs: because naming shit is HARD.
+[01:37] Tim_Smart: :D Documentation is like the dished of cooking
+[01:37] Tim_Smart: *dishes
+[01:37] isaacs: totally
+[01:37] isaacs: i wanna cook and eat.
+[01:38] isaacs: if the #commonjs folks wanna clean up, that's great.  i'll take my pots and forks out of whichever drawer they put em in.
+[01:40] isaacs: Tim_Smart: so, i'm gonna try to comb through my module.js again tomorrow and see what i can clean up.  felix comes back friday, and herby will probably have some feedback at some point.  hopefully this weekend i'll be able to knit it all into a nice series of pretty patches.
+[01:41] Tim_Smart: Cool. Nothing a rebase can't fix
+[01:41] isaacs: yep
+[01:41] isaacs: i usually just dump a patch of the -wip branch, then create a new branch off master, apply the patch, and add it in pieces, so it looks like i just wrote 5 brilliant commits in final form all at once.
+[01:42] Tim_Smart: isaacs: I need to checkout which of these fail instanceof TypeError, Number, URIError, RangeError, ReferenceError, RegExp, Array, Date, Boolean, Error, String
+[01:42] Tim_Smart: and Function
+[01:43] Tim_Smart: and some others that missed my check >.>
+[01:43] Tim_Smart: grr
+[01:43] isaacs: i start work in 3 weeks, too...
+[01:44] isaacs: ugh
+[01:44] isaacs: and want to get npm to a 0.1.0 by that time
+[01:46] Tim_Smart: Yeah I want to get Web Workers implemented soon, with the ability to send fd's
+[01:46] Tim_Smart: But I got other stuff more important to do.. :(
+[01:47] stepheneb has joined the channel
+[01:51] JimBastard_ has joined the channel
+[01:53] CrockBot has joined the channel
+[01:54] JimBastard_: so Crockbot timed out and didn't reconnect....but the instance never stopped
+[01:54] JimBastard_: i think he needs a reconnect built in
+[01:54] JimBastard_: i thought Jerk would handle that
+[01:54] JimBastard_: Douglas Crockford
+[01:54] CrockBot: The government once tried to clone Crockford. They were only partially successful. The result, Chuck Norris.    ara_p
+[01:55] okito has joined the channel
+[01:56] jashkenas has joined the channel
+[01:57] JimBastard_: whaddup jashkenas 
+[01:57] jashkenas: howdy.
+[01:58] JimBastard_: have you met my dear friend Douglas Crockford?
+[01:58] CrockBot: I typed alert('The Master!'), and Douglas Crockford said &quot;Wassup?&quot;   DanielEricLee
+[01:58] JimBastard_: :-D
+[01:59] jashkenas: Nicely done. You're going to have to grab some more choice quotes at JSConf.
+[02:05] softdrink has joined the channel
+[02:06] Atmoz has joined the channel
+[02:07] sh1mmer has joined the channel
+[02:07] mattly has joined the channel
+[02:07] magcius_ has joined the channel
+[02:07] stephenlb has joined the channel
+[02:07] kjeldahl has joined the channel
+[02:07] alex-desktop has joined the channel
+[02:07] blazzy has joined the channel
+[02:07] mediacoder has joined the channel
+[02:10] jfd has joined the channel
+[02:13] brandon_beacher has joined the channel
+[02:13] stalled has joined the channel
+[02:16] sh1mmer has joined the channel
+[02:17] jashkenas has left the channel
+[02:22] dnolen_ has joined the channel
+[02:30] okito has joined the channel
+[02:34] gf3 has joined the channel
+[02:36] isaacs has joined the channel
+[02:46] RayMorgan has joined the channel
+[02:52] kriszyp has joined the channel
+[03:00] ditesh|cassini has joined the channel
+[03:01] softdrink has joined the channel
+[03:06] pedrobelo has joined the channel
+[03:09] cloudhead has joined the channel
+[03:29] sh1mmer has joined the channel
+[03:43] Gruni has joined the channel
+[03:47] Tim_Smart has joined the channel
+[03:48] aguynamedben has joined the channel
+[04:21] PyroPete1 has joined the channel
+[04:45] aguynamedben has joined the channel
+[04:46] steadicat has joined the channel
+[04:47] cloudhead has joined the channel
+[04:47] binary42 has joined the channel
+[05:14] isaacs has joined the channel
+[05:19] isaacs: Tim_Smart: hey, i just saw your email
+[05:20] isaacs: did i already answer your questions before in irc?
+[05:23] tiglionabbit has joined the channel
+[05:31] Tim_Smart: Yeah, I sent the e-mail before I asked in IRC, isaacs 
+[05:31] sh1mmer has joined the channel
+[05:32] isaacs: ah, gotcha
+[05:32] isaacs: figured
+[05:32] isaacs: i replied to the email with the bullet points, because IRC is like the wind, and email is my todolist
+[05:35] micheil has joined the channel
+[05:35] isaacs: jan____: http://twitter.com/janl/status/10505119832
+[05:36] isaacs: jan____: any idea what your size is? you're a few inches taller than me, iirc, and i have a pair of sprints that are just a bit too big.  apparently the only pair of size-43 sprints in the bay area.
+[05:37] jan____: isaacs: I bought mine today, I'm a 9/42
+[05:37] isaacs: ah, nice
+[05:37] isaacs: where'd you find them?
+[05:37] jan____: oakland kayak store
+[05:38] jan____: has plenty in stock
+[05:38] isaacs: ah
+[05:38] isaacs: if i'd known i would've headed up there.
+[05:38] isaacs: i ordered them from a kayak store in oregon
+[05:38] jan____: http://www.calkayak.com/location.cfm
+[05:38] isaacs: i got them today in the mail, but 43 is way too big forme.
+[05:38] jan____: yeah, I tried 10, they fit, but are a little loose
+[05:39] isaacs: i remeasured, and realized that i'd totally messed it up, and i should've ordered 40s
+[05:39] jan____: ouch, you may wanna drive up to oakland and do the in-store fitting
+[05:39] isaacs: well, it's more than i'd like to actually have them sooner.
+[05:40] jan____: that too :)
+[05:40] isaacs: if i drive to okl, i'll have them on my feet tomorrow
+[05:40] jan____: they are awesome btw.
+[05:40] isaacs: and i think i can still cancel the order.
+[05:40] isaacs: I KNOW RIGHT!?
+[05:40] jan____: if you do, drop by the office for lunch
+[05:40] isaacs: good idea!
+[05:40] kriskowal: ACTION has webbed feet
+[05:40] kriskowal: not really, but it would be funny in context if i did.
+[05:41] isaacs: hehe
+[05:41] isaacs: yeah, they say on the website that vibrams will not fit you with webbed toes
+[05:41] isaacs: otoh, you'd probably out swim me
+[05:42] kriskowal: i'll have to stick to artificial absurdity.
+[05:42] kriskowal: ACTION puts on his robe and wizard hat
+[05:43] kriskowal: over an hour without email. weird. crazy busy week.
+[05:43] kriskowal: maybe i've been banned form the commonjs mailing list
+[05:44] kriskowal: it was just a matter of time
+[05:53] Tim_Smart has joined the channel
+[05:53] RayMorgan has joined the channel
+[05:53] charlesjolley has joined the channel
+[05:53] jfd has joined the channel
+[05:53] rockstar has joined the channel
+[05:53] zuk has joined the channel
+[05:53] gbot2 has joined the channel
+[05:53] ivan has joined the channel
+[05:53] bjartek has joined the channel
+[05:55] Tim_Smart: Hmm.. so many net splits today.
+[05:56] isaacs: jan____: yeah, that's a good idea. i'll swing by.  i've got gtalk in the phone, so use that if you guys get hungry and decide to head out before i get there.
+[05:58] jan____: isaacs: will do
+[05:59] micheil has joined the channel
+[05:59] jan____: isaacs: warning tho: tomorrow might be crazy busy
+[05:59] isaacs: jan____: no worries.  i probably won't be there for more than lunch
+[06:00] isaacs: mostly i'm going to be going up that way for shoes :)
+[06:00] jan____: :)
+[06:02] isaacs: jan____: also, I might bail if any other kayak store nearer-by has them
+[06:03] isaacs: i hadn't thought to search for boat stores, i just called shoe and hiking type places, and they're ALL sold out, like, every single one of them
+[06:03] isaacs: literally between here and oregon
+[06:03] isaacs: i ordered mine from oregon
+[06:03] jan____: isaacs: yeah, if you happen to be around, drop by, if not, whatever :)
+[06:03] jan____: isaacs: the guy told me he gets calls from all over the country
+[06:03] isaacs: oh, i'm sure
+[06:03] isaacs: they go fast
+[06:03] isaacs: the vibram website is sold out atm
+[06:04] isaacs: unless you're very tiny or very huge
+[06:04] jan____: yea
+[06:04] jan____: tried to get the KSO Trek
+[06:04] jan____: no dice
+[06:04] isaacs: ah
+[06:04] isaacs: i ordered a pair of treks and a pair of sprints today
+[06:05] jan____: I have Flows now
+[06:05] isaacs: nie
+[06:05] isaacs: nice
+[06:05] jan____: I wanted black :)
+[06:06] isaacs: ah, so it WAS a kayak store i got them from, i guess
+[06:06] isaacs: http://kayakshed.blogspot.com/2010/03/vibram-fivefinger-availability-what.html
+[06:06] isaacs: they have size 40 treks
+[06:06] jan____: I checked the store locator on the vibram site
+[06:06] jan____: and just looked at the closest store
+[06:07] isaacs: you got lucky
+[06:07] isaacs: okl doesn't show up for me when i search there
+[06:07] jan____: very, I could bike to the store :)
+[06:08] jan____: i've put in the oakland zip code in the search
+[06:08] jan____: 94607
+[06:08] isaacs: hm.
+[06:09] isaacs: i'll make another round of phonecalls tomorrow morning, maybe i won't have to drive all the way up there.
+[06:09] isaacs: but it sounds like that might actually be the closest place.
+[06:09] cloudhead has joined the channel
+[06:10] isaacs: ACTION is embarrassingly excited at this new footwear
+[06:10] technoweenie has joined the channel
+[06:10] jan____: :)
+[06:27] bpot has joined the channel
+[06:38] mikeal has joined the channel
+[06:47] yatiohi has joined the channel
+[06:47] keeto has joined the channel
+[06:48] keeto has joined the channel
+[06:52] kennethkalmer has joined the channel
+[07:02] mikeal has joined the channel
+[07:02] dgathright has joined the channel
+[07:52] pdelgallego has joined the channel
+[07:58] javajunky has joined the channel
+[08:02] christkv has joined the channel
+[08:05] rnewson has joined the channel
+[08:07] kjeldahl has joined the channel
+[08:12] QuietKnight has joined the channel
+[08:25] tiglionabbit has joined the channel
+[08:29] tilgovi has joined the channel
+[08:29] micheil has joined the channel
+[08:29] kixxauth has joined the channel
+[08:29] tilgovi: Hey all. I'm trying to toss a little bit of my node library out into an addon
+[08:29] tilgovi: I have a static data member, constructor_template, on my class, just like I see done throughout the node code
+[08:30] tilgovi: I can require my module fine, but _as soon as_ I reference constructor_template I get undefined symbol: _ZN3MyClass20constructor_templateE trying to require it
+[08:30] tilgovi: so, right now I have everything necessary to set up the New() function commented and Initialize does diddly squat
+[08:31] tilgovi: obviously there is something silly I'm forgetting here
+[08:31] tilgovi: I just need another person to tell me what that is
+[08:31] teemow has joined the channel
+[08:36] tbassetto has joined the channel
+[08:37] kennethkalmer has joined the channel
+[08:38] kennethk_ has joined the channel
+[08:38] javajunky has joined the channel
+[08:39] tilgovi: turns out if I try to access *any* static variables on my class I get undefined references when I require it
+[08:39] tilgovi: what gives?
+[08:43] tilgovi: err, or really anything
+[08:43] tilgovi: Initialize is fine, but if I reference any static variables from Initialize on my class I get undefined references
+[08:43] Gruni has joined the channel
+[08:45] tilgovi: hmm
+[08:45] tilgovi: do I need C linkage maybe?
+[08:45] tilgovi: but where...
+[08:46] Tim_Smart: read http://nodejs.org/api.html#_addons?
+[08:49] Tim_Smart: And maybe a example C++ addon http://github.com/ry/node_postgres/blob/master/binding.cc
+[08:50] tilgovi: I have been...I think I may have found my answer here: http://stackoverflow.com/questions/272900/c-undefined-reference-to-static-class-member
+[08:53] tilgovi: yep :)
+[08:53] tilgovi: now to figure out why I can't reference the constructor
+[09:27] okito has joined the channel
+[09:30] tilgovi: holy crap
+[09:30] tilgovi: I just had to remove the destructor
+[09:30] tilgovi: once upon a time I thought I knew c++...
+[09:31] tilgovi: virtual destructors and crazy linker errors and non-existent references to initialized static variables...weeeeeeeiiirrrdddd stuff
+[09:54] ithinkihaveacat has joined the channel
+[10:02] keeto_ has joined the channel
+[10:04] MattJ has joined the channel
+[10:05] Tim_Smart: urgh, my addon is throwing compiler errors, even though it is the most minimal example
+[10:17] tilgovi: Tim_Smart: similar to mine?
+[10:17] tilgovi: maybe I can help
+[10:17] tilgovi: I fixed mine
+[10:17] tilgovi: But now I'm trying to figure out if I can overload javascript's comparison operators and implement them in C++ for my class
+[10:17] Tim_Smart: tilgovi: I fixed that, now the next thing... How do you extend the native prototypes from c++
+[10:17] tilgovi: what do you mean by native?
+[10:18] Tim_Smart: Object, Array, Function....
+[10:18] Tim_Smart: I'm not sure how you extract the Function templates from things
+[10:19] tilgovi: hmm
+[10:19] tilgovi: you want to extend Array?
+[10:19] tilgovi: I don't know if that's possible...
+[10:19] tilgovi: I mean, I guess it should be
+[10:19] tilgovi: I think you'd have to get at the prototype FunctionTemplate
+[10:20] tilgovi: might be a static member on the class
+[10:20] Tim_Smart: Yeah you to get at the FunctionTemplate
+[10:23] Tim_Smart: I'm still learning C++, so all this typing is giving me a headache haha
+[10:23] tilgovi: holy sh*****
+[10:23] tilgovi: you can just overload C++ operators on your addon classes
+[10:23] tilgovi: and it gets called when you use the operator in js
+[10:23] tilgovi: like < and >
+[10:23] tilgovi: oh wait
+[10:24] tilgovi: no
+[10:24] tilgovi: misread my output
+[10:24] tilgovi: doesn't work :-P
+[10:24] tilgovi: damn
+[10:29] Tim_Smart: tilgovi: http://code.google.com/p/v8-juice looks interesting
+[10:30] tilgovi: huh
+[10:30] tilgovi: yeah
+[10:36] tilgovi: oh wow. I don't even neeeed to compare these things in C++
+[10:36] tilgovi: I think I can do the rest from JS
+[10:36] tilgovi: :)
+[10:37] tilgovi: but I need to sleep now
+[10:37] tilgovi: good luck Tim
+[10:55] magcius has joined the channel
+[11:13] chakrit has joined the channel
+[11:15] bronson has joined the channel
+[11:15] spoob has joined the channel
+[11:17] jbrantly has left the channel
+[11:20] okito has joined the channel
+[11:25] rnewson has joined the channel
+[11:27] hellp has joined the channel
+[11:54] keeto has joined the channel
+[12:00] shirro has joined the channel
+[12:10] kriszyp has joined the channel
+[12:14] stalled has joined the channel
+[12:17] hassox has joined the channel
+[12:28] pmuellr has joined the channel
+[12:31] QuietKnight has joined the channel
+[12:33] jbrantly has joined the channel
+[12:40] ssteinerX has joined the channel
+[13:01] kjeldahl has joined the channel
+[13:14] stepheneb has joined the channel
+[13:14] unomi has joined the channel
+[13:16] joshbuddy has joined the channel
+[13:19] binary42 has joined the channel
+[13:24] jherdman has joined the channel
+[13:31] kjeldahl has joined the channel
+[14:00] Ramone: anybody running on ubuntu?  I'm wondering how to get around the gnutls >= 2.5.0 failure
+[14:04] lifo has joined the channel
+[14:10] rtl has joined the channel
+[14:15] gsf: Ramone: not exactly sure about ubuntu, but this is what i have on my debian machine: https://gist.github.com/2c307025ad6685b9bb1e
+[14:15] gsf: Ramone: the two in the middle are probably all you need
+[14:18] gf3 has joined the channel
+[14:31] aryounce has joined the channel
+[14:37] softdrink has joined the channel
+[14:37] jbrantly: I know there's been some talk of implementing async require in Node.js, but it hasnt happened yet, correct? And if so, is it Modules/Async/A?
+[14:46] binary42 has joined the channel
+[15:01] softdrink has joined the channel
+[15:03] alex-desktop has joined the channel
+[15:04] pdelgallego has joined the channel
+[15:04] tbassetto has left the channel
+[15:05] confounds has joined the channel
+[15:12] drostie has joined the channel
+[15:12] sh1mmer has joined the channel
+[15:13] n8o has joined the channel
+[15:14] johan-s has joined the channel
+[15:15] johan-s has joined the channel
+[15:15] johan-s has joined the channel
+[15:15] johan-s has joined the channel
+[15:16] johan-s has joined the channel
+[15:16] cpleppert has joined the channel
+[15:16] johan-s has joined the channel
+[15:17] johan-s has joined the channel
+[15:17] johan-s_ has joined the channel
+[15:21] sixtus42 has joined the channel
+[15:28] tbassetto has joined the channel
+[15:28] tbassetto has left the channel
+[15:29] pmuellr has joined the channel
+[15:40] JAAulde has joined the channel
+[15:40] JAAulde has joined the channel
+[15:40] RayMorgan has joined the channel
+[15:49] ditesh|cassini has joined the channel
+[16:00] cloudhead has joined the channel
+[16:06] sh1mmer has joined the channel
+[16:13] JimBastard: nice Crockford didn't die
+[16:13] CrockBot: Douglas Crockford does not respond to email. You can only reach him through a JSONP callback.   zoompf
+[16:15] bpot has joined the channel
+[16:16] callen: jbrantly: there's an independent tool you can use to get an async require.
+[16:16] callen: jbrantly: it's not yet built into node by default though.
+[16:16] _ry: jbrantly: it's there
+[16:16] callen: _ry: they integrated one into node.js?
+[16:18] jbrantly: does it follow the require.ensure proposal?
+[16:19] _ry: i don't know what the require.ensure proposal is
+[16:19] steadicat has joined the channel
+[16:19] _ry: require.async() should be working though
+[16:20] jbrantly: _ry: looks like they changed it from require.async to require.ensure, but cool, thanks
+[16:20] jbrantly: _ry: http://wiki.commonjs.org/wiki/Modules/Async/A
+[16:23] indiefan has joined the channel
+[16:23] mikeal has joined the channel
+[16:23] nefD has joined the channel
+[16:24] _ry: um.. ok
+[16:27] kriszyp: yeah, I am not sure why the name change, doesn't seem that helpful
+[16:27] rtl has joined the channel
+[16:28] brapse has joined the channel
+[16:31] ashb: looks like tobie changed it
+[16:31] ashb: http://wiki.commonjs.org/index.php?title=Modules/Async/A&diff=2515&oldid=2496
+[16:31] jbrantly: reading the IRC log doesn't help
+[16:31] ashb: 'Given the semantic shift this method has taken thanks to Wes Garland's suggestions, the name "require.async" no longer seemed appropriate. We ended up agreeing on "require.ensure" instead.'
+[16:33] okito has joined the channel
+[16:33] jbrantly: there's almost an hour's gap between the first mention of it, and then the finalization of it, with pretty much no discussion of it in-between
+[16:34] ashb: i'll ask Wes
+[16:34] callen: jbrantly: /lastlog
+[16:34] callen: disconnects time from subject.
+[16:35] _ry: it's rather debatable whether an async require is useful at all given the fact that all programs are now using the sync one.
+[16:35] callen: _ry: avoiding blocking calls of any kind, especially in something you're linking to, is important for how the system functions.
+[16:36] callen: _ry: laziness is what made node.js necessary. no need to infect it with the same attitudes.
+[16:37] _ry: i mean - it's an all or nothing sort of thing
+[16:37] callen: that's my point, and why it's important.
+[16:37] ashb: _ry: once the alterinative is know and usable/stable i'm sure it will get used
+[16:37] _ry: i doubt it
+[16:37] isaacs has joined the channel
+[16:37] callen: anything using a blocking call, including a require, should be clearly marked with a huge warning sign and avoided. any 3rd party libs for node.js that still use the synchronous requires should be converted immediately.
+[16:39] silentrob has joined the channel
+[16:40] _ry: i'd like to make it an error to call require() once you're in the event loop
+[16:40] callen: _ry: I'd tend to agree.
+[16:41] _ry: so it can't be used while a program is busy doing stuff...
+[16:41] callen: if the purity of the callbacks isn't maintained, it could be for nought.
+[16:42] joshbuddy has joined the channel
+[16:42] joshbuddy has joined the channel
+[16:55] javajunky: _ry: any ideas on when you're planning the next release of node (which I assume will be off TIP)  ? 
+[16:56] aguynamedben has joined the channel
+[16:58] mjr_ has joined the channel
+[17:02] tbassetto1 has joined the channel
+[17:03] orlandov has joined the channel
+[17:04] kjeldahl_ has joined the channel
+[17:09] dgathright has joined the channel
+[17:10] ashb: http://arewefastyet.com/ interesting
+[17:11] ashb: (x axis is check out date, with most recent to the right)
+[17:11] mikeal has joined the channel
+[17:12] JimBastard: they are ordering lunch at my company and i told the secretary i wanted Fudgey the Whale or Cookiepuss. she said no so i threatened to file a work greviance  
+[17:13] ashb: JimBastard: bit of advice. never piss of the Secretary
+[17:13] JimBastard: i think this in fact did the exact opposite
+[17:14] ashb: hope you dont want to get any packages delivered to your office then ;)
+[17:15] CodeOfficer has joined the channel
+[17:15] callen: JimBastard: the name seems appropriate.
+[17:16] JimBastard: www.jimbastard.com
+[17:16] KungFuHamster: Jim was finishing his schoolwork before any of his classmates and was he was getting perfect scores
+[17:17] KungFuHamster: ACTION can't help proofreading
+[17:17] JimBastard: ahahah shit, that sites been up for years
+[17:17] JimBastard: i hope i didnt push a bad version when i moved servers
+[17:18] JimBastard: http://nymag.com/news/features/27341/index5.html 
+[17:18] _ry: javajunky: not this week
+[17:18] JimBastard: KungFuHamster: ill update when i get home for sure
+[17:18] tbassetto1 has left the channel
+[17:19] KungFuHamster: no worries mate, I enjoy irony
+[17:19] javajunky: _ry: ok thanks, are you waiting on the fallout from the net2 merge or do you have something else planned ?
+[17:20] bronson has joined the channel
+[17:20] _ry: javajunky: there are just lots of bugs at the moment, and I don't have to much time to look at them
+[17:21] _ry: which is fallout from the net2 merge
+[17:21] javajunky: ;) time the great leveller :) 
+[17:21] _ry: it needs to settle down a bit
+[17:21] _ry: + fixes
+[17:28] rtl has joined the channel
+[17:33] sztanpet has joined the channel
+[17:36] callen: JimBastard: what's that site hosted on, an arduino from kenya? Here's a nickle kid, get yourself a real computer.
+[17:41] unomi has joined the channel
+[17:42] rauchg has joined the channel
+[17:49] lifo has joined the channel
+[17:49] joshbuddy_ has joined the channel
+[17:49] joshbuddy_ has joined the channel
+[17:51] dgathright has joined the channel
+[17:55] CIA-77: node: 03Ryan Dahl 07master * r6740dd4 10/ lib/buffer.js : Change Buffer toString() output - http://bit.ly/9VGqYz
+[17:55] CIA-77: node: 03Ryan Dahl 07master * r48f5f77 10/ (180 files in 14 dirs): Update to V8 2.1.9.1 - http://bit.ly/aKXv5s
+[17:59] tmpvar has joined the channel
+[18:10] indiefan_ has joined the channel
+[18:12] atmos has joined the channel
+[18:19] maritz has joined the channel
+[18:24] unomi has joined the channel
+[18:29] admc has joined the channel
+[18:31] tisba has joined the channel
+[18:34] tilgovi has joined the channel
+[18:36] maritz has joined the channel
+[18:39] JimBastard: whats up callen ?
+[18:39] JimBastard: are you getting slow speeds?
+[18:39] JimBastard: im using some BS ruby shit
+[18:40] callen: JimBastard: I'm trolling you bro.
+[18:41] callen: JimBastard: funny that you'd use ruby and you're in node.js :P
+[18:41] JimBastard: funny that a site i setup 3 years ago wouldnt be running node.js ?
+[18:41] JimBastard: really that site should be parked behind nginx anyway, its all static
+[18:41] softdrink: any idea if there's a way to put the terminal into raw mode from within node?
+[18:41] callen: JimBastard: can't convert the site?
+[18:42] _ry: softdrink: you need termcap bindings
+[18:42] _ry: softdrink: we don't have that
+[18:42] softdrink: doh
+[18:42] softdrink: do you know if anyone is working on it?
+[18:42] _ry: i don't think so
+[18:43] _ry: why do you want that?
+[18:43] rolfb has joined the channel
+[18:43] softdrink: i want to write a sexy server monitor
+[18:46] callen: JimBastard: static + nginx would be more sensible.
+[18:46] JimBastard: thanks callen 
+[18:47] callen: JimBastard: ?
+[18:47] JimBastard: thanks
+[18:47] callen: don't think for a moment I'm doing you any favors by directing you to nginx. the documentation is made of tears, blood and russian fangs.
+[18:47] JimBastard: thanks
+[18:47] mjr_: I'd like to have termcap, or actually just curses in node.
+[18:47] callen: JimBastard: thanks.
+[18:47] JimBastard: np
+[18:48] callen: JimBastard: y/w
+[18:48] mjr_: curses coupled with repl could be a big win
+[18:49] softdrink: fo' sho'.
+[18:50] softdrink: a commandline firebug-esque thingy would be very nice.
+[18:52] brapse has joined the channel
+[18:53] dnolen has joined the channel
+[18:54] indiefan has joined the channel
+[18:56] JimBastard: whats up softdrink ?
+[18:56] JimBastard: there is a web console for node
+[18:56] JimBastard: node_debug
+[18:56] JimBastard: two builds, Connorhd and mine
+[18:57] JimBastard: im not sure what you mean by curses
+[18:57] softdrink: yeah i saw those… but i don't want to just open that up to the world, and i don't want to have to hide it behind some sort of auth
+[18:58] softdrink: curses = terminal manipulation stuff.. think "nethack" ;)
+[18:58] softdrink: (also… node-based nethack anyone? :D)
+[18:59] RayMorgan has joined the channel
+[18:59] JimBastard: so softdrink thats the biggest issue with node_debug is that its open
+[19:00] JimBastard: whats wrong with setting up an auth? or an htaccess? i could add session support to node_debug
+[19:00] JimBastard: so it has a simple login
+[19:00] JimBastard: i mean if you are going to have a console open to your node instance, you have to protect it somehow
+[19:00] unomi has joined the channel
+[19:02] softdrink: yeah that's one reason i wanted to have the monitor running behind screen over ssh :)
+[19:02] isaacs has joined the channel
+[19:03] JimBastard: i dont see the benefit you would get over ssh instead of browser
+[19:03] JimBastard: in my version of node_debug i setup a lot of cool clicky click draggy drag stuff
+[19:03] JimBastard: and history, code snippets, etc
+[19:03] JimBastard: clickable object exploration
+[19:03] mjr_: that sounds cool.  I'll have to check it out.
+[19:04] JimBastard: i need to update for head for sure, i think Connor's build is up to date
+[19:04] mjr_: I mostly want it as a monitor and less of a debugger.
+[19:04] cedricv has joined the channel
+[19:04] JimBastard: it doesnt really debug
+[19:04] mjr_: A regularly updating monitor for very app-specific stuff.
+[19:04] JimBastard: you can do debug.log() statements
+[19:04] mjr_: like top or mtr.
+[19:04] JimBastard: yeah
+[19:04] JimBastard: node_debug might be good for you
+[19:05] softdrink: mjr_:  likewise… basically something htop-like, where i can see the load, open comet connections, number of users logged in, etc
+[19:06] JimBastard: yeah thats the kind of stuff i started to add
+[19:06] JimBastard: i should take a weekend and update node_debug
+[19:06] JimBastard: open connections, total requests served
+[19:06] JimBastard: number of sessions
+[19:07] softdrink: *nod* just some nice statistics
+[19:07] sh1mmer has joined the channel
+[19:08] Connorhd: I wonder if I should rename node_debug
+[19:08] JimBastard: to like node_console or something?
+[19:08] Connorhd: since its failing quite hard at being a debugger
+[19:08] Connorhd: yeah
+[19:08] Connorhd: maybe node_webconsole
+[19:08] JimBastard: you still dont like my UI right?
+[19:08] Connorhd: no, sorry :P
+[19:09] Connorhd: I prefer to keep it simple
+[19:09] softdrink: node_webconsole sounds good
+[19:09] JimBastard: yeah, i just hate the idea of two projects that do the same shit
+[19:09] joshbuddy has joined the channel
+[19:09] JimBastard: but i guess there is nothing wrong with healthy competition
+[19:09] JimBastard: its pretty much the same backend
+[19:10] softdrink: i say hack out a few versions and see where everyone meets
+[19:11] Connorhd: softdrink: me and JimBastard appear to have pretty opposing design views ;)
+[19:12] softdrink: hehe
+[19:12] JimBastard: i just wanted to hacker like green and black shit
+[19:12] javajunky has joined the channel
+[19:12] JimBastard: with resizable and draggable interfaces
+[19:12] JimBastard: Connorhd's is a more simplistic approach
+[19:12] mattly: commonjs question, applicible to node:
+[19:12] pedrobelo has joined the channel
+[19:13] mattly: if i modify the load path in one module, and then require that in another module, does it inherit the load path modifications?
+[19:13] softdrink: JimBastard:  whyyyyyy did i see dreamweaver in the video?
+[19:13] JimBastard: ahahahahaha
+[19:13] JimBastard: dreeeaaaammweeaaver helps me make web pages like it was 2001 (sung to dreamweaver)
+[19:14] okito has joined the channel
+[19:14] JimBastard: just happened to be the machine i was on
+[19:14] softdrink: ah
+[19:14] softdrink: ACTION pets his beloved vim
+[19:14] Connorhd: softdrink: http://connorhd.co.uk/wp-content/uploads/2010/01/node_debug21.png
+[19:14] Connorhd: thats what my version looks like
+[19:14] softdrink: *nod* saw it :)
+[19:14] Connorhd: just a line to enter commands
+[19:14] Connorhd: cool :)
+[19:15] JimBastard: Connorhd are you planning to add any new features or anything like that
+[19:15] JimBastard: because my orignial idea was to start building a node web ide from my build
+[19:15] rdrake has joined the channel
+[19:16] Connorhd: JimBastard: I had a couple of things I wanted to add, and I also think a web ide would be cool, but I'd probably make another project for that
+[19:17] JimBastard: would you have any interest in collaborating with me on that?
+[19:17] JimBastard: maybe your build could be the minimal defacto web console
+[19:17] JimBastard: and mine could be more of the ide
+[19:17] gf3: crockbot
+[19:17] gf3: oh noes
+[19:17] JimBastard: Douglas Crockford
+[19:18] CrockBot: Don't call Douglas Crockford if you plan to use eval(). He will call you.   oanat
+[19:18] gf3: ahh
+[19:18] Connorhd: yeah, I'd like to say yes, but I don't think I have time right now
+[19:18] JimBastard: i should add his name as a trigger
+[19:18] Connorhd: my personal todo list grows every day 
+[19:18] JimBastard: thats cool, i just dont like having two builds with the same name that almost do the same thing
+[19:18] JimBastard: confusing
+[19:18] softdrink: Connorhd:  i know the feeling :(
+[19:18] JimBastard: ill update my node_debug over the weekend if i can and we can talk next week
+[19:18] JimBastard: about renaming and what not
+[19:19] JimBastard: how does that sound?
+[19:19] Connorhd: sure
+[19:19] JimBastard: awesome
+[19:19] aryounce has joined the channel
+[19:19] binary42 has joined the channel
+[19:20] sh1mmer has joined the channel
+[19:20] maushu has joined the channel
+[19:20] softdrink: ah well, at least this works:    stty raw -echo; node foo.js; stty -raw echo
+[19:22] softdrink: bbl. meeting.
+[19:22] isaacs: softdrink: what's stty raw?
+[19:22] isaacs: oh, have fun
+[19:22] JimBastard: dammit when does felix get back
+[19:23] JimBastard: if i dont get dirty soon im gonna have a stroke
+[19:23] mikeal has joined the channel
+[19:23] JimBastard: stupid open-source authors doing free work for everyone
+[19:23] isaacs: JimBastard: tomorrow, i bliee
+[19:23] isaacs: believe
+[19:23] JimBastard: ahaha nice
+[19:23] james has joined the channel
+[19:29] callen: JimBastard: get...dirty?
+[19:30] JimBastard: node-dirty
+[19:30] JimBastard: v2
+[19:31] callen: JimBastard: do you have a specific use-case for using Redis?
+[19:31] JimBastard: huh
+[19:32] callen: the redis instance would have to be local unless you implemented an API, something that node.js is admittedly good at, but jesus.
+[19:32] callen: JimBastard: what exactly do you think node-dirty uses for a database?
+[19:32] JimBastard: a flat json file?
+[19:32] callen: yes, but it's just like redis.
+[19:32] teemow has joined the channel
+[19:32] callen: in-memory, basic kv.
+[19:32] callen: persistence and networking are unaddressed matters with it.
+[19:33] callen: you can push to disk, although I don't know how fault tolerant that is.
+[19:33] JimBastard: do you know what you are talking about? i cant tell
+[19:33] JimBastard: node-dirty uses an append only process to the flat-file with a cleanup routine
+[19:33] callen: it flushes asychronously.
+[19:34] JimBastard: sure
+[19:34] javajunky has joined the channel
+[19:34] callen: JimBastard: okay, so why?
+[19:34] JimBastard: uhh
+[19:34] JimBastard: JSON.parse() is syncronous
+[19:34] JimBastard: and stringify
+[19:34] callen: JimBastard: there are more reliable alternatives for persisting data and native json objects.
+[19:34] callen: you can do a flat schema in mysql + db-slayer.
+[19:35] JimBastard: so yeah callen i need a 100% embeddable solution
+[19:35] JimBastard: its for hook.io
+[19:35] dnolen has joined the channel
+[19:35] JimBastard: so people can clone hook.io and type node server.js
+[19:35] JimBastard: so if you know a better way i can embed a simple db please let me know
+[19:35] callen: JimBastard: well that's what I'm questioning, the embedded nature of it.
+[19:35] JimBastard: because if i have to install more software im using mongo
+[19:36] callen: mongo sounds more sensible.
+[19:36] JimBastard: its a core feature of hook.io
+[19:36] JimBastard: to be able to clone and run without any other software but node
+[19:36] mikeal: is this redis vs mongo?
+[19:36] JimBastard: no mikeal 
+[19:36] JimBastard: its callen  versus my business logic (which he doesnt know)
+[19:36] mikeal: haha
+[19:37] mikeal: if you want something embedded with no install you could use dirty
+[19:37] mikeal: if you're using node.js
+[19:37] JimBastard: OHH REALLY
+[19:37] JimBastard: THANKS
+[19:37] mikeal: haha
+[19:37] JimBastard: read up man
+[19:37] mikeal: i'm interested in what the use case for Mongo is
+[19:37] mattly: heh
+[19:37] mikeal: because i honestly haven't seen one
+[19:37] mikeal: ever
+[19:37] mattly: mikeal: seriously
+[19:38] jherdman has joined the channel
+[19:38] JimBastard: callen:  have you seen http://hook.io ?
+[19:38] JimBastard: and the github repo?
+[19:38] mikeal: you need to store data, not in memory, but not in a state that is actually consitent, with no guarantees
+[19:38] sztanpet has joined the channel
+[19:38] mikeal: i've seen the site
+[19:38] mikeal: haven't looked through the github repo
+[19:38] mikeal: uh oh, api tests are failing :( http://hook.io/test.html
+[19:39] mattly: mikeal: the use case is, you're coming away from SQL and want something that allows for similar querying semantics, but you don't actually care about data integrity
+[19:39] callen: mikeal: better troll than I ever dreamed I could be.
+[19:39] callen: ACTION tips hat
+[19:39] mikeal: if you want something to hold your hand, sure
+[19:39] mattly: or at least not enough to really investigate the tradeoffs you're making
+[19:39] mikeal: but if you don't care about integrity I think there are better solutions that are targetted
+[19:39] mattly: right
+[19:40] mikeal: like redis
+[19:40] JimBastard: mikeal: considering we havent released v0.1 yet i think our test coverage is pretty good
+[19:40] mattly: mikeal: so my ex-co-workers are rewriting the company's flagship product on top of mongo
+[19:40] mattly: i tried so very hard to get them to reconsider
+[19:40] mikeal: i think the main thing people like about mongo is that the writes are as fast as socket.write() because they don't even have responses, so in your Ruby or Python app where every write is blocking a thread it looks incredibly fast
+[19:40] mattly: right
+[19:41] mikeal: i don't really understand the whole handholding SQLish thing, but I'm kinda crazy
+[19:41] mikeal: most people should probably not listen to me
+[19:42] mikeal: but it's not like i just hate everything that isn't CouchDB
+[19:42] callen: mikeal: I actually like kv and doc stores better than full-blown SQL for most use-cases, especially embedded ones. I just like harassing people with arrogant websites.
+[19:42] mikeal: i love Redis
+[19:42] mikeal: it's awesome
+[19:42] mikeal: dirty is awesome too
+[19:42] callen: mikeal: I used bdb for embedded databases before nosql was cool. :(
+[19:42] callen: (like everyone else under the sun...)
+[19:42] mattly: redis is major awesome
+[19:42] mikeal: i was at OSAF working on Chandler project for two years
+[19:42] JimBastard: http://en.wikipedia.org/wiki/Object-relational_impedance_mismatch
+[19:42] mjr_: It is hard to un-learn how to think about databases.
+[19:42] JimBastard: i think thats the big issue
+[19:42] mikeal: using Andi's crazy custom object persistence database build on bdb
+[19:43] mattly: JimBastard: yep
+[19:43] JimBastard: because who wants to build an ORM
+[19:43] mattly: most ruby/pythonistas i think really just want an object database
+[19:43] callen: mikeal: you read about how friendfeed flattened their schema and made a pseudo ODB in mysql?
+[19:43] callen: mattly: oh yes they do. hahaha.
+[19:43] mikeal: yeah, i that was awesome
+[19:43] mikeal: they basically turned it into a key/value store
+[19:43] callen: mikeal: sorta. it's a hashed pickled python object.
+[19:43] mikeal: but like, Redis in a year will be WAY better at that
+[19:43] callen: and coompressed.
+[19:44] mjr_: I thought they did with mysql vs. something nosql was because of the "mysql is a mature and known to be fast storage engine" argument.
+[19:44] callen: mattly: my coworkers would love nothing more than to insert arbitrary instance variables into things.
+[19:44] mattly: callen: oh god
+[19:44] callen: mjr_: it was a gradual migration issue.
+[19:44] mikeal: when they finish the virtual memory stuff the size limit is going to be big enough to handle the friendfeed use case
+[19:44] callen: mjr_: they didn't do it for all data, just for things that needed to be fast and flat.
+[19:44] mattly: instance variables are the lynchpin for me falling out of love with ruby
+[19:44] callen: mjr_: that didn't want to support two sets of infrastructure, so they made hashed objects.
+[19:44] mikeal: they wanted the MySQL btree but they really just needed a key/value store
+[19:44] mikeal: so they turned it in to that
+[19:45] mikeal: it's an exact match for what they wanted to do
+[19:45] callen: mjr_: I don't mind monkeypatching, but the way the ruby community *abuses* it turns me off.
+[19:45] mjr_: I'm glad I don't have to think about sql much anymore.
+[19:46] mattly: callen: that too
+[19:46] mikeal: i really like how many crazy database there are now
+[19:46] callen: mjr_: pffft. I have multiple mysql databases at work to manage. and migrations. :|
+[19:46] mikeal: i'm a little pessimistic about all the Dynamo and BigTable clones
+[19:47] callen: it's hilarious how fearful they are of the solaris machine.
+[19:47] mikeal: but people are doing cool stuff other than that
+[19:47] callen: mikeal: for big-scale I'm a bigger fan of cassandra.
+[19:47] JimBastard: based on what i've seen and heard, i think the Mongo guys are the most well organized right now
+[19:47] mikeal: I'm not a fan of things that scale up and not down
+[19:47] callen: mongo isn't 100% partition tolerant yet though, is it?
+[19:47] callen: mikeal: that's why I don't actually use it.
+[19:47] mikeal: because I'm highly skeptical you have Amazon or Google's scaling problems
+[19:47] JimBastard: not sure
+[19:47] callen: mikeal: read above.
+[19:48] callen: mikeal: I don't, hence I don't use it.
+[19:48] mjr_: Since we aren't talking about node or JavaScript anymore, can someone explain to me the apparent lack of enthusiasm for riak?
+[19:48] JimBastard: i mean wtf guys, why cant we all just MS SQL SERVER 2005?!?!?!
+[19:48] callen: mikeal: cassadra was used to replace the caching backend that bdb+memcachedb used to manage for a site recently.
+[19:48] mikeal: riak is another Dynamo clone
+[19:48] mikeal: they are all about GIANT scale and don't care at all about scaling down
+[19:48] callen: mjr_: ^^ that and the rails/ruby obsession clouding it.
+[19:48] mikeal: so it's really not interesting unless your at like Facebook scale
+[19:49] mikeal: time to eat!
+[19:49] confounds has joined the channel
+[19:49] mikeal: JimBastard: you laugh but MS SQL Server kicks the hell out of all the other SQL benchmarks
+[19:49] mikeal: it's just like 10 grand per box you wanna run it on :)
+[19:50] JimBastard: yeah i mean , that depends on what your definitions of the words "kicks" "other" and "benchmarks" mean
+[19:51] callen: I'll be honest, I used to work in .NET, and a well-configured MS SQL Server is damned impressive, but so is a hacked up MySQL setup built by a wizard.
+[19:51] callen: or Postgres for that matter.
+[19:51] callen: Postgres has some crazy shit.
+[19:57] rolfb has joined the channel
+[19:57] kixxauth: Object Relational Mapping is the Vietnam of computer science.
+[19:58] mattly: nice
+[19:58] mjr_: Hopefully ORM will also yield a series of kick ass movies.
+[19:58] kixxauth: all this new fangled db stuff just simply taked the relational part out of ORM
+[19:59] mattly: i think it's really object mapping in general
+[19:59] callen: mattly: which goes back to what I said, that's what programmers secretly want.
+[19:59] mattly: right
+[20:00] BRMatt has joined the channel
+[20:00] callen: mattly: the real secret sauce to be found is in finding the balance between schema flexibility and discipline.
+[20:00] mattly: well mot all programmers necessarily
+[20:00] rolfb has joined the channel
+[20:00] callen: mattly: because trust me, the people I work with? we'd have our data gerfuckt in two weeks.
+[20:00] callen: mattly: not all, but many would like a more flexible data model.
+[20:00] callen: mattly: I work in django, and the manual migrations are an irritant.
+[20:00] mattly: heh
+[20:00] callen: my coworkers refuse to learn south, so that option's out.
+[20:00] callen: (rage)
+[20:01] mattly: i've been a rails guy for the past five years
+[20:01] callen: I tried it. couldn't get into it.
+[20:01] callen: too much magic.
+[20:01] sveisvei has joined the channel
+[20:01] mattly: and some of the things people use callbacks/ivars for in their models...
+[20:01] mattly: well
+[20:01] callen: I like ruby, just not the libraries built on it.
+[20:01] mattly: it's like telling a box to ship itself to germany
+[20:02] voxpelli-laptop has joined the channel
+[20:06] JimBastard: drop.io is adversting for JS jobs again
+[20:06] Gruni has joined the channel
+[20:07] mrjjwright has joined the channel
+[20:07] JimBastard: fuck those gusy
+[20:07] callen: JimBastard: what's your complaint?
+[20:07] JimBastard: i tell everyone i meet not to apply there
+[20:07] JimBastard: i got stood up twice for a job interview with the founder (which he setup both times)
+[20:07] JimBastard: and like, i dont care about not getting a job
+[20:07] callen: wowowow.
+[20:07] JimBastard: getting jobs is easy
+[20:08] JimBastard: im really pissed about the disrepect
+[20:08] callen: hahaha. that is ridic unprofessional.
+[20:08] JimBastard: my time is not worthless
+[20:08] callen: I would be too @ disrespect. jesus.
+[20:08] isaacs: JimBastard: totally.  getting stood up kinda ruins your afternoon
+[20:08] JimBastard: like i was really poor at the time too
+[20:08] JimBastard: spending my last dollars on a subway pass or a taxi ride
+[20:08] JimBastard: not cool
+[20:08] isaacs: JimBastard: apparently he was, too
+[20:08] mrjjwright: ready to write another small little lib that uses child process.  Debating whether I should update to ry/master and use the new child process api.  Is it stable enough?  I use about a dozen other node libs that could break but kind of anxious to update them anyway.  Is it too soon?
+[20:08] callen: JimBastard: where are you located?
+[20:08] JimBastard: ncy
+[20:09] callen: JimBastard: I work in midtown manhattan.
+[20:09] callen: I didn't know drop.io was in NY.
+[20:09] JimBastard: BK
+[20:09] JimBastard: im at 31st and 8th now
+[20:09] JimBastard: do you goto nyc.js?
+[20:09] callen: BX. I live in the land of big buildings.
+[20:09] callen: I work at 27th and broadway
+[20:09] lifo has joined the channel
+[20:09] JimBastard: ahahaha
+[20:09] JimBastard: nice
+[20:09] callen: nyc.js? naw, I don't go to any get-togethers. They seemed more like group therapy for the socially disabled.
+[20:10] callen: welll, the django group did anyway.
+[20:10] JimBastard: no way
+[20:10] callen: I haven't gone to nyc.js yet.
+[20:10] JimBastard: nyc.js is awesome
+[20:10] JimBastard: join the mailing list
+[20:10] JimBastard: i had a javascript party last week
+[20:10] callen: I went to a super secret security meetup. Bunch of fucking posers.
+[20:10] JimBastard: lots of really good people came
+[20:10] callen: I was disappoint. :(
+[20:10] drostie has joined the channel
+[20:11] JimBastard: creationix , binary42, jkashesh, quirkey, all in attendance
+[20:11] callen: I'll look into it.
+[20:13] kixxauth: JimBastard: I'm up in Poughkeepsie. Am I allowed to come to nyc.js ?
+[20:13] kixxauth: The groups up here are " more like group therapy for the socially disabled"
+[20:15] rnewson has joined the channel
+[20:15] rnewson has joined the channel
+[20:17] JimBastard: yeah sure
+[20:17] JimBastard: join the list
+[20:19] callen: kixxauth: ...were you mocking me?
+[20:19] callen: or did you just like my turn of phrase?
+[20:19] JimBastard: every single nyc.js i've been to has had a really great speaker
+[20:19] blakemizerany has joined the channel
+[20:19] JimBastard: last month was Furf of Sexy.js
+[20:20] kixxauth: callen: noway... it's totally true. I go to the meetups in Boston too
+[20:20] kixxauth: 3.5 hr drive.
+[20:20] callen: kixxauth: I don't think I could really live away from my trains
+[20:20] callen: I used to drive all the time, motorcycle too, but now...
+[20:21] kixxauth: I used to do sales in NYC, NJ, CT, so I'm used to it.
+[20:21] JimBastard: callen where do you work at
+[20:21] callen: JimBastard: a company no one here would know, I assure you.
+[20:22] JimBastard: i guess i mean ive been working in nyc for 6 years or so
+[20:22] JimBastard: done a bit of consulting for a lot of comapnies
+[20:22] mjr_: I'm pretty sure the sexyjs.com page is "safe for work".  I may leave it up for a while, just to find out.
+[20:22] callen: these people are too cheap to hire a consultant. lol.
+[20:23] callen: mjr_: technically safe for work, but not obviously work oriented from a glance.
+[20:23] callen: JimBastard: I'm the all-man here. I do it all. All the code nobody else wants to do, the sysadminning, everything from the frontend CSS + js to the backend database stuff.
+[20:23] callen: JimBastard: ...because they're cheap. :P
+[20:24] JimBastard: yeah, i would hate to do that. im lead JS here
+[20:24] JimBastard: lead JS and lead jQuery
+[20:25] callen: JimBastard: I'm the only one who knows how to do AJAX calls and serve them server-side here.
+[20:25] callen: JimBastard: this fact frightens me. it's nothing complicated.
+[20:25] JimBastard: yeah 
+[20:25] callen: I'm not a big-time js guy, not at all. My background is low level software, .NET (previously) and now Django.
+[20:26] callen: I'm only here because node.js tickles the hell out of me.
+[20:26] callen: I did some benchmarks comparing node.js to Django+Apache actually
+[20:26] callen: extremely rudimentary, but got the point across.
+[20:28] JimBastard: but ya
+[20:28] JimBastard: anyone in here from NYC, don't apply to drop.io
+[20:28] JimBastard: unless you like being treated like a piece of shit
+[20:28] JimBastard: most of the employees i met there were pretty whipped
+[20:28] JimBastard: sheep
+[20:29] callen: JimBastard: I'm given a lot of free reign to use my judgment where I'm at, so I'm pretty comfortable. I'm actually converting them to mercurial + 2.6 + django 1.2 right now.
+[20:29] admc has joined the channel
+[20:29] callen: could use a raise though *_*
+[20:33] cpleppert has joined the channel
+[20:33] javajunky: arggh git pulled on the wrong server.   Is node TIP compiling ATM for people ?
+[20:35] javajunky: nm, found a building sha
+[20:37] mjr_: make -j doesn't seem to do anything when building node
+[20:37] mjr_: that is, anything in parallel
+[20:41] frodenius: make -j 2
+[20:42] mjr_: yeah, it doesn't help
+[20:43] mjr_: I have an 8-core, and doing make -j8 I still only get one compile process at a time.
+[20:43] CodeOfficer: back, that was a fun db discussion to scroll though :)
+[20:43] CodeOfficer: hi all!
+[20:44] kennethkalmer has joined the channel
+[20:45] JimBastard: stop CodeOfficer 
+[20:45] JimBastard: i mean
+[20:45] JimBastard: sup
+[20:45] JimBastard: SUP
+[20:45] JimBastard: lol
+[20:45] CodeOfficer: lol
+[20:45] JimBastard: STOP
+[20:45] CodeOfficer: STOP!!!!
+[20:45] JimBastard: HEIMER TIME
+[20:46] callen: CodeOfficer: despite never desiring to work as a DBA, I find databases and structures fascinating.
+[20:47] CodeOfficer: ya its interesting for sure. i was a music major that fell backwards into web dev about 15 years ago
+[20:47] callen: CodeOfficer: I was a C/system-level nut that got screwed into being a professional web dev.
+[20:47] CodeOfficer: i think its all interesting really
+[20:47] CodeOfficer: lol
+[20:47] CodeOfficer: nice
+[20:47] callen: CodeOfficer: I'd rather be making embedded SOC software.
+[20:47] CodeOfficer: i only recently started playing with node
+[20:47] callen: CodeOfficer: but here I am, vomiting HTML into people's browsers.
+[20:48] CodeOfficer: i have been using it mostly as a websocket server
+[20:48] callen: I just use it as an API server.
+[20:48] callen: I never had much interest in websockets/comet
+[20:48] CodeOfficer: i'm all over websocket and canvas atm
+[20:49] CodeOfficer: currently working on a little 2 player tower defense game
+[20:49] CodeOfficer: http://screencast.com/t/YTA3YzRiM
+[20:49] atmos: that could be really cool :)
+[20:49] callen: I find both mildly interesting, but front-end isn't really my uh, preference.
+[20:49] CodeOfficer: crappy footage, my apologies
+[20:49] callen: tower defense in canvas would be bad ass.
+[20:49] mjr_: canvas is pretty fun, and its a lot faster than I thought it would be.
+[20:49] CodeOfficer: cavas rullllllles
+[20:49] CodeOfficer: *canvas
+[20:50] mjr_: I did some realtime visualization stuff in canvas last year, and I was pretty amazed by how fast modern browsers can fetch XHRs and then update a canvas.
+[20:50] CodeOfficer: its awesome, i agree
+[20:51] CodeOfficer: in my heart i really want to bea game dev, but could never get beyond hobby status in compiled languages
+[20:51] mjr_: My laptop could run about 50 iterations a second, which really surprised me.
+[20:51] CodeOfficer: with canvas i can do it in an environment i am already comfortable in
+[20:51] callen: CodeOfficer: I could get you going in C, if you really wanted.
+[20:51] CodeOfficer: which makes me a happy camper
+[20:51] callen: CodeOfficer: serious offer.
+[20:52] CodeOfficer: 10 years ago i may have taken you up on that :)
+[20:52] callen: CodeOfficer: nothing stopping you now.
+[20:52] callen: wouldn't take as long as you might think.
+[20:53] CodeOfficer: dont really want to be working in c really
+[20:53] callen: I've mentored people in it before. I have a secret weapon for teaching people C.
+[20:53] callen: working and tinkering are two different things man.
+[20:53] callen: I don't go anywhere near node at work.
+[20:53] CodeOfficer: haha true :)
+[20:53] callen: you think I fiddled with making a busybox clone in haskell so that I could use it at work? come on.
+[20:54] CodeOfficer: you guys have blogs btw?
+[20:54] callen: CodeOfficer: I do, with a single post being a benchmark comparing node.js versus Django+Apache
+[20:54] mjr_: What is your secret weapon for teaching people C?
+[20:54] CodeOfficer: http://www.codeofficer.com/
+[20:55] JimBastard: ohh shit nice page 
+[20:55] JimBastard: i <3 abusing the jquery chain and the DOM tree 			 $(this).parent().parent().parent().parent().parent().parent().remove();
+[20:55] JimBastard: what a terrible terrible line
+[20:55] CodeOfficer: lol
+[20:55] callen: mjr_: K&R, and make damned certain they complete the exercises on pain of death.
+[20:55] JimBastard: i think im gonna join the jquery room and post that line
+[20:55] CodeOfficer: closest() ? :)
+[20:55] callen: mjr_: the exercises are key to grokking rather than simply riding on cargo.
+[20:55] JimBastard: ask them why it doesnt work
+[20:56] callen: mjr_: seems to work well. I have a small brood of people whom I've tutored, they seem happy.
+[20:57] JimBastard: closest is neat
+[20:57] CodeOfficer: i'm going to be looking for work after the 1st, hate that.
+[20:57] JimBastard: i didn tknow about thatone
+[20:57] JimBastard: CodeOfficer: i might be able to help
+[20:57] mjr_: My experience is that teaching people about programming is almost always doomed form the start.  If they are the kind of person that wants to be "taught", as opposed to someone who is tinkering on their own and needs some guidance, then they'll never really get it.
+[20:57] JimBastard: you arent trying to move right?
+[20:57] CodeOfficer: oh ya?
+[20:57] callen: mjr_: I don't do any manual work beyond course correciton
+[20:57] callen: mjr_: I just light the fire underneath their asses that inspires them to haul it.
+[20:57] CodeOfficer: nope, i have a house here in so. Portland Maine, don't think it will fit in my car.
+[20:57] callen: mjr_: I try to emulate the experience of being dropped into a job, which seems to be the fastest learning experience.
+[20:58] CodeOfficer: i like that approach callen, very practical
+[20:58] callen: mjr_: I start writing up small design specs for them to implement, based upon progress in the book.
+[20:58] callen: mjr_: eventually they're writing event loops, IRC clients, etc.
+[20:58] callen: and learning why the slice syntax for arrays is treacherous...
+[20:58] callen: etc.
+[20:58] onar has joined the channel
+[20:58] callen: but in the end, it's just K&R with a flaming whip to enforce it.
+[20:59] CodeOfficer: i attempted to get into iphone dev earlier this year. had more trouble learning xcode than i did coding objective-c
+[20:59] rdrake: Xcode is awful.
+[20:59] callen: objective-c is probably the most human friendly superset of C that I've seen yet.
+[20:59] callen: xcode is indeed awful, but the iphone dev process itself is pleasant.
+[20:59] CodeOfficer: i understood it a lot more my 2nd time around, with 3 years of ruby behind me
+[21:00] JimBastard: CodeOfficer: 
+[21:00] CodeOfficer: my dream is one day having macruby replace applescript offically
+[21:00] CodeOfficer: ya?
+[21:01] JimBastard: http://www.appcelerator.com/
+[21:01] JimBastard: your welcome
+[21:01] CodeOfficer: haha love it :)
+[21:01] CodeOfficer: getting my ipad on the 3rd too!
+[21:01] callen: be warned: Apple is hostile to those kinds of tools.
+[21:02] JimBastard: i have 0 knowledge of how it works
+[21:02] callen: seriously. it's being used to make rss'ish templatey apps.
+[21:02] rdrake: Pretty site.
+[21:02] JimBastard: i gotta restart FF 2 gigs of ram
+[21:02] callen: JimBastard: I wouldn't recommend it until the dust clears, they're going to start auto-rejecting app-acc apps soon.
+[21:02] qFox has joined the channel
+[21:04] sztanphet has joined the channel
+[21:04] JimBastard has joined the channel
+[21:04] callen: welcome back.
+[21:05] JimBastard:   Douglas Crockford can give a woman multiple orgasms asynchronously
+[21:05] CrockBot: When Douglas Crockford says, &quot;The Software shall be used for Good, not Evil.&quot; He means it.   troynt
+[21:06] CodeOfficer: gotta jet for a few, daughter wants a ruby lesson http://screencast.com/t/YmQzZGVmZTUt :)
+[21:06] mattly: JimBastard: how does one get their quip into crockbot's pool?
+[21:06] JimBastard: you gotta use a twatter hashtag
+[21:06] JimBastard: #crockfordfacts
+[21:06] CrockBot: Doug Crockford doesn't write code. It orderly lays itself in front of him in JSON beauty. dalmaer
+[21:06] mattly: ah
+[21:07] mattly: i think i used #crockfordfact
+[21:07] CrockBot: douglas crockford doesn't have to trim his beard. he just wakes up and assigns a smaller value to beard.length   oxysmoros
+[21:07] mattly: singular
+[21:07] JimBastard: some of them are not good
+[21:07] JimBastard: i wish they had better reviewers
+[21:07] mattly: ah
+[21:07] mattly: the first two are original: http://search.twitter.com/search?q=crockford+from:mattly+
+[21:08] CrockBot: If you execute &quot;typeof Crockford&quot; your browser will return &quot;awesome&quot;  @F1LT3R
+[21:08] softdrink has joined the channel
+[21:08] brapse has joined the channel
+[21:08] frodenius: CrockBot: you should replace html entities
+[21:08] CrockBot: Douglas Crockford doesn't sleep, he waits to be triggered.   tobeytailor
+[21:09] atmos: CrockBot: 
+[21:09] CrockBot: God was about to eval(&quot;let there_be='light'&quot;) when Crockford's voice thundered from above: &quot;Do no evil - use JSLint!&quot;   marcuswestin
+[21:09] mattly: hahah
+[21:09] mattly: CrockBot: 
+[21:09] CrockBot: Crockford stores his JSON in an actual Couch   sliderrr
+[21:09] mjr_: I keep expecting this whole crockford facts thing to get tiresome, but it still delivers.
+[21:09] CrockBot: Douglas Crockford's beard wrote RFC 4627   ara_p
+[21:10] frodenius: rofl
+[21:13] callen: CrockBot: 
+[21:13] CrockBot: Crockford needs no global namespace, the global namespace inherits from him.   Samisdat
+[21:13] callen: lmfao.
+[21:13] callen: huh. some of the facts are true.
+[21:13] callen: how about that.
+[21:14] JimBastard: the crockbot script is OS
+[21:15] JimBastard: its on github
+[21:15] mattly: oh good, we can do _ry facts now
+[21:16] sztanpet has joined the channel
+[21:17] JimBastard: when _ry writes code he starts in assembly and then reverse engineers it into C code while drunk.
+[21:17] JimBastard: _ry once wrote an http_parser so fast it went back in time before http existed and segfaulted
+[21:17] _ry: :P
+[21:18] JimBastard: the real reason behind breaking api changes is that _ry is a sadist enjoys making people suffer
+[21:19] tisba has joined the channel
+[21:21] JimBastard: i heard _ry caused the fall of the USSR by creating an nginx module
+[21:21] JimBastard: im drawing blanks here
+[21:22] pavelz has joined the channel
+[21:22] softdrink: _ry rocks the casbah
+[21:22] JimBastard: _ry tried to join a ruby group but they kept blocking his requests
+[21:23] JimBastard: oofa!
+[21:25] markwubben has joined the channel
+[21:28] softdrink: ugh… kids = really smudgy glasses
+[21:28] JimBastard: _ry is under investigation from PETA for killing narwals 
+[21:28] JimBastard: ^_^
+[21:29] kriskowal: it's only a flesh wound
+[21:29] mattly: ++ on the blocking one
+[21:31] JimBastard: thank you, i'm here all week. two for one drink specials on thursdays, ask your opers. thank you thank you
+[21:31] Tim_Smart has joined the channel
+[21:31] JimBastard: damn Tim_Smart  you just missed all the _ry facts
+[21:31] Tim_Smart: lol
+[21:32] JimBastard: _ry once wrote an http_parser so fast it went back in time before http existed and segfaulted
+[21:32] JimBastard: _ry is under investigation from PETA for killing narwals 
+[21:32] JimBastard: _ry tried to join a ruby group but they kept blocking his requests
+[21:32] JimBastard: when _ry writes code he starts in assembly and then reverse engineers it into C code while drunk.
+[21:33] JimBastard: Tim i saw your hook.io updates last night, im excited to pull and test
+[21:33] JimBastard: i should be working all weekend
+[21:33] softdrink: _ry presented at jsconf and everyone wet their pants.
+[21:33] JimBastard: possibly gonna update node_debug and package it with hook.io
+[21:33] JimBastard: maybe not
+[21:34] Tim_Smart: JimBastard: I'm working on twitter / oauth atm
+[21:34] JimBastard: awesome
+[21:34] JimBastard: we are dangerously close to a v0.1 release
+[21:34] JimBastard: im getting some traction on github already, we are getting good watchers
+[21:34] isaacs: Tim_Smart: i'm so glad you're working on oauth, bt.
+[21:34] isaacs: btw
+[21:35] JimBastard: someone from engineyard started watching, i dont think hes in this room
+[21:35] erikvold has joined the channel
+[21:35] isaacs: oauth is such a pita.
+[21:35] Tim_Smart: isaacs: http://github.com/Tim-Smart/node-oauth/tree/hashlib
+[21:35] JimBastard: yeah hook.io integrates with a shit ton of web apis, so we need it
+[21:35] Tim_Smart: It's pretty much a clone of their Javascript library
+[21:35] isaacs: nice
+[21:36] Tim_Smart: I might abstract it one more level, because it is still a headache...
+[21:36] isaacs: yeh
+[21:36] JimBastard: dont dive too deep into the rabbit hole for the first time around!
+[21:36] Tim_Smart: I like bunnies!
+[21:36] JimBastard: well if you go deep enough into the rabbit hole you might come out on this side of the world
+[21:36] JimBastard: so that wouldnt be so bad
+[21:37] sh1mmer has joined the channel
+[21:38] callen: Tim_Smart: make it so highly abstracted that I have to burn the fetus of an elephant to get the API to work.
+[21:38] Tim_Smart: callen: You sick sick....
+[21:39] callen: Tim_Smart: no, just coded in Ruby before.
+[21:39] callen: Used to it.
+[21:39] softdrink: snap.
+[21:40] okito has joined the channel
+[21:41] JimBastard: yeah callen  is a little strange
+[21:41] JimBastard: and apparently he's a few blocks away from me
+[21:41] softdrink: run
+[21:41] softdrink: very fast
+[21:43] pdelgallego has joined the channel
+[21:45] Tim_Smart: Finally, Facebook chat supports XMPP
+[21:45] callen: ACTION waves at JimBastard from the 4th floor.
+[21:45] callen: Tim_Smart: it didn't before? :\
+[21:45] Tim_Smart: no
+[21:45] callen: learn something every day.
+[21:46] Tim_Smart: Before everyone reversed engineer the web api
+[21:46] JimBastard: yeah xmpp , pubsubhubbub, we got a lot of shit to implement Tim_Smart 
+[21:46] JimBastard: ahaha
+[21:46] Tim_Smart: *engineered
+[21:46] JimBastard: Tim_Smart: check this out, http://pusherapp.com/
+[21:46] mikeal: pubsubhubbub takes too long to say for me to consider implementing it :P
+[21:46] JimBastard: yet another service which is a subset of hook.io's functionality
+[21:46] JimBastard: and is closed source
+[21:46] callen: JimBastard: 'we' ?
+[21:47] JimBastard: ?
+[21:47] JimBastard: hook.io is an open-source project
+[21:47] callen: JimBastard: oh, you're a part of hook.io
+[21:47] mikeal: but…. pretty graphs JimBastard
+[21:47] mikeal: look a the pretty graphs
+[21:47] callen: just understand the collective statement of need to implement.
+[21:47] JimBastard: Tim_Smart is one of the core contributors right now
+[21:47] JimBastard: he did most of the back-end work
+[21:47] callen: mikeal: 'graph make me want spend money, ooga ooga'
+[21:48] JimBastard: hook.io is my concept and im currently directing the direction of the project
+[21:48] mikeal: if you don't have pretty graphs what are you going to put in your keynote slides when you meet VC :P
+[21:48] JimBastard: but its my intention to keep it all open-source
+[21:48] sh1mmer has joined the channel
+[21:48] mikeal: directing the direction, there is a joke there somewhere
+[21:48] JimBastard: its a lot of work man
+[21:48] JimBastard: and we barely even started
+[21:48] JimBastard: im definitely looking for more contributors 
+[21:49] mikeal: is there a reason you're using RPC for the API?
+[21:49] JimBastard: we'll have better docs soon for creating custom hook.io protocols
+[21:49] JimBastard: JSON-RPC ?
+[21:49] JimBastard: the JS API uses JSON-RPC 
+[21:49] mikeal: instead of something resty
+[21:49] JimBastard: because that wouldnt make sense
+[21:49] JimBastard: but its irrelvant
+[21:49] tmpvar has joined the channel
+[21:49] JimBastard: json-rpc is one entry point to the API
+[21:50] JimBastard: creating new entry points is pretty trivial
+[21:50] softdrink: protobuf?
+[21:50] mikeal: i see
+[21:50] JimBastard: you just gotta pick your interface and implement it
+[21:50] JimBastard: its VERY modular
+[21:50] JimBastard: check out the code
+[21:50] mikeal: everytime I've written and RPC interface I've regretted it later
+[21:50] mikeal: s/and/an
+[21:50] callen: JimBastard: modular is good but bewares ze ravioli code. http://c2.com/cgi-bin/wiki?RavioliCode
+[21:51] mikeal: but that's cool that it's all pluggable
+[21:52] callen: home tiiiiiime
+[21:53] JimBastard: callen: the scope of our functionality is very very small
+[21:53] JimBastard: create hooks, create actions, attach actions to hooks, trigger hooks, fire actions
+[21:53] JimBastard: thats pretty much it
+[21:53] JimBastard: everything else is pluggable as a custom protocol or custom defintion
+[21:53] mikeal: that sounds mostly evented
+[21:54] JimBastard: yep
+[21:54] mikeal: good stuff
+[21:54] JimBastard: we got "Actioner" and "Hooker"
+[21:54] JimBastard: Tim_Smart really did a good job breaking it all down
+[21:54] Tim_Smart: We got hookers playing with the hooks :o
+[21:55] rictic has joined the channel
+[21:56] qFxo has joined the channel
+[22:03] cloudhead has joined the channel
+[22:04] qFxo has joined the channel
+[22:06] rtl has joined the channel
+[22:10] chakrit has joined the channel
+[22:11] chakrit has left the channel
+[22:12] chakrit has joined the channel
+[22:14] chakrit: Got Build failed:  -> task failed (err #2): {task: libv8.a SConstruct -> libv8.a} .. Ubuntu almost latest. any tips?
+[22:17] micheil_mbp has joined the channel
+[22:19] Tim_Smart: chakrit: Sacrifice some steak to the C++ gods
+[22:19] rnewson has joined the channel
+[22:19] rnewson has joined the channel
+[22:26] chakrit: guess that means I'll have to wait? =(
+[22:26] Tim_Smart: Which Ubuntu? I have built on Ubuntu fine before
+[22:28] chakrit: me too, but the latest v8 update fails the build
+[22:28] chakrit: karmic
+[22:29] mjr_: yeah, it breaks on my ubuntu machine as well
+[22:30] mjr_: But setting GCC_VERSION to 44 per recent mailing list posting makes it work.
+[22:31] rnewson has joined the channel
+[22:31] rnewson has joined the channel
+[22:31] CIA-77: node: 03Ryan Dahl 07master * ra49bf86 10/ (8 files in 2 dirs): Finish V8 update - http://bit.ly/9MOeDe
+[22:31] _ry: mjr_: --^
+[22:31] mjr_: building, looks good so far
+[22:31] chakrit: oh... git pull -ing :)
+[22:32] mjr_: _ry: why doesn't make -jX do the expected thing?
+[22:33] chakrit has left the channel
+[22:33] felixge has joined the channel
+[22:33] felixge has joined the channel
+[22:35] mjr_: Builds and passes tests on my ubuntu 9.10 amd64 machine.
+[22:35] gf3 has joined the channel
+[22:38] RayMorgan has joined the channel
+[22:39] _ry: what's make -jX do?
+[22:40] felixge: ACTION is back in the internet
+[22:40] chakrit has joined the channel
+[22:40] felixge: _ry: congratz on merging net2
+[22:44] rolfb has joined the channel
+[22:46] sh1mmer has joined the channel
+[22:47] javajunky has joined the channel
+[22:48] _ry: felixge: thanks
+[22:48] rnewson has left the channel
+[22:48] gianni has joined the channel
+[22:49] hassox has joined the channel
+[22:49] chakrit: builds ok now + make test 100% :)
+[22:49] mjr_: _ry: make -j 8, for example, should run 8 compile jobs in parallel.
+[22:50] mjr_: A big win if you have more than one processor available.
+[22:57] softdrink has joined the channel
+[22:58] charlesjolley has joined the channel
+[23:03] charlesjolley has joined the channel
+[23:05] chakrit has left the channel
+[23:08] _ry: mjr_: oh you can do that with waf
+[23:08] _ry: mjr_: you have to call waf directly
+[23:08] javajunky has joined the channel
+[23:12] joshbuddy has joined the channel
+[23:12] joshbuddy has joined the channel
+[23:18] Tim_Smart: _ry: How do you cast an Arguments instance to an array?
+[23:20] aho has joined the channel
+[23:23] _ry: Tim_Smart: you don't
+[23:23] _ry: you have to do it manually afaik
+[23:24] Tim_Smart: Damn, so no prototype.slice.call trick :p
+[23:24] _ry: in c++, n
+[23:24] broofa has joined the channel
+[23:25] chakrit has joined the channel
+[23:25] kixxauth has joined the channel
+[23:25] broofa: hey folks, just pulled/built HEAD and am having some issues with "<Buffer .....>" objects where I was previously getting strings.
+[23:26] broofa: can somebody clue me in to what this change is about?
+[23:32] Tim_Smart: _ry: Does the C++ API have something like ->IsArray() etc?
+[23:34] jed_ has joined the channel
+[23:35] mjr_: broofa: the Buffer objects that come back aren't strings, but you can get at your data by slicing it:
+[23:35] mjr_: chunk.utf8Slice(0, chunk.length))
+[23:35] mjr_: At least, I did that, and I got at my data.  Maybe there's a better way.
+[23:49] broofa: mjr_: sounds like what I'm after, but I'm getting "(buffer) has no method 'utf8Slice'"
+[23:49] mjr_: what does it look like if you sys.inspect it
+[23:49] mjr_: ?
+[23:50] broofa: "<Buffer 6d 65 ... (lots of hex pairs) ...>"
+[23:50] broofa: seems odd that I'm just getting the toString value, with no methods/properties being listed.
+[23:50] mjr_: That's Buffer.prototype.toString in buffer.js:10
+[23:51] mjr_: But there is also node_buffer.h
+[23:52] mjr_: oh, I think Utf8Slice with a capital U.
+[23:53] _ry: Tim_Smart: http://github.com/ry/node/blob/a49bf8622fe396be232de7a9889e3d0d2d6ced29/deps/v8/include/v8.h#L1479-1502
+[23:53] broofa: mjr_: nope, still not working.
+[23:53] Tim_Smart: Thanks _ry 
+[23:54] mjr_: sorry, I gotta run.  I've been exploring Buffers and the other new APIs today, so I only just barely have my stuff working.
+[23:54] _ry: i'd like to get the Buffer api changed over to Binary/E
+[23:55] _ry: (or whatever it's called)
+[23:56] broofa: Is there a way to convert a Buffer to a String?   (Is that even a meaningful question?)
+[23:56] _ry: broofa: if you have an encoding
+[23:56] _ry: the current way (which i agree, is a terrible API) is buffer.utf8Slice(0, buffer.length)
+[23:57] softdrink: behold! stupid terminal tricks!  256 color terminal, dithering between each color (with node!)  http://dl.dropbox.com/u/543400/term256dither.png
+[23:57] bpot has joined the channel
+[23:58] broofa: _ry: I'm getting " no method 'utf8Slice'" errors when I do that.  (in .js app file).
+[23:58] broofa: TypeError: Object <Buffer 6d 65.... 44> has no method 'Utf8Slice'
+[23:59] _ry: http://github.com/ry/node/blob/6f21ac12827aab4e9c745442ea192ff8700161a4/test/simple/test-buffer.js
+[23:59] _ry: oh i guess there aren't any utf8Slice tests there
+[23:59] _ry: but a assure you it's there

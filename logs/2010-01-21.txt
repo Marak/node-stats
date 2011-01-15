@@ -1,0 +1,533 @@
+[00:00] bentomas1: gotta run, this is interesting though!
+[00:00] bentomas1 has left the channel
+[00:00] inimino: but unless it handles asyncronous exceptions, there's no point...
+[00:00] inimino: that's trivially doable now with a try/catch
+[00:00] micheil: benw: if there's an exception thrown from the request listener, and there's an unhandledException listener, that event will be emitted
+[00:01] benw: micheil: Like inimino said, that doesn't buy me anything.
+[00:01] micheil: okay
+[00:02] benw: Let's handle the case where handleRequest calls setTimeout with a callback which is supposed to respond to the request, but instead throws.
+[00:02] inimino: but it would be nice to see a real-world case where this is needed before bikeshedding how it should work
+[00:02] DamZ has joined the channel
+[00:03] micheil: true
+[00:03] benw: inimino: Ok, let's pretend instead of setTimeout it's actually calling some I/O functions that might throw, with an eventual callback that responds to the request.
+[00:03] _ry: req.addL("unhandledExcdeption", function () { res.sendHeader(500); res.sendBody("error"); res.finish(); })
+[00:04] inimino: benw: which I/O functions that might throw?
+[00:04] benw: req.addL("unhandledExcdeption", function (e) { res.sendHeader(500); res.sendBody(e.stack); res.finish(); })
+[00:04] inimino: benw: throwing an exception should be exceptional
+[00:05] benw: Ok, I get it exceptions are bad. But they happen.
+[00:05] inimino: benw: that's why to me this is a fringe edge case
+[00:05] inimino: benw: if you're throwing exceptions and not catching them often enough that you really want this for a better user experience, you're doing something wrong IMHO
+[00:06] benw: inimino: The point of exceptions is that they bubble up the stack to a point that knows how to handle them appropriately.
+[00:06] robrighter_ has joined the channel
+[00:06] benw: Because we're async, that stack no longer exists.
+[00:06] _ry: yeah - "unhandledException" doesn't buy much
+[00:06] stevestmartin: im not following how anything would need to be baked into core
+[00:07] inimino: sure, that's why you have things that have two callbacks or emit two different events one for failure, one for success
+[00:07] stevestmartin: if your making a framework, then you can wrap the low level functions with your own, and use events
+[00:07] inimino: that's why I asked "which I/O functions that might throw"
+[00:07] benw: The Sentinel idea (open to a better name) is about creating a different kind of stack specifically for this purpose.
+[00:07] inimino: because generally if you call an async I/O functions and it throws, then there's a bug
+[00:08] micheil: benw: you'd have to re-write a hell of a lot, including things like promises...
+[00:08] stevestmartin: nothing stops him from wrapping them
+[00:08] benw: micheil: I don't think they'd need to change at all
+[00:08] stevestmartin: i mean if your going to give developers abstractions, you might as well go all the way
+[00:09] micheil: benw: if my promise throws an exception, then sentinel probably can't find that
+[00:09] benw: This may well involve V8 core hacking that is beyond me, but I'd like to think through the desired semantics.
+[00:09] benw: Why is promise different from any other callback?
+[00:10] micheil: because, it's async, like you said, it's not working on a stack
+[00:10] micheil: you have no real way of catching any errors there
+[00:10] inimino: if you do something like posix.cat("non-existing-file") it's not going to throw, it's going to emit an error event
+[00:11] stevestmartin: i think your trying to bring a mindset of a different language into this one
+[00:11] benw: I'm not proposing Sentinel would deal with unhandled error callbacks
+[00:11] micheil: also, if I have code which contains a syntax error or something, that too can't be caught
+[00:11] benw: Actually I think syntax errors throw exceptions
+[00:11] inimino: benw: yes
+[00:11] benw: That's exactly the sort of thing I want to catch
+[00:12] micheil: yeah, at process.addListener("unhandledException") level
+[00:12] stevestmartin: pretend exceptions never happen, pretend all you have is events, try/catch doesnt exist, how would you solve it?
+[00:12] micheil: however, production code shouldn't have any syntax errors, those should be caught in testing
+[00:12] inimino: benw: can you show an example of a scenario where you need to catch that?
+[00:13] benw: It seems everyone is against me :)
+[00:13] joshbuddy has joined the channel
+[00:13] inimino: yes, if you're deploying code that doesn't even compile, that's a pretty grave error
+[00:14] benw: It's a dynamic language, lots of stuff won't blow up until runtime
+[00:14] inimino: I recommend Joe Armstrong's talk: http://www.infoq.com/presentations/Systems-that-Never-Stop-Joe-Armstrong
+[00:14] benw: Software has bugs, even production code.
+[00:15] micheil: I don't think javascript is really that dynamic, as it has to be compiled by an interpreter
+[00:15] benw: Bugs that might not be tickled until someone submits a form with just the right string.
+[00:15] benw: Which currently has the potential to be a denial of service attack that brings down the whole server.
+[00:15] inimino: (recommended to everyone)
+[00:15] inimino: benw: sure, that's why you have monitoring, you record incidents when they occur, and you find them and fix the defects
+[00:15] _ry: i think it's a good point. how do you design a web framework, where whatever error people might make in thier handler - it will return a 500 status code
+[00:15] benw: Constraining the damage to a single connection is easier in the thread-per-connection world.
+[00:16] stephenlb: inimino++ for the Armstrong link
+[00:16] benw: I'm excited about node, I'm all for async
+[00:16] benw: I've been writing event-driven async servers the hard way for a while
+[00:16] inimino: benw: if you want uptime and you don't have monitoring and restart, you're already doing it wrong
+[00:16] _ry: it would be nice to have a stack of closures somehow
+[00:17] _ry: which would be different than the execution stack
+[00:17] benw: _ry: Exactly
+[00:17] inimino: one of the things in that talk is that processes are the layer at which you isolate errors
+[00:17] inimino: ("process" isn't necessarily an OS process)
+[00:18] benw: The first argument to new Sentinel() is essentially the catch block for that persistent top-level closure in which future callbacks run.
+[00:18] inimino: but in the case of node, if you want to write a Web server that always gives 500 regardless of what was loaded, you use a worker and hand connections to it
+[00:19] benw: Creating a Sentinel pushes onto the exception-handling stack, for the current execution context and for the contexts of all callbacks that are registered by it.
+[00:21] inimino: so if we're going to add some features, let's add a good worker implementation that you can send sockets to :)
+[00:24] _ry: benw: it's not clear to me how the Sentinel would work
+[00:24] _ry: what i could imagine is having .. is a stack of event emitters
+[00:25] _ry: process creates server. server creates req. req creates setTimeout
+[00:25] _ry: i'm not really sure how that'd work...
+[00:26] _ry: well .. okay, i can kind of imagine it
+[00:26] benw: :)
+[00:26] mattly has joined the channel
+[00:26] _ry: you'd have a stack: var eventEmitterStack = []
+[00:26] inimino: you can maintain a shadow stack with each thing that puts events on the stack, and then swap it in...
+[00:26] benw: I can see difficulties preventing the sentinel stack from growing forever
+[00:26] _ry: inimino: yeah
+[00:27] _ry: it would be behind the scenes
+[00:27] _ry: then when you get an exception in an event
+[00:27] _ry: you call unhandledException event on the top eventemitter
+[00:27] inimino: ...on every new event loop entry
+[00:27] inimino: kind of ugly
+[00:28] _ry: if the unhandleException isn't there, you go down the stack
+[00:28] _ry: if nothing catches it then you exit the program
+[00:28] inimino: yeah
+[00:29] _ry: seems kind of ugly.
+[00:29] _ry: eemitter.catch(Error, function (eventName, exception) { })
+[00:29] _ry: shrug.
+[00:30] inimino: yeah
+[00:30] _ry: but in that way you could respond with 500 depsite errors in the handlers
+[00:30] inimino: yes
+[00:31] _ry: well. maybe it's not so bad.. 
+[00:31] _ry: a generalized unhandledException
+[00:31] inimino: I'd rather use a worker for it
+[00:31] _ry: well - can't start new processes for each req
+[00:32] inimino: no, but you don't need to either
+[00:32] inimino: you can reuse them
+[00:33] mikeal has joined the channel
+[00:33] inimino: (until something crashes it)
+[00:33] CIA-78: node: 03Ryan Dahl 07develop * r5547450 10/ ChangeLog : credit Erich in ChangeLog - http://bit.ly/4Qi9fM
+[00:35] _ry: oh okay
+[00:36] _ry: but then processes can only handle one request at a time
+[00:36] _ry: how's this done in the web browser?
+[00:36] _ry: what happens if you throw in setTimeout?
+[00:36] inimino: it's just like what node does currently
+[00:37] jed_ has joined the channel
+[00:41] ahminus_ has joined the channel
+[00:42] benw: I should go.
+[00:42] benw: Thanks all for indulging me in this conversation.  :)
+[00:43] benw: _ry: BTW, who's paying you to work on this?
+[00:44] _ry: benw: I work for Joyent
+[00:45] benw: Cool, well thanks, you're doing a great job.
+[00:45] ahminus has joined the channel
+[00:46] _ry: thanks
+[00:46] ahminus: _ry: Just came across node.js while doing some research... I recognized your email address from the libev mailing list :)
+[00:46] _ry: ahminus: :)
+[00:47] ahminus: I am using it for a Flash MMOG backend.
+[00:47] micheil: _ry: I was wondering who you worked for, nice to know :)
+[00:48] _ry: ahminus: libev or node?
+[00:48] ahminus: libev
+[00:48] _ry: ahminus: cool
+[00:48] erichocean has joined the channel
+[00:49] blackdog` has joined the channel
+[00:50] stevestmartin: whats the best way to get an object to extend from EventEmitter
+[00:50] ahminus: I'm fighting all the same battles everyone else bumps into trying to do stress testing...
+[00:50] RayMorgan: stevestmartin: process.inherit(obj, process.EventEmitter);   (if I remember correctly)
+[00:51] RayMorgan: might be inherits
+[00:51] micheil: inherits
+[00:52] joshbuddy_ has joined the channel
+[00:54] _ry: someone should write a simple message queue 
+[00:54] _ry: server
+[00:54] _ry: amqp-like but with a non-shit protocol
+[00:54] _ry: topic exchange
+[00:55] _ry: and persistent queues
+[00:56] ahminus: Yeah.  I researched all the various MQs out there at my previous gig.
+[00:57] ahminus: Rabbit seems to be the defacto choice is your use matches its feature set.
+[00:57] ahminus: I was intrigued by ZeroMQ, but the lack of durable queues is a problem.
+[00:59] sudoer has joined the channel
+[01:01] _ry: topic \r\n (hex-body-length) \r\n (opaque body)
+[01:01] micheil: hmm.. 
+[01:02] micheil: _ry: write a spec for it, and I'll try and implement it
+[01:03] _ry: could make the couchdb of message queues
+[01:03] _ry: assign arbitrary js functions to the queues to grab messages
+[01:03] micheil: hmm..
+[01:04] _ry: CREATE_QUEUE xxx \r\n function (topic) { return true; }
+[01:04] _ry: ^-- a queue named "xxx" which grabs all messages
+[01:05] _ry: shrug
+[01:05] micheil: _ry: wouldn't it be simpler to work with basic data types?
+[01:05] erichocean: it's really easy to implement durable message queues with Redis
+[01:05] micheil: eg, ENQUEUE topic data
+[01:05] cheapRoc has joined the channel
+[01:06] _ry: erichocean: is there a way to subscribe in redis?
+[01:06] _ry: erichocean: to a queue?
+[01:06] erichocean: a Twitter clone is the "hello world" ap for redis
+[01:06] erichocean: so, yes
+[01:07] sktrdie has joined the channel
+[01:07] sktrdie: is node written completely in C?
+[01:07] technoweenie: no redis doesnt have subscriptions
+[01:07] sktrdie: or C++?
+[01:07] technoweenie: its not event based, you just pop an item off a list though
+[01:08] sktrdie: since v8 is written in C++, i would think that also nodejs was
+[01:08] erichocean: also, see Resque by the GitHub people
+[01:08] erichocean: also implemented on top of Redis
+[01:08] micheil: ACTION would have to read more on amqp and such first..
+[01:08] ahminus: AMQP and XMPP are both pretty crummy.
+[01:08] ahminus: So, you'd have to have subscribers polling?
+[01:08] un0mi has joined the channel
+[01:08] micheil: sktrdie: C++/C and JavaScript
+[01:09] sktrdie: micheil: that's weird, why would it use C?
+[01:09] micheil: ahminus: why not just persist a connection between server and client?
+[01:09] sktrdie: if there's C++ libs
+[01:09] micheil: sktrdie: I forget which it is.
+[01:09] ahminus: Persisting the connection is orthogonal.
+[01:10] sktrdie: and it's doubtful it would write anything in javascript
+[01:10] micheil: sktrdie: why don't you browse the source to the project?
+[01:10] erichocean: Redis is a data structure server, so you build things like subscriptions on top of Redis (which, again, is fairly trivial to do)
+[01:11] micheil: that'll tell you what it's written in.
+[01:11] ahminus: erich: Maybe... but, a scalable solution might be very non-trivial.
+[01:12] erichocean: Redis scales the same way memcached does: consistent hashing
+[01:12] ahminus: Yeah, but if you're building an MQ on top of it, you have to solve all the same problems the existing MQs do...
+[01:12] ahminus: And even ZeroMQ falls over when you start creating hundreds of thousands of exchanges.
+[01:12] joshbuddy: I didn't think Redis had a blocking pop yet.
+[01:13] erichocean: that's in the latest release
+[01:13] erichocean: well, not release, dev branch
+[01:13] joshbuddy: erichocean: aye, i suppose i'm referring to the current release, i've been told its coming.
+[01:13] joshbuddy: i wonder if it will be close to beanstalk's speed.
+[01:13] erichocean: it's the same speed as memcached in my tests
+[01:14] erichocean: so, faster
+[01:14] joshbuddy: i mean, as a queue
+[01:14] joshbuddy: beanstalkd is a work queue
+[01:15] ahminus: I did a bunch of research of the KV stores and ended up with TokyoCabinet/Tyrant, so far.
+[01:15] erichocean: ahminus: that's nice to, just not as flexible as Redis
+[01:15] joshbuddy: tokyo is very nice ... lack of tooling, but very nice.
+[01:15] erichocean: it also has corruption problems if it's killed in the middle of a save (or so I've heard)
+[01:15] ahminus: Yeah.  I was much more concerned about stability and robustness than the flexibility.
+[01:15] ahminus: My use case is pretty limited.
+[01:16] cheapRoc: tokyo needs true open dev
+[01:16] cheapRoc: author is a wizard, but needs to share and delegate dev responsibilties
+[01:16] joshbuddy: at postrank, we experimented with tokyo as a middle layer for persisting far in the future jobs from beanstalk.. very fast, but when things get corrupt, you're kind of screwed.
+[01:16] ahminus: And basically, all the people I trust about this stuff all kinda told me the same story: they evaluated a bunch of them, wrote a bunch of stress tests, and concluded that almost none of them were reliable enough for real production use (for them) but TokyoCabinet was the closest.
+[01:17] ahminus: Hrm.
+[01:18] ahminus: Maybe I'll be back to shovelling crap at MySQL again :)
+[01:18] cheapRoc: there's plenty of people on the Tokyo mailing list using it in high vol prod, from what I read
+[01:18] ahminus: Yeah, it's being used in various capacities in production.  The people I'm referring to didn't think it was ready enough for them.
+[01:18] joshbuddy: i wrote a memcached front end to tokyo.. it was very fast, almost as fast as memcache, i'm very impressed with it
+[01:18] joshbuddy: with tokyo cabinet that is.
+[01:19] ahminus: Josh: good to know.
+[01:19] cheapRoc: that's not shocking
+[01:19] ahminus: I'll be using it to persist a crap-ton of saved game state, so, it's not super "mission critical", but it would suck to lose too much state due to corruption.
+[01:20] cheapRoc: I've jus worked on, and spec'd ruby-tokyotyrant c wrapper.. I enjoy it, but not prod use yet
+[01:21] joshbuddy: i wrote a ruby interface to dystopia before.. i got really wonky results out of it .. i was very disappointed, and communicating with the author was really tough. :(
+[01:21] joshbuddy: because tokyo dystopia running well would be awesome...
+[01:21] cheapRoc: joshbuddy: Yup
+[01:22] cheapRoc: compare that to redis author, that guys a hacker from what I can tell
+[01:22] erichocean-away: ahminus: Cassandra is *really* nice
+[01:23] erichocean-away: but you need a fairly high-end server setup to survive crashes
+[01:23] erichocean-away: it's fast as hell though
+[01:23] joshbuddy: I think I need to get the blocking pop version of redis out, write a beanstalk front end to it, and put it through its paces... need to really benchmark it hard.
+[01:23] cheapRoc: Cassandra scared me away when I read evan's ec2 warning :<
+[01:24] mattly_ has joined the channel
+[01:25] ahminus: Yeah, the biggest downside to Cassandra is Java :/
+[01:26] joshbuddy: did you guys see ... was it, kufufs?
+[01:27] joshbuddy: this one: http://github.com/etolabo/kumofs
+[01:27] joshbuddy: certainly looks interesting.
+[01:27] ahminus: Yeah, I wish there were FEWER choices rather than more. :)
+[01:28] ahminus: That's build on TokyoCabinet.
+[01:28] ahminus: Er, built.
+[01:28] joshbuddy: tokyocabinet is such a great swiss army knife though.
+[01:28] isaacs: anyone want a simple "which of these functions is faster" type benchmarking script? http://github.com/isaacs/node-bench
+[01:28] isaacs: enjoy.
+[01:28] joshbuddy: thanks isaacs!
+[01:29] isaacs: joshbuddy: np
+[01:29] joshbuddy: oh, i got content caputres working today .. i can't think of anything else i really need for a templating layer. i think i'll put a haml style parser on it, but its rocking pretty hard.
+[01:29] joshbuddy: time to build a full web framework in node i think
+[01:30] joshbuddy: and i put in those namespacing things you mentioned isaacs, thanks for that.
+[01:30] stephenlb: headed to CBS JS meetup for good times
+[01:31] joshbuddy: in case anyone cares about templating .. here is my latest example in node.js.. 
+[01:31] joshbuddy: http://github.com/joshbuddy/emjay/blob/master/examples/nodejs/test.mjs
+[01:40] ahminus has joined the channel
+[01:40] benw has joined the channel
+[01:40] jamiew has joined the channel
+[01:40] konobi has joined the channel
+[01:40] aguynamedben has joined the channel
+[01:40] rictic has joined the channel
+[01:40] Micheil_away has joined the channel
+[01:40] ryah_away has joined the channel
+[01:40] mies has joined the channel
+[01:40] sveimac has joined the channel
+[01:40] xnt14 has joined the channel
+[01:40] zimbatm has joined the channel
+[01:42] un0mi has joined the channel
+[01:46] joshbuddy has joined the channel
+[01:48] eddanger has joined the channel
+[01:51] bpot has joined the channel
+[01:54] robrighter has joined the channel
+[01:56] un0mi has joined the channel
+[02:11] ahminus has left the channel
+[02:17] kennethkalmer has joined the channel
+[02:18] mattly has joined the channel
+[02:26] bryanl_ has joined the channel
+[02:29] micheil_mbp has joined the channel
+[02:43] un0mi has joined the channel
+[02:44] rauchg has joined the channel
+[02:46] RayMorgan has joined the channel
+[02:52] brandon_beacher_ has joined the channel
+[02:57] aguynamedben has joined the channel
+[03:07] allnickstaken has joined the channel
+[03:15] unomi has joined the channel
+[03:16] mikeal has joined the channel
+[03:46] eddanger has joined the channel
+[03:49] isaacs has joined the channel
+[03:50] unom1 has joined the channel
+[03:54] steadicat has joined the channel
+[04:09] quirkey has joined the channel
+[04:16] isaacs: hey, unix wizards...
+[04:16] isaacs: is it possible to have a shebang that points to a node program?
+[04:16] isaacs: ie, #!/path/to/program (then some javascript here)
+[04:16] deanlandolt: isaacs: definitely ping ashb
+[04:16] stevestmartin: yes
+[04:16] isaacs: where /path/to/program then has a shebang of its own pointing to node.
+[04:16] isaacs: it's not seeming to work for me.
+[04:17] deanlandolt: there's some maddening shebang handling in linux
+[04:17] isaacs: it seems that if the interpreter isn't a binary, it's falling back to sh
+[04:17] stevestmartin: #!/usr/bin/env node
+[04:17] mikeal has joined the channel
+[04:17] isaacs: stevestmartin: sure, but what i really want to execute is /usr/local/bin/node myprogram myotherprogram
+[04:18] isaacs: then have node execute "myprogram" with "myotherprogram" as the arg
+[04:18] JoePeck has joined the channel
+[04:18] isaacs: but it's stubbornly refusing to use my interpreted script as an interpreter.
+[04:18] isaacs: ashb: you around?  the kids in here say you know about the unixez.
+[04:20] isaacs: i mean, i could write a little c wrapper around it, i guess.
+[04:20] isaacs: seems silly though.
+[04:21] cheapRoc has joined the channel
+[04:28] eddanger has joined the channel
+[04:44] cheapRoc has joined the channel
+[04:55] rictic has joined the channel
+[05:00] binary42 has joined the channel
+[05:10] RJ2 has joined the channel
+[05:21] un0mi has joined the channel
+[05:26] cadorn has joined the channel
+[05:36] bentomas1 has joined the channel
+[05:53] okito has joined the channel
+[06:03] dnolen has joined the channel
+[06:03] okito has joined the channel
+[06:12] bentomas1 has left the channel
+[06:15] eddanger has joined the channel
+[06:18] technoweenie has joined the channel
+[06:24] un0mi has joined the channel
+[06:24] Yuffster has joined the channel
+[06:27] dnolen has joined the channel
+[07:20] hassox has joined the channel
+[07:28] un0mi has joined the channel
+[07:57] zmoog has joined the channel
+[08:22] piranha has joined the channel
+[08:27] teemow has joined the channel
+[08:34] mikeal has joined the channel
+[08:37] mikeal has joined the channel
+[08:47] rictic has joined the channel
+[09:04] hassox has joined the channel
+[09:05] felixge has joined the channel
+[09:27] felixge: zimbatm: yt?
+[09:31] DamZ has joined the channel
+[09:36] ayo has joined the channel
+[09:44] mikeal has joined the channel
+[10:06] markwubben has joined the channel
+[10:12] un0mi has joined the channel
+[10:19] erichocean has joined the channel
+[10:35] felixge has joined the channel
+[11:12] edds has joined the channel
+[11:23] charlenopires has joined the channel
+[11:26] jfd has joined the channel
+[11:43] DamZ has joined the channel
+[11:57] rtomayko has joined the channel
+[12:18] un0mi has joined the channel
+[12:23] micheil has joined the channel
+[12:25] bryanl has joined the channel
+[12:34] benw has joined the channel
+[12:35] benw has left the channel
+[12:35] alex-desktop has joined the channel
+[12:39] blackdog has joined the channel
+[12:52] un0mi has joined the channel
+[12:54] tlynn has joined the channel
+[13:02] tlynn: What databases (if any) does node.js support currently?
+[13:03] blackdog: I'm using orlandov's mongo driver, not in production, but it's working nicely, thought incomplete
+[13:03] blackdog: though
+[13:03] blackdog: there's a postgresql from ry, and the sqlite driver is being actively worked on
+[13:04] tlynn: No MySQL?
+[13:04] blackdog: mysql via some wrapper
+[13:04] blackdog: from the new york times, not native
+[13:04] tlynn: Thanks, that's very useful.
+[13:04] blackdog: also a js redis driver
+[13:06] steadicat has joined the channel
+[13:20] mahemoff has joined the channel
+[13:34] micheil has joined the channel
+[13:34] jfd has joined the channel
+[13:34] felixge has joined the channel
+[13:34] mikeal has joined the channel
+[13:34] ayo has joined the channel
+[13:34] zmoog has joined the channel
+[13:34] cadorn has joined the channel
+[13:34] RJ2 has joined the channel
+[13:34] zimbatm has joined the channel
+[13:34] xnt14[sleep] has joined the channel
+[13:34] sveimac has joined the channel
+[13:34] mies has joined the channel
+[13:34] ryah_away has joined the channel
+[13:34] konobi has joined the channel
+[13:34] Booster has joined the channel
+[13:34] CIA-78 has joined the channel
+[13:34] skampler has joined the channel
+[13:34] xantus_ has joined the channel
+[13:34] emyller has joined the channel
+[13:34] evilhackerdude has joined the channel
+[13:34] hober has joined the channel
+[13:34] Pilate has joined the channel
+[13:34] jacobat has joined the channel
+[13:34] aurynn has joined the channel
+[13:34] martyn__1 has joined the channel
+[13:34] tlockney has joined the channel
+[13:34] elbart has joined the channel
+[13:34] webben has joined the channel
+[13:34] mahemoff has joined the channel
+[13:34] steadicat has joined the channel
+[13:34] tlynn has joined the channel
+[13:34] un0mi has joined the channel
+[13:34] rtomayko has joined the channel
+[13:34] DamZ|food has joined the channel
+[13:34] edds has joined the channel
+[13:34] erichocean has joined the channel
+[13:34] rictic has joined the channel
+[13:34] teemow has joined the channel
+[13:34] piranha has joined the channel
+[13:34] Yuffster has joined the channel
+[13:34] cheapRoc has joined the channel
+[13:34] brandon_beacher has joined the channel
+[13:34] kennethkalmer has joined the channel
+[13:34] sveisvei has joined the channel
+[13:34] deanlandolt has joined the channel
+[13:34] FoxFurry has joined the channel
+[13:34] tlrobinson has joined the channel
+[13:34] gbot2 has joined the channel
+[13:34] rudebwoy has joined the channel
+[13:34] n8o has joined the channel
+[13:34] bengl has joined the channel
+[13:34] mayerbacher has joined the channel
+[13:34] ashb has joined the channel
+[13:34] jspiros_ has joined the channel
+[13:34] wil has joined the channel
+[13:35] joshthecoder has joined the channel
+[13:35] alex-desktop has joined the channel
+[13:35] BradleyS has joined the channel
+[13:35] jan____ has joined the channel
+[13:35] binary42 has joined the channel
+[13:35] blackdog has joined the channel
+[13:35] inimino has joined the channel
+[13:35] rednul has joined the channel
+[13:35] nefD has joined the channel
+[13:35] philippbosch has joined the channel
+[13:35] jazzychad has joined the channel
+[13:35] orlandov has joined the channel
+[13:35] sztanpet has joined the channel
+[13:35] rektide has joined the channel
+[13:35] Atm0z has joined the channel
+[13:35] CraigW has joined the channel
+[13:36] frodenius has joined the channel
+[13:36] halorgium has joined the channel
+[13:37] hassox has joined the channel
+[13:37] sktrdie has joined the channel
+[13:37] gwoo has joined the channel
+[13:37] [k2] has joined the channel
+[13:37] keeto has joined the channel
+[13:42] JoePeck has joined the channel
+[13:42] erikcorry|away has joined the channel
+[13:44] kriszyp has joined the channel
+[13:47] bryanl has joined the channel
+[13:48] JoePeck_ has joined the channel
+[13:56] stevestmartin has joined the channel
+[14:03] pmuellr has joined the channel
+[14:05] joshbuddy has joined the channel
+[14:13] kennethkalmer has joined the channel
+[14:20] sixtus42 has joined the channel
+[14:23] sixtus42: howdy
+[14:27] joshbuddy: yo.
+[14:28] robrighter has joined the channel
+[14:31] DamZ has joined the channel
+[14:32] aho has joined the channel
+[14:39] BradleyS has joined the channel
+[14:39] alex-desktop has joined the channel
+[14:39] frodenius has joined the channel
+[14:39] sixtus42 has joined the channel
+[14:39] kriszyp has joined the channel
+[14:39] hassox has joined the channel
+[14:39] sktrdie has joined the channel
+[14:39] gwoo has joined the channel
+[14:39] [k2] has joined the channel
+[14:39] keeto has joined the channel
+[14:39] JoePeck_ has joined the channel
+[14:39] kennethkalmer has joined the channel
+[14:39] ryah_away has joined the channel
+[14:39] mies has joined the channel
+[14:39] sveimac has joined the channel
+[14:39] konobi has joined the channel
+[14:39] cadorn has joined the channel
+[14:39] zmoog has joined the channel
+[14:39] felixge has joined the channel
+[14:39] pmuellr has joined the channel
+[14:39] joshbuddy has joined the channel
+[14:39] aho has joined the channel
+[14:39] stevestmartin has joined the channel
+[14:39] bryanl has joined the channel
+[14:39] erikcorry|away has joined the channel
+[14:39] blackdog has joined the channel
+[14:39] jan____ has joined the channel
+[14:39] wil has joined the channel
+[14:39] jspiros_ has joined the channel
+[14:39] ashb has joined the channel
+[14:39] mayerbacher has joined the channel
+[14:39] bengl has joined the channel
+[14:39] n8o has joined the channel
+[14:39] rudebwoy has joined the channel
+[14:39] gbot2 has joined the channel
+[14:39] tlrobinson has joined the channel
+[14:39] FoxFurry has joined the channel
+[14:39] deanlandolt has joined the channel
+[14:39] sveisvei has joined the channel
+[14:39] brandon_beacher has joined the channel
+[14:39] cheapRoc has joined the channel
+[14:39] Yuffster has joined the channel
+[14:39] piranha has joined the channel
+[14:39] teemow has joined the channel
+[14:39] rictic has joined the channel
+[14:39] erichocean has joined the channel
+[14:39] edds has joined the channel
+[14:39] rtomayko has joined the channel
+[14:39] un0mi has joined the channel
+[14:39] tlynn has joined the channel
+[14:39] mahemoff has joined the channel
+[14:39] micheil has joined the channel
+[14:39] jfd has joined the channel
+[14:39] mikeal has joined the channel
+[14:39] RJ2 has joined the channel
+[14:39] zimbatm has joined the channel
+[14:39] xnt14[sleep] has joined the channel
+[14:39] Booster has joined the channel
+[14:39] CIA-78 has joined the channel
+[14:39] skampler has joined the channel
+[14:39] xantus_ has joined the channel
+[14:39] emyller has joined the channel
+[14:39] evilhackerdude has joined the channel
+[14:39] hober has joined the channel
+[14:39] Pilate has joined the channel
+[14:39] jacobat has joined the channel
+[14:39] aurynn has joined the channel
+[14:39] martyn__1 has joined the channel
+[14:39] tlockney has joined the channel
+[14:39] elbart has joined the channel
+[14:39] webben has joined the channel
+[14:40] halorgium has joined the channel
+[14:40] joshthecoder has joined the channel
+[14:40] davidsklar has joined the channel
+[14:45] shfx has joined the channel
+[14:45] BradleyS has joined the channel
+[14:47] lifo has joined the channel
+[14:47] beppu has joined the channel

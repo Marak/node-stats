@@ -1,0 +1,1679 @@
+[00:01] <erichocean> inimino: here's a minimized test that results in a bad parse: http://gist.github.com/306101
+[00:01] jed has joined the channel
+[00:02] kriszyp has joined the channel
+[00:04] <jashkenas> In the docs, it says that process.compile() is the same as eval(), but from inside of my process.compile'd script, I can't access require().
+[00:04] <jashkenas> Is it supposed to be that way?
+[00:04] <Tim_Smart> yeah
+[00:04] <Tim_Smart> well I think so anyways
+[00:08] quirkey has joined the channel
+[00:09] <jashkenas> another question: Is there a way to get the arguments to process.createChildProcess() to be subject to shell expansion?
+[00:09] <jashkenas> Or, alternately, a way to do directory globs?
+[00:10] <ryah> no
+[00:10] <inimino> erichocean: thanks!
+[00:10] <jashkenas> ah. missed posix.readdir
+[00:11] <ryah> jashkenas: binding a glob function is on my todo though
+[00:11] <jashkenas> great.
+[00:11] <erichocean> inimino: do you have code to test if a parse tree is well-formed?
+[00:12] Tim_Smart has joined the channel
+[00:12] <erichocean> I'm using showTree() for erring out right now, but it could lead to false positives
+[00:13] Tim_Smart has left the channel
+[00:17] <CIA-77> node: 03Jérémy Lal 07master * r5a08a56 10/ src/node.cc : Calculate page size with getpagesize for armel - http://bit.ly/aQexiL
+[00:20] <inimino> erichocean: I don't... probably showTree will catch most kinds of invalid trees
+[00:28] <erichocean> *grrrrr* multidelta doesn't like Unicode
+[00:30] steadicat has joined the channel
+[00:31] <isaacs> ryah: how would you feel about porting node_buffer.cc to non-net2 node?
+[00:31] <isaacs> well, not so much "porting" as just "copying", i guess
+[00:32] <ryah> isaacs: yeah, i've been thinking about it
+[00:33] <isaacs> ryah: i've been looking at this decodeURIComponent weirdness, and there's actually a lot of awfulness involved in using that function.  i think using buffers directly might be safer.
+[00:33] <isaacs> basically, the fact that it throws, and loses information about the raw bytes when you get a querystring with invalid UTF-8 bytes in it, means that you can't use it for anything *except* utf8 characters.
+[00:33] malkomalko has joined the channel
+[00:35] <ryah> i don't think it's going to be any time soon though
+[00:35] Tim_Smart has joined the channel
+[00:36] <isaacs> why not?  think it'll change?
+[00:36] <ryah> i'd like to have a consistent plan for binary
+[00:36] <isaacs> i see
+[00:36] <ryah> which i don't - so im hesitant to port Buffer over
+[00:37] <isaacs> yeah, i've been reading through the Binary/B and Binary/D more closely.  i'm a little unenthused.  seems like a lot of stuff that doesn't have a lot of clear uses.
+[00:37] <ryah> i mean, basically the String 'binary' thing we have now works pretty well
+[00:37] <isaacs> i disagree strongly with that.  it doesn't work pretty well.
+[00:37] <isaacs> it works for simple use cases, but the edge cases are pretty much unsolveable.
+[00:38] <ryah> well - it probably needs some better encoding functions
+[00:38] <ryah> for splitting on multibyte chars
+[00:38] <ryah> but as a backend for storage - it's not slow
+[00:38] <isaacs> that's true
+[00:38] <isaacs> slowing down is not an option.
+[00:39] <ryah> I thought using Buffer in net2 and doing zero copy would help a lot - but in fact net2 is slower
+[00:39] <ryah> so i don't now.
+[00:39] <ryah> s/now/know/
+[00:40] <ryah> i hope to get some time to play around with net2 more this week - maybe it can be fixed
+[00:42] <ryah> wow d8 is actually working for me
+[00:44] cozby has joined the channel
+[00:47] guan_ has joined the channel
+[00:47] <cozby> hey, trying to give node.js a spin. I got ubuntu going in a VM with gcc ver 4.4.1 , when I try ./configure
+[00:48] <cozby> it tells me c++ not found, CC not found, icpc not found, error c++ compiler not found, g++. c++ not found error msgs
+[00:48] <cozby> which is totally odd, as I have gcc 4.4.1 installed
+[00:49] <cozby> I know... not a linux help room
+[00:51] <konobi> cozby: apt-get install build-essential
+[00:51] <cozby> konobi: thanks, I'll do that
+[00:53] <cozby> konobi: brilliant, that worked - thank you
+[00:53] <inimino> cozby: Ubuntu installs gcc and g++ separately, for future reference
+[00:54] <cozby> inimino: ah ok
+[00:56] dnolen has joined the channel
+[00:59] <Tim_Smart> cozby: Just install build-essential
+[01:00] <Tim_Smart> sudo apt-get install build-essential or something
+[01:00] <Tim_Smart> my bad ---^
+[01:10] kriskowal has joined the channel
+[01:11] gwoo has joined the channel
+[01:12] <kriskowal> is there a common explanation for an ostensibly inexplicable RangeError Maximum call stack exceeded error?
+[01:13] <kriskowal> i get no backtrace, and the program halts; it's also very heisenbuggy; seems to depend on how much i've written to stdout
+[01:14] hassox has joined the channel
+[01:14] jcrosby has joined the channel
+[01:16] binary42 has joined the channel
+[01:17] pavelz has joined the channel
+[01:29] <erichocean> inimino: another crasher
+[01:29] <erichocean> http://gist.github.com/306173
+[01:29] <erichocean> well, not a crasher, but it doesn't parse correctly on node/v8
+[01:29] creationix has joined the channel
+[01:32] <isaacs> erichocean: what's wrong with that?
+[01:32] <erichocean> returns true on the parse, but the parse tree is wrong
+[01:32] <erichocean> something is seriously flaky with v8 here
+[01:33] <erichocean> kind of tricky to test though
+[01:36] bpot has joined the channel
+[01:41] <isaacs> oic
+[01:42] Tim_Smart has joined the channel
+[01:48] steadicat has joined the channel
+[01:49] melatonin has joined the channel
+[02:02] <erichocean> inimino: http://gist.github.com/306202
+[02:02] <erichocean> strange
+[02:09] dnolen_ has joined the channel
+[02:18] Atmoz has joined the channel
+[02:28] mikeal has joined the channel
+[02:33] felixge_ has joined the channel
+[02:33] felixge_ has joined the channel
+[02:33] <isaacs> so, this is odd.  when you send a STRING, it looks like you need to always do it with utf-8 encoding.  but when you send a FILE, you need to send it with ascii or binary.
+[02:33] <isaacs> even if the file is a text file that is utf-8 encoded.
+[02:34] <isaacs> and even if the string was constructed via require("fs").cat
+[02:34] <isaacs> so, i guess, when i say, "send a FILE", what i mean is, send the bytes of a file in chunks as they show up in fs.read
+[02:43] <isaacs> ahh, unless you specify "utf-8" as the encoding to fs.read.
+[02:43] <isaacs> gaah, javascript hates bytes.
+[02:48] <micheil> arvo'
+[02:49] voodootikigod_ has joined the channel
+[02:51] <isaacs>  seems like the only safe way to do it is to read files using binary, and send them using binary, and never concatenate strings ever.
+[02:51] <micheil> does anyone have any forms of proxy implemented in node? eg, an irc gateway / proxy?
+[02:52] <ryah> micheil: there is a proxy in the tests
+[02:52] <ryah> an http 
+[02:52] <micheil> oh, hi there ;)
+[02:52] <micheil> ACTION is looking to setup a gateway for his irc
+[02:53] <micheil> probably just a thin tcp connector or something, not too hard to implement, but may be still there
+[02:58] <kriskowal> ryah, would you have a list of likely suspects for a maximum recursion error that occurs in the course of the first event of a program that's doing a lot of sync file reads and stdout writes?
+[02:59] steadicat has joined the channel
+[02:59] <kriskowal> i'm working on narwhal bootstrapping
+[03:00] <ryah> kriskowal: hm
+[03:00] <kriskowal> (i've opted to copy-and-paste node.cc so as to avoid merge conflicts with my embedding)
+[03:00] <ryah> kriskowal: maximum recursion error?
+[03:00] <kriskowal> yes, RangeError, maximum call stack exceeded
+[03:00] <kriskowal> it's been hard to isolate
+[03:01] <ryah> are you doing real sync file i/o or wait() ?
+[03:01] <kriskowal> no
+[03:01] <kriskowal> i haven't even evaled the native node.js; i have an alternate that does very little so far
+[03:02] <ryah> oh hm
+[03:02] <ryah> nothing comes to mind.
+[03:02] <kriskowal> ok
+[03:02] <kriskowal> well, the good news is i've made some progress
+[03:03] <kriskowal> i've got it using narwhal's module loader modules
+[03:03] malkomalko has joined the channel
+[03:03] <kriskowal> so i'm most of the way through bootstrapping
+[03:03] <ryah> oh wow - nice
+[03:04] <kriskowal> can't wait to refactor narwhal's module loader for async loading on node
+[03:05] <kriskowal> not much point in trying to get that to work in rhino
+[03:05] <micheil> would node benefit by callback style module loading?
+[03:06] <kriskowal> i presume you don't mean require.async(id, ok, error)?
+[03:06] <micheil> eg, the transition that dojo seems to be making, dojo.require("module") => dojo.require("module", callback);
+[03:06] <kriskowal> or require.async(id).then(ok, error)
+[03:06] <kriskowal> there are definitely benefits to that style
+[03:06] <micheil> meaning that you wouldn't have to preprocess the modules before loading them
+[03:06] <kriskowal> for loading modules that are named at run-time
+[03:06] <micheil> that too
+[03:07] <micheil> require("module", function(someAlias){})
+[03:07] <kriskowal> ah, it's debatable whether you'd get away entirely from the need to preprocess.
+[03:07] <micheil> you pretty much could
+[03:07] <kriskowal> if you disallowed sync require in the context of its transitive dependencies, yes
+[03:07] <micheil> yes
+[03:08] creationix has joined the channel
+[03:08] <kriskowal> and by sync i mean immediate return, not actually high latency
+[03:08] <micheil> although, I guess the code would be instead of exports, "this"
+[03:09] <kriskowal> i went down that road about four years ago
+[03:09] <micheil> did it work?
+[03:09] <kriskowal> not like you'd expect; you really need promises
+[03:09] <micheil> ACTION only really started playing with module loaders whilst working at napalmriot.com last year
+[03:09] <kriskowal> "this" is problematic; you really need exports named in the closure because "this" disappears from scope too easily
+[03:09] <micheil> true
+[03:10] <micheil> so maybe, require("module", function(exports, module1, ...){})
+[03:10] <kriskowal> but also, you need promises because you need to prevent your dependees from using your API until your transitive dependencies are ready
+[03:10] <micheil> yeah, the module is only returned after the deps are loaded
+[03:10] <creationix> here was one of my ideas a while back http://gist.github.com/300066
+[03:11] <micheil> ie, the callback is only evaluated after all the deps have loaded
+[03:11] <micheil> oh, hi tim
+[03:11] <creationix> hi
+[03:11] <kriskowal> this resembles module transports
+[03:11] <kriskowal> http://wiki.commonjs.org/wiki/Modules/Transport
+[03:12] <kriskowal> but if you want to look at *good* prior art on that technique, look at YUI 3
+[03:12] <micheil> yes
+[03:12] <kriskowal> although, there's nothing presently that uses promises, which would open a lot of doors
+[03:13] <micheil> it'd be an area for definite experimentation
+[03:13] <isaacs> yui3's module loading system is quite nice.
+[03:14] <kriskowal> its only flaw is that "use" does not return a promise
+[03:14] <kriskowal> which means you cannot defer another operation on the completion of a module load directly
+[03:14] brosner_ has joined the channel
+[03:15] <ryah> how do you eval something in eclipse?
+[03:15] brosner_ has left the channel
+[03:17] <ryah> man the debugger is pretty sick
+[03:18] <micheil> sick as in bad / ill or sick as in cool?
+[03:19] <ryah> as in cool
+[03:19] sztanphet has joined the channel
+[03:20] <ryah> working well - allows me to see scriptsin a way i haven't before :)
+[03:20] <creationix> is it kinda like the webkit debugger or firebug?
+[03:20] <micheil> hmm... how resource intensive is watchFile?
+[03:20] <Tim_Smart> eclipse isn't bad, kind of like a lovable fat mother
+[03:21] <micheil> btw, ryah, did you see the wiki discussion from last night?
+[03:22] <micheil> and is there such thing as watchDirectory() ?
+[03:23] <Tim_Smart> micheil: Implement a module :p
+[03:23] jashkenas has joined the channel
+[03:23] <micheil> heh, not right now.
+[03:23] joshthecoder_ has joined the channel
+[03:23] <Tim_Smart> Can't watch for newly created files though :/
+[03:23] gsf_ has joined the channel
+[03:23] mrd`_ has joined the channel
+[03:23] jwm_ has joined the channel
+[03:23] <micheil> yeah
+[03:27] joshthecoder has joined the channel
+[03:29] brosner_ has joined the channel
+[03:32] <ryah> micheil: wiki discussion, no
+[03:32] <micheil> one sec, I'll find the log
+[03:32] <ryah> micheil: you can watchFile on a directory
+[03:32] <micheil> sweet!
+[03:34] <micheil> ryah: http://nodejs.debuggable.com/2010-02-16.txt around 13:20
+[03:34] <micheil> basically rather then use the github wiki, have a github repo for the wiki, then a few people to manage the merges and changes
+[03:35] dnolen has left the channel
+[03:35] <micheil> so that we can see what has actually changed in the wiki, who made the change and stuff like that
+[03:36] <micheil> or move the wiki entirely off github and onto a separate app
+[03:38] <ryah> hm
+[03:38] <ryah> can't we just get the github people to fix it?
+[03:38] brosner_ has joined the channel
+[03:38] <creationix> should be able to
+[03:38] brosner_ has left the channel
+[03:39] <ryah> maintaining a wiki sounds annoying
+[03:39] <ryah> i guess having a github page wouldn't be bad
+[03:40] <ryah> as long as the owner was liberal about giving commit rights
+[03:46] <CIA-77> node: 03Ryan Dahl 07master * r4322523 10/ src/node.cc : 
+[03:46] <CIA-77> node: [debug] Use ProcessDebugMessage() instead of executing empty script
+[03:46] <CIA-77> node: And don't use --debugger_auto_break v8 flag, it seems unnecessary. - http://bit.ly/d2qS7q
+[03:46] <CIA-77> node: 03Ryan Dahl 07master * r5468173 10/ (src/node.cc src/node.js): [debug] Give debug_watcher maximum priority - http://bit.ly/b2WlAt
+[03:46] malkomalko has joined the channel
+[03:47] eck has joined the channel
+[03:49] tmpvar has joined the channel
+[03:52] dnolen has joined the channel
+[03:55] Tim_Smart has joined the channel
+[03:56] <ryah> someone should do a screencast of getting eclipse running with node
+[03:57] <Tim_Smart> Gives me a reason to try Screenflow i guess
+[03:58] <Tim_Smart> Gah firefox for mac crashes on me every 5 minutes
+[03:58] <ryah> remember to mention it only works with snapshots after today
+[03:59] <ryah> there was a bug before 
+[03:59] <Tim_Smart> ahok
+[04:01] bpot has joined the channel
+[04:06] tmpvar_ has joined the channel
+[04:06] tmpvar has joined the channel
+[04:06] <tmpvar> yo yo
+[04:07] <creationix> tmpvar: howdy
+[04:10] <Tim_Smart> howdy yol
+[04:13] <creationix> yol?
+[04:13] <creationix> here in Texas it's y'all
+[04:14] <creationix> :P
+[04:14] <isaacs> tmpvar: hey.  sax-js has unit tests now, thought you might be interested
+[04:14] <tmpvar> nice!
+[04:14] <tmpvar> isaacs, after you left last night, i was able to get a slightly modified version of sizzle/pure (bepole) running on jsdom (with the help of sax.js
+[04:15] <isaacs> nice!
+[04:15] <tmpvar> yep :)
+[04:15] <isaacs> i don't quite know what sizzle/pure (bepole) is
+[04:15] <isaacs> but it sounds awesome
+[04:15] <tmpvar> ill link
+[04:15] <tmpvar> http://sizzlejs.com/
+[04:15] <tmpvar> and
+[04:15] <tmpvar> http://beebole.com/pure/
+[04:16] <isaacs> tmpvar: so, here's what i'd like to do..
+[04:16] <isaacs> .
+[04:16] <isaacs> have a CSS parser that can attach events to a streaming xml thing
+[04:17] <tmpvar> hrm..?
+[04:17] <isaacs> so, like, bind("someElement.someClass", doSomething)
+[04:17] <tmpvar> oh
+[04:17] <ryah> tmpvar: have you seen the debugger stuff in the last few commits?
+[04:17] <isaacs> then, stream it through sax, and have the functions get called on that node when it opens or closes or whatever.
+[04:17] dnolen_ has joined the channel
+[04:17] <tmpvar> ryah, yes, very good!
+[04:17] <tmpvar> ryah, i havent had a chance to try though
+[04:17] <ryah> it seems to work well
+[04:17] <isaacs> tmpvar: that way, you could have something hooked up to an xmpp channel that does stuff.
+[04:18] <tmpvar> isaacs, yeah, thats pretty cool
+[04:18] <isaacs> tmpvar: not "that's"... "that would be"
+[04:18] <isaacs> hehe
+[04:18] <tmpvar> heh, its a cool idea
+[04:18] <tmpvar> i went the dom route because eventually (maybe) i'll build/use the capture/bubble events 
+[04:19] <tmpvar> not sure if thats needed for simple templating though .. haha
+[04:19] <isaacs> yeah, without a gui, you don't have many different kinds of "events"
+[04:19] <tmpvar> yep
+[04:19] <tmpvar> who knows, i may not go past level 1
+[04:20] [Pwner]John has joined the channel
+[04:20] <isaacs> sizzle looks interesting
+[04:20] <isaacs> but it looks like it needs a dom
+[04:20] <tmpvar> requires a dom heh
+[04:20] <tmpvar> yeah
+[04:20] <isaacs> yeah
+[04:20] <isaacs> CSS kinda does.
+[04:20] <isaacs> at least, CSS 3 does.
+[04:20] <tmpvar> yeah
+[04:20] <tmpvar> but you dont need a full CSS selector set
+[04:21] <isaacs> p + p + p + p
+[04:21] <isaacs> you need to know how many things have come before, etc.
+[04:21] <tmpvar> that seems sort of painful
+[04:21] <isaacs> p:nth-of-type(3000)
+[04:21] <isaacs> yeah
+[04:21] <tmpvar> ryah, im going to try this now.. been a long day (kinda slow atm)
+[04:21] <isaacs> css is the perfect demon to complement html.
+[04:22] <tmpvar> haha, yeah
+[04:22] <eck> i don't get it -- why is this macro defined twice (seen in node.cc)? http://paste.pocoo.org/show/179140/
+[04:23] <ryah> turns the macro into a string
+[04:23] <ryah> i think it was a copy paste thing
+[04:23] <[Pwner]John> http://privatepaste.com/3b95304f4a
+[04:23] <[Pwner]John> I failed.
+[04:23] <eck> yeah, i understand the #s, just didn't see why there was an extra level of indirection
+[04:24] <ryah> [Pwner]John: hm yeah. we've seen that bug occasionally - but i don't know what causes it
+[04:24] <[Pwner]John> :\
+[04:24] <[Pwner]John> So I can't configure it, right
+[04:25] <ryah> it's some WAF bug
+[04:25] <[Pwner]John> WAF?
+[04:25] <ryah> the build system
+[04:25] <[Pwner]John> oh
+[04:25] <[Pwner]John> anything I can do about it?
+[04:25] <Tim_Smart> you got the latest git revision?
+[04:25] <[Pwner]John> Yes.
+[04:26] mikeal has joined the channel
+[04:27] <ryah> [Pwner]John: i don't have a fix for you - unfortunately - im asking about it in #waf
+[04:27] <ryah> if you want to join
+[04:29] <micheil> ryah: would it be an idea to move node from ry/node to node/node?
+[04:29] <Tim_Smart> [Pwner]John: Looks to me like some python dependancy problem
+[04:30] <Tim_Smart> What version of python are you using?
+[04:30] <[Pwner]John> er
+[04:30] <micheil> (you staying as committer of course)
+[04:30] <[Pwner]John> 2.5.2
+[04:30] <ryah> micheil: why?
+[04:30] <micheil> so that you could have "offical" node projects
+[04:30] <Tim_Smart> try python 2.6 maybe?
+[04:30] RayMorgan has joined the channel
+[04:31] <Tim_Smart> should be in the debian repos
+[04:31] <ryah> shrug - i have official node packages :)
+[04:31] <micheil> eg, the website, the documentation and source code all under the same user on github, just different repos
+[04:31] <isaacs> micheil: imo, it's better to have the project owned by the owner.
+[04:31] <tmpvar> ryah, wut wut, it works!
+[04:31] <ryah> micheil: if node is around 6 months from now, i'll do that
+[04:31] <micheil> eg, like what facebook does with it's projects.
+[04:31] <ryah> tmpvar: cool
+[04:31] <[Pwner]John> So Python2.6 is needed?
+[04:31] <[Pwner]John> :\
+[04:31] <isaacs> ryah: it's better this way
+[04:32] <tmpvar> ryah, i mean, eclipse is probably the shittiest debugger there is, but this is a big step
+[04:32] <micheil> ryah: you expect node not to be around in 6 months time?
+[04:32] <isaacs> ryah: don't do that till nodejs is incorporating.
+[04:32] <Tim_Smart> [Pwner]John: Not sure, but it is worth a try
+[04:32] <ryah> [Pwner]John: yeah sorry for this. what os are you?
+[04:32] <[Pwner]John> debian
+[04:33] <ryah> yeah. i really don't know what the bug is.
+[04:33] <ryah> upgrading python *may* help.
+[04:33] <[Pwner]John> and if not?
+[04:33] <[Pwner]John> :P
+[04:33] <Tim_Smart> Then blame it on nvidia_user
+[04:33] <tmpvar> i blame it on themacuser
+[04:33] <ryah> if not we have to get some support from the waf people
+[04:34] <ryah> (or maybe it's my config - although i really doubt it)
+[04:35] <eck> in the c++ api, what's the right way to see if a passed in argument is truthy?
+[04:35] <jashkenas> does Node care at all about CommonJS package.json files?
+[04:35] <ryah> eck: v8 api?
+[04:35] <ryah> jashkenas: no
+[04:35] <jashkenas> thanks
+[04:35] <eck> ryah: yeah, sorry, the v8 api
+[04:35] <ryah> eck: args[0]->IsTrue() 
+[04:35] <eck> thanks
+[04:37] <micheil> jashkenas: feel free to write a module to support it
+[04:37] <tmpvar> ^_^
+[04:38] <creationix> jashkenas: isaacs is working on something for this http://github.com/isaacs/npm-data
+[04:38] <isaacs> creationix: not npm-data
+[04:38] <isaacs> just npm
+[04:38] <isaacs> http://github.com/isaacs/npm
+[04:39] <isaacs> but no, node doesn't care about those files
+[04:40] <RayMorgan> isaacs: been out of the loop for a couple weeks and things move way too fast around here for me.... but what is the state of ejsgi vs the alternatives? Is everyone still working on their different versions until one wins out?
+[04:42] <isaacs> RayMorgan: i'm not sure, exactly.  ithinkihaveacat is using it, i know, and sent a patch recently.  and i kinda mean to make it support whatever the commonjs crowd decides jsgi should be, but i'm not entirely aware of what that is.
+[04:42] <isaacs> RayMorgan: part of my issue with it is that text encoding is a bit of a snag right now in node.
+[04:42] <isaacs> RayMorgan: so that makes it a bit weird to work with "official" jsgi
+[04:43] <RayMorgan> yeah
+[04:43] <ryah> i'm redoing the http api right now
+[04:43] <ryah> well just renaming things mostly
+[04:43] <ryah> but req is a readable stream, res is a writable stream
+[04:43] dnolen has joined the channel
+[04:44] <isaacs> ryah: nice.
+[04:44] <ryah> which is mostly jsgi - except you don't return the res
+[04:44] <ryah> ejsgi
+[04:44] <ryah> i mean
+[04:44] <isaacs> right
+[04:44] <isaacs> that'll make ejsgi even smaller :)
+[04:44] <RayMorgan> I am once again reworking some of the internals of Vroom and trying to figure which platform I should build the HTTP layer on top of.
+[04:44] <isaacs> returning the res is a nice way to chain middleware together.
+[04:45] <isaacs> but it's also unnecessary overhead for cases that won't use it.
+[04:45] <ryah> i kind of like the idea of only having one duplex object but i could see how that would confuse people
+[04:47] <jashkenas> On OSX, using process.watchFile, I'm getting my callback invoked twice every time the file changes.
+[04:47] <jashkenas> Is that a known bug?
+[04:47] <ryah> jashkenas: is your callback changing the file?
+[04:47] <jashkenas> Looks like it's not always twice, just sometimes.
+[04:47] <jashkenas> Nope
+[04:48] <ryah> i don't think it's a bug
+[04:48] <[Pwner]John> Too bad I'm not in sudo file
+[04:48] <[Pwner]John> XD
+[04:48] <jashkenas> ok, no biggie.
+[04:49] <isaacs> jashkenas: probably it's changing more than one thing in the file.
+[04:49] <isaacs> atime and mtime, most likely.
+[04:49] <[Pwner]John> All my shells have Python 2.5.2
+[04:49] <[Pwner]John> ._.
+[04:49] <ryah> i mean, there is no guarantee that callbacks and changes are in one-to-one correspondence
+[04:49] <isaacs> make sure that you're actually getting a more recent mtime, since that's usually what you care about.
+[04:49] <tmpvar> i roll with noatime
+[04:49] <tmpvar> ext2, cuz im hardcore
+[04:50] <isaacs> tmpvar: ? how do you not get access time on osx?
+[04:50] <tmpvar> i run a linux desktop ^_^
+[04:50] <tmpvar> afaik mac doesnt have an fstab
+[04:51] <isaacs> ah, i see
+[04:51] <jashkenas> sometimes it goes three times. It's a bit of a pain to have to manage a hash of filenames-to-mtimes yourself. 
+[04:51] <jashkenas> It makes sense that multiple changes might be seen by node as a single change, but the other way around (as it is currently) is more problematic.
+[04:51] <jashkenas> If you kick off something expensive.
+[04:52] <isaacs> jashkenas: just do something like this:  process.watchFile(myFile, function (o, n) { if (o.mtime == n.mtime) return; doSomething() })
+[04:52] <jashkenas> sure, will do.
+[04:52] <isaacs> or maybe o.mtime.getTime() or something, since it's actually a Date obj
+[04:53] <jashkenas> works beautifully, nice idea issacs.
+[04:53] <isaacs> process.watchFile(myFile, function (o, n) { if (!(n.mtime > o.mtime)) return; doSomething() })
+[04:53] <isaacs> >= won't work, since they'll never be equal, even if they are.
+[04:54] <isaacs> that's a jswtf for ya
+[04:54] <jashkenas> wtf.
+[04:55] <isaacs> object equality is by reference only.  since they're different date objects, they're not equal, even if they are referring to the same date.
+[04:56] <inimino> erichocean: that is really odd
+[04:56] <isaacs> but > and < are defined for Date objects to mean that they refer to later or earlier dates
+[04:56] <inimino> erichocean: but it is happening here too, I'll see how much of the parser I can strip out
+[04:57] <Tim_Smart> unless you parseInt the date objects first ^^
+[04:57] <Tim_Smart> I mean, do getTime()
+[04:57] <Tim_Smart> or w/e
+[04:58] <ryah> isaacs: could i ask you for a quick favor - could you throw like 10 puts() into test/mjsunit/test-multipart.js which just - like - output what it's doing?
+[04:58] <isaacs> ryah: sure
+[04:58] <ryah> just like puts("first request - this should be good") ... puts("parsing")
+[04:58] <ryah> etc
+[04:59] eelco_ has joined the channel
+[04:59] Tim_Smart has left the channel
+[05:00] sztanpet has joined the channel
+[05:08] brandon_beacher has joined the channel
+[05:08] <creationix> inimino: tell me what you think of http://github.com/creationix/do.  It looks a lot like your file-io code I'm sure
+[05:08] <eck> i built node with --debug, and by backtrace has an awful lot of question marks. is that due to the jit in v8, or is it pebcak?
+[05:10] <micheil> anyone interested on creating the documentation for File? (ryah do we need it?)
+[05:11] <micheil> ** File module (lib/file.js)
+[05:11] <ryah> eck: it's becase of v8
+[05:11] <inimino> creationix: looks useful
+[05:12] <ryah> eck: the js frames are on the c execution stack
+[05:13] <eck> ok, well i think i figured out my bug
+[05:13] <eck> when i close a file in the event loop, i need to let libev know?
+[05:13] <eck> i see a message like: (libev) epoll_wait: Bad file descriptor
+[05:13] <eck>  
+[05:14] <micheil> ryah: nice stuff, current master/HEAD passes all tests
+[05:14] <ryah> eck: if ev is watching it, yes
+[05:15] <isaacs> ryah: http://github.com/isaacs/node/commit/ea7c749766ecd5879799e3624ea1be4f14a653d9
+[05:16] <eck> got it, looks like node_stdio.cc has what i need
+[05:16] <isaacs> ryah: also removed the unnecessary process.nextTick
+[05:16] <ryah> isaacs: thank you
+[05:18] mattly has joined the channel
+[05:22] <ryah> micheil: isn't it always? :)
+[05:22] <micheil> hmm?
+[05:22] <ryah> passing all tests?
+[05:22] <micheil> the tests weren't passing about two releases bacvk
+[05:22] <micheil> (on mac os x)
+[05:22] <ryah> oh
+[05:23] <ryah> yeah - i think i disabled the sendfile one
+[05:23] <micheil> okay
+[05:24] <micheil> ryah: does lib/file.js need to be documented?
+[05:24] <micheil> as in, it needs documentation, but do you want it to have documentation
+[05:25] <creationix> I'd rather just move the write method into the new fs module and rename cat to read
+[05:25] <creationix> it's about all that truly useful in lib/file.js I think
+[05:27] <ryah> yeah, i think i agree with creationix 
+[05:27] mikeal has joined the channel
+[05:28] <ryah> and maybe we should change fs.open() to take string flags instead of integers.
+[05:28] <ryah> maybe i was wrong about that
+[05:28] <creationix> I would like to
+[05:29] <creationix> or at least accept both, sometimes you may need full control over all the flags
+[05:29] <creationix> ryah: is the fs module in a state where I could help with moving the stuff over?
+[05:30] <creationix> (not that it would be all that hard anyway)
+[05:30] <ryah> creationix: if you can do it relatively quickly i'd be happy to have the changes
+[05:30] <ryah> i won't work on it tonight
+[05:30] <creationix> ok, I'll see what I can do
+[05:30] <jashkenas> ryah: string flags would be fantastic.
+[05:30] <ryah> i might move stuff around
+[05:31] <ryah> tomorrow
+[05:31] <ryah> but if i have your changes it can get moved too
+[05:31] <creationix> ok, I'll send a patch before going to bed so you'll have time to move it around
+[05:31] <inimino> erichocean: you still around?
+[05:31] <ryah> creationix: so you're going rm to lib/file.js ?
+[05:31] <creationix> I think so
+[05:31] <ryah> okay
+[05:31] <creationix> does anyone actually use the File class
+[05:31] <ryah> no
+[05:32] <ryah> ACTION loves removing code
+[05:32] <creationix> :D
+[05:35] <creationix> ryah: dump question, where is the fs module? I'm not seeing it in /lib
+[05:35] <creationix> *dumb
+[05:35] <ryah> creationix: src/node.js
+[05:35] <inimino> creationix: it's probably in node.js
+[05:35] <creationix> ahh, thanks
+[05:37] <ryah> RayMorgan: how did you do the inspect with eclipse?
+[05:37] <creationix> hmm, there is already a fs.read that takes an fd, I think I'll call it readfile
+[05:37] <ryah> creationix: there is already a cat
+[05:37] dnolen has joined the channel
+[05:37] <creationix> yeah, I was going to rename cat to read and then copy over write from file
+[05:37] <RayMorgan> ryah: I just booted my app up and then attached the debugger, then threw in a breakpoint. 
+[05:37] <ryah> readFile and writeFile?
+[05:38] <creationix> sounds good to me, you can rename them tomorrow if you want
+[05:38] <ryah> creationix: docs too?
+[05:38] <creationix> good point, thanks
+[05:39] <micheil> creationix: file class is referenced in a few howtonode tutorials
+[05:39] <ryah> creationix: and a depreciation warning for fs.cat()
+[05:40] <creationix> I was wondering about howtonode, should I update the articles as node changes or just node the node version and leave them be?
+[05:40] <creationix> s/node the node/note the node/
+[05:40] <micheil> update I'd say
+[05:40] <ryah> creationix: it would be really cool if there were tabs which showed which versions the articles were good for
+[05:40] <jashkenas> creationix: seriously consider keeping them up to date
+[05:40] cloudhead has joined the channel
+[05:40] <jashkenas> That would really make it a valuable resource.
+[05:40] <jashkenas> Of more than just historic interest.
+[05:40] <micheil> ryah: "nodebook"
+[05:41] <jashkenas> dude, nodebook.net is available
+[05:41] <jashkenas> snag that.
+[05:41] <creationix> ok, I'll try to keep the articles with the latest released node then
+[05:41] <ryah> 0.1.20-0.1.28 | 0.1.29 - present 
+[05:41] <ryah> ^-- would be great to have such tabs
+[05:41] <ryah> with differnt versions of the articles
+[05:41] <micheil> nodebook.org or, alternatively: book.nodejs.org
+[05:41] <creationix> tabs?
+[05:42] <creationix> ahh, with the original versions
+[05:42] <ryah> yeah
+[05:42] <micheil> creationix: I'll have to talk to you later about implementing tagged articles
+[05:42] <creationix> metadata in the header should be enough, pointing to git revisions
+[05:43] <creationix> it will be a lot of work in the generator, but I think it's worth it
+[05:43] <ryah> jquery's doc is so awesome: http://api.jquery.com/category/version/1.2.3/
+[05:43] <micheil> it'd also be really cool if people could comment on various parts of the articles
+[05:43] <micheil> (like add a comment to a paragraphy)
+[05:43] <micheil> *paragraph
+[05:43] <creationix> I'd love that too, I'm about fed up with disqus
+[05:43] <ryah> i would so love to have documentation like that
+[05:43] <micheil> ryah: I'm thinking more the python / django cookbook
+[05:43] <ryah> micheil: link
+[05:43] <ryah> ?
+[05:44] <micheil> http://djangobook.com/
+[05:44] <ryah> oh yeah, that's nice too
+[05:45] <ryah> but i like how jquery very structurally documents its changes
+[05:45] <micheil> yeah
+[05:45] <ryah> its really built into the website
+[05:45] <micheil> maybe we could use git tags.. I'll have to work it out more with tim as to what's possible
+[05:45] <micheil> eg, grit in js
+[05:46] <inimino> erichocean: if you read this, take a look at http://boshi.inimino.org/3box/PEG/erics_parser_instrumented.js and http://boshi.inimino.org/3box/PEG/erics_parser_instrumented_output (especially the bit at the end) ... I'll look into the other thing tomorrow
+[05:46] <ryah> i'd like to move away from asciidoc at some point
+[05:46] <micheil> ryah / creationix: when you finish the File class changes, could you post to the list, so that I could write documentation up for it (unless you want to do it)
+[05:47] <micheil> ryah: that could also be in part with using a git repo for the wiki
+[05:47] <micheil> jquery's docs are a wiki
+[05:47] <creationix> jquery's new docs are freaking awesome
+[05:47] <micheil> ACTION was documentation manager for the past for jquery UI sprints..
+[05:47] <creationix> we've got to build that somehow
+[05:47] <micheil> no, the last one
+[05:48] <micheil> creationix: 11:47am?
+[05:48] <creationix> pm
+[05:48] <micheil> okay
+[05:51] jed has joined the channel
+[05:55] rtomayko has joined the channel
+[05:57] <kriskowal> does anyone know what it would take to prototype tom van cutsem's proxy proposal?
+[05:57] <kriskowal> (http://wiki.ecmascript.org/doku.php?id=harmony:proxies)
+[05:58] <kriskowal> that is, how to create objects that forward "missing method" or __getattr__
+[05:59] <micheil> kriskowal: probably a lot
+[05:59] <micheil> kriskowal: have you seen the bug on v8 about method missing
+[05:59] <micheil> ?
+[05:59] <kriskowal> no
+[05:59] <micheil> oh.. look it up
+[05:59] <micheil> there's a bug report on v8 for __methodMissing__
+[06:00] <micheil> and basically v8 won't apply the patch for it until webkit's javascript:core does
+[06:00] <kriskowal> i know that it would be unwise to implement it naively
+[06:00] <kriskowal> oh, that's no surprise
+[06:00] <micheil> which I think is rather stupid.
+[06:00] <micheil> but that's an opinion, not fact
+[06:00] <kriskowal> ES is definitely not going to standardize __defineGetter/Setter__
+[06:01] <micheil> hangon.
+[06:01] <kriskowal> take a look at the link i just posted.
+[06:01] <micheil> ES5 has getter setters I think
+[06:01] <micheil> it just doesn't have methodMissing
+[06:01] <ryah> i dont think multipart should know about http
+[06:01] <kriskowal> yes, different syntax
+[06:01] <kriskowal> yeah, they're looking into proxies, above link, for method missing alternatives
+[06:02] <kriskowal> in any case, if proxies can be implemented in node without dancing around in v8's code, it would be nice
+[06:02] <kriskowal> a quick pass at the code seems to indicate that there's some infrastructure in place for such interceptors
+[06:02] <kriskowal> but i'm not sure
+[06:03] <micheil> maybe if you go (fab) style?
+[06:03] <tmpvar> i was under the impression that ryah wanted to keep to vanilla v8 js?
+[06:03] <micheil> myClass.call(method, args)
+[06:03] <micheil> or something
+[06:03] <micheil> myClass.__methodMissing__ = func...
+[06:04] <micheil> if(!myClass[method]) invoke __methodMissing
+[06:05] <kriskowal> there's no question that a similar pattern couldn't be done in pure-js with a meta-object pattern, but that kinduh misses the point.
+[06:06] <micheil> true
+[06:06] <micheil> kriskowal: just redefine the Object :P
+[06:06] <kriskowal> the ES proposal looks like new Proxy({get: function (thisp, key) {return 10}}).foo == 10
+[06:06] <micheil> Object.prototype.call = function.. :P
+[06:06] <micheil> that would be monkey patching though
+[06:06] <mikeal> nott his again
+[06:07] <kriskowal> sorry, sorry. i'm interested as an exercise, not for influencing node's direction.
+[06:07] <kriskowal> it just happens that this is the only room in the world where people talk about v8 in earnest.  where does everyone else go for their v8 internals info?
+[06:08] <mikeal> it's typical google open source, work on it in a closed room and throw code over a wall in between meetings :)
+[06:08] <mikeal> they have a mailing list tho
+[06:08] <mikeal> and it's pretty active
+[06:09] <kriskowal> yeah, i looked
+[06:09] <kriskowal> v8-users is 90% spam, and v8-dev is 90% automated ticket messages
+[06:10] <mikeal> all google groups are 9/10 spam nowadays
+[06:10] <micheil> you'd think they'd redo it?
+[06:10] <mikeal> unless you're lucky enough to have some volunteer moderators
+[06:10] <mikeal> they really don't care
+[06:10] <mikeal> groups is on life support
+[06:11] <mikeal> the GitHub guys have been talking about doing something
+[06:11] <micheil> sweet.
+[06:11] <mikeal> this makes me happy
+[06:11] <mikeal> http://code.google.com/p/v8/issues/detail?id=235
+[06:11] <micheil> mailing list, meet github, github meeting mailing list
+[06:12] <mikeal> "There are currently no plans for implementing E4X in V8."
+[06:12] <mikeal> thank fuck!
+[06:12] <mattly> yay
+[06:12] <mattly> e4x is awful
+[06:12] <mikeal> worst. idea. ever.
+[06:12] <mikeal> xml literals, cause we should encourage *more* xml
+[06:13] <mikeal> spidermonkey is removing it, hah!
+[06:14] <micheil> kriskowal: I don't like the idea of proxies, methodMissing is simple, it does the job, and is familar (ruby, python, as example)
+[06:14] dekz has joined the channel
+[06:15] <mikeal> javascript isn't ruby or python
+[06:15] <mikeal> i mean, i can see the alure of features like this
+[06:15] <kriskowal> particularly, in ruby and python, the property and key-spaces are separate
+[06:15] <mikeal> but what they really are are just features around abstractions that don't really exist
+[06:16] <mikeal> you live in that abstraction in ruby and python, and you shouldn't in javascript
+[06:16] <inimino> mikeal: is spidermonkey killing E4X finally?
+[06:16] <inimino> ACTION thought that would never happen
+[06:16] <mikeal> i know that bugs are basically being ignored and it's probably going to not be compiled in by default anymore
+[06:16] <inimino> that would be nice
+[06:17] <mikeal> the code may sit there, but spidermonkey isn't being released regularly anymore
+[06:17] <creationix> mikeal: btw we can now monkypatch Object.prototype without breaking as soon as we pull in latest V8, it has Object.defineProperty
+[06:17] <mikeal> a bunch of stuff has already been unofficially killed like threads
+[06:17] <micheil> mikeal: generally extensions to things like that are bad, but methodMissing is actually incredibly useful
+[06:17] <creationix> not sure if that's a good idea though (monkey patching)
+[06:17] <mikeal> defineProperty is great
+[06:17] <micheil> mikeal: think of things like ORM and stuff
+[06:17] <mikeal> ORMs are the devil
+[06:17] <mattly> hah
+[06:17] <micheil> not really.
+[06:17] <micheil> they lower the barrier to entry
+[06:17] <mattly> monkeypatching is a double-edged sword
+[06:18] <mikeal> i store JSON, that's a lower barirer to entry than ORM
+[06:18] <mikeal> defineProperty isn't for monkey patching
+[06:18] <micheil> mikeal: and for those using any form of db?
+[06:18] <mikeal> i use a db
+[06:18] <mikeal> i store JSON in the db
+[06:18] <mikeal> :)
+[06:18] <micheil> bah!
+[06:18] <mikeal> it's called CouchDB
+[06:18] <mattly> :D
+[06:18] <mikeal> it'll help you relax
+[06:18] <micheil> bah! #2
+[06:18] <mikeal> :)
+[06:19] <micheil> there are other uses asides from ORM
+[06:19] <mikeal> not really, i used to think so
+[06:19] <mikeal> then i realized i was wrong
+[06:19] <micheil> dynamic code loading?
+[06:19] <micheil> just call it, even if it doesn't exist.
+[06:20] <micheil> (sorry, joke.)
+[06:20] <mikeal> hehe
+[06:20] <mikeal> i think properties are a totally valid use case
+[06:20] <kriskowal> proxies would make it possible to create "membranes" for remote objects
+[06:21] <mikeal> but i think it's real uses come from it adding more dynamic features to the language without getting in the way by defining rigid object customization schemes
+[06:21] <kriskowal> http://vimeo.com/9149445
+[06:21] <inimino> kriskowal: hasn't every computing system in the history of computing that's ever tried to make remote object access transparent eventually failed (after wasting thousands of man hours, usually?)
+[06:21] <mikeal> when you start naming abstractions around abstractions that don't exist yet you're off in wonderland
+[06:22] <kriskowal> it certainly wouldn't be transparent, it'd just be less painful
+[06:22] <mikeal> inimino: yes!
+[06:22] <inimino> I did watch the video, though
+[06:23] <inimino> kriskowal: and I think it's great stuff, just not sure that we need to overload property access to do it...
+[06:24] <kriskowal> it's a lot cleaner to do so than to break existing code by introducing a new implicitly meaningful key to the domain of every object
+[06:24] <mikeal> i don't think it's worth the overhead just to have something that looks like shared memory 
+[06:24] <inimino> kriskowal: why would it have to be every object?
+[06:24] <kriskowal> and, given that nobody on the ES board is seriously considering __missingMethod__, it's safe to assume they are aware of security flaws with that approach
+[06:25] <kriskowal> what's your counter-proposal
+[06:26] <mikeal> what is the problem you are trying to solve under what constraints?
+[06:26] <inimino> personally I don't have a problem with object("method", args)
+[06:26] <inimino> (or call it a message instead of a method if that helps)
+[06:26] <kriskowal> ah, tyle closes's ref_send impl does that
+[06:27] <kriskowal> in that impl, because object.freeze wasn't yet available, all promise objects were in fact functions that took a "method name" as their first arg.
+[06:27] <inimino> it's a better OO (in the Smalltalk sense) pattern than the OO facilities JavaScript has
+[06:28] <kriskowal> it isn't hard to talk about better OO patterns than JS
+[06:28] <micheil> security flaws in method missing?
+[06:28] <inimino> closures are a lot closer to true encapsulated objects
+[06:28] <inimino> they're opaque, you can't copy them, etc... all you can do is send messages to it
+[06:28] isaacs has joined the channel
+[06:28] dekz has joined the channel
+[06:28] <inimino> and there is no instanceof nonsense...
+[06:28] <ryah> docbook is such hell
+[06:28] <inimino> it enforces "good" OO style
+[06:29] <kriskowal> so your counter-proposal is for everyone to use good style
+[06:29] <inimino> kriskowal: no, my counter-proposal is a pattern which happens to be good style
+[06:29] <inimino> there's a difference ;-)
+[06:30] <kriskowal> neither copes well with extant code
+[06:30] <inimino> kriskowal: the reason it's good style is because it allows true encapsulation... the ability to do things like method missing, or to make an object transparently distributed, is just a side benefit
+[06:31] <kriskowal> same problem as the categorical imperative; there are infinite internally consistent sets of rules, but few combinations thereof that remain consistent
+[06:31] <inimino> kriskowal: I think node has showed that people are willing to adapt to what is new if there is a tangible benefit
+[06:31] <kriskowal> i agree
+[06:31] <kriskowal> i think commonjs has shown that too
+[06:32] <inimino> yes, interoperability is the benefit there
+[06:32] brosner_ has joined the channel
+[06:33] brosner_ has left the channel
+[06:33] bentomas has joined the channel
+[06:34] <bentomas> is there a way to do sys.print but like sys.error so it gets written immediately?  I don't want the new line
+[06:34] jashkenas has joined the channel
+[06:36] <micheil> sys.debug
+[06:38] <isaacs> bentomas: process.stdio.writeError("foo")
+[06:39] <bentomas> ahhh, perfect!
+[06:45] <ryah> soon to be process.stderr.write("foo")
+[06:45] <bentomas> how soon?
+[06:45] <ryah> 2 days?
+[06:45] <bentomas> so, soon!
+[06:46] <[Pwner]John> lol
+[06:46] <ryah> actually, i dont think it will make it into the next release
+[06:46] <ryah> probably the one after that
+[06:46] <[Pwner]John> Mah
+[06:46] <bentomas> I'll keep an eye out
+[06:46] <[Pwner]John> None of the admins are on my shell
+[06:46] <[Pwner]John> :\
+[06:46] <[Pwner]John> so I can't upgrade :p
+[06:47] <ryah> [Pwner]John: what if you change the first line of Makefile to --jobs=0
+[06:47] <isaacs> ryah: hey, how about having both sync and async modes for both stdout and stderr?
+[06:47] <kriskowal> ryah is process.stderr.write part of net2?
+[06:48] <ryah> isaacs: maybe...
+[06:48] <cloudhead> inimino: the problem with OO through closures, is that we don't have an easy way to pass objects by value
+[06:48] <ryah> kriskowal: not really - just general api clean ups
+[06:48] <kriskowal> aye
+[06:48] <kriskowal> i like it, in any case
+[06:48] <isaacs> cloudhead: that'd be a lot of copying anyway.  why would you want to do that?
+[06:49] <[Pwner]John> ryan: same thing
+[06:49] <isaacs> cloudhead: if it's too big to pass with json, it's probably not a good idea.
+[06:49] <[Pwner]John> should I move it back to jobs=1?
+[06:49] <[Pwner]John> oh
+[06:49] <[Pwner]John> I don't have waf installe
+[06:49] <[Pwner]John> d
+[06:49] <[Pwner]John> ACTION facepalms
+[06:49] <ryah> [Pwner]John: shouldn't matter
+[06:49] <[Pwner]John> lol
+[06:49] <ryah> [Pwner]John: node includes it
+[06:49] <[Pwner]John> i see
+[06:49] <[Pwner]John> PwnerJohn@grsec:~/node$ make
+[06:49] <[Pwner]John> Project not configured (run 'waf configure' first)
+[06:49] <[Pwner]John> waf configur
+[06:50] <kriskowal> isaacs it's an interesting idea
+[06:50] <ryah> [Pwner]John: maybe put --jobs=0 in configure ?
+[06:50] <cloudhead> isaacs, well, to pass state to a function, and make it modifiable, without affecting all the other functions
+[06:50] <kriskowal> bringing stuff from node into narwhal, i'm probably going to establish some kind of convention for sync/async API modules
+[06:51] <cloudhead> same thing you do every day when passing values through closures
+[06:51] <isaacs> cloudhead, just use Object.create(whatever)
+[06:51] <kriskowal> like fs/afs, os/aos, system/asystem
+[06:51] <isaacs> that'll pop off a safely-writeable object that decends from "whatever"
+[06:51] <cloudhead> yea, that's the best alternative
+[06:51] <ryah> kriskowal: i'd perfer fs/sfs 
+[06:51] <kriskowal> naturally
+[06:51] <ryah> :)
+[06:51] <[Pwner]John> nope
+[06:51] <[Pwner]John> doesn't work
+[06:52] jcrosby has joined the channel
+[06:52] <kriskowal> and i don't object in principle, just got a bunch of code that'd have to be revised
+[06:52] <ryah> [Pwner]John: i'm sorry. i wish i could help you somehow. it really involves digging into waf
+[06:52] <kriskowal> and not all of it is my own
+[06:52] <cloudhead> isaacs: I've just been using new() so far, but I think I'm gonna start using Object.create now
+[06:52] <[Pwner]John> :\
+[06:52] <[Pwner]John> np
+[06:52] <ryah> [Pwner]John: which i don't want to do because you're the only one in a long time who's complained
+[06:52] <mikeal> i'm so used to fixing code for API changes in node that it's part of my  monday routine
+[06:53] <[Pwner]John> so I am the first to complain?
+[06:53] <[Pwner]John> :(
+[06:53] sveisvei has joined the channel
+[06:53] <[Pwner]John> in a long time*
+[06:53] <isaacs> cloudhead: note, changing references to object members will maybe affect the parent scopes.
+[06:53] <kriskowal> didn't tlrobinson quip that we could meet in the middle with sfs/afs, sos/aos, … :)
+[06:53] <mikeal> git pull ry master ; build ; fix all my libraries ; git push
+[06:53] <isaacs> o = {foo:{bar:1|}};  n = Object.create(o);  n.foo.bar = 2;  puts(o.foo.bar)
+[06:53] <mikeal> fs/sfs is better, it emphasize what you *should* use
+[06:54] <isaacs> mikeal: ++
+[06:54] <cloudhead> isaacs: you mean it won't deep-copy?
+[06:54] <isaacs> cloudhead: no.
+[06:54] <isaacs> try it in the repl yourself: o = {foo:{bar:1}};  n = Object.create(o);  n.foo.bar = 2;  puts(o.foo.bar)
+[06:54] <cloudhead> right, well that shouldn't be a problem in most cases
+[06:55] <mikeal> i wrote some code to do a deep copy of an object in javascript
+[06:55] <mikeal> but i think it might be mozilla platform specific 
+[06:55] <kriskowal> you too!?
+[06:55] <isaacs> cloudhead: for simple bag-o-data objects, it's usually not required.
+[06:56] <cloudhead> aye
+[06:59] <isaacs> mikeal: you can do a deepCreate easier than a deep copy: http://gist.github.com/306377
+[06:59] <mikeal> i wrote it a long time ago, i should try to find it, i'm sure it's terrible
+[06:59] <isaacs> not sure if it's faster.
+[07:00] <isaacs> and it'll crash the stack for looping objects.
+[07:00] <mikeal> i think i wrote it for something else I was doing because I was annoyed by the lack of introspection features in javascript
+[07:00] kennethkalmer has joined the channel
+[07:00] <mikeal> boy was I stupid
+[07:00] <kriskowal> neat isaacs
+[07:01] <kriskowal> except o.hasOwnProperty(k) which is admittedly a debatable pattern
+[07:01] <isaacs> right
+[07:01] <mikeal> that looks useful and then I realize all the different ways I could abuse it
+[07:01] <mikeal> hasOwnProperty is debatable?
+[07:01] <mikeal> by who?
+[07:01] <isaacs> kriskowal: but in this case, it already has the non-own-properties, so assigning them as own properties seems odd.
+[07:01] <isaacs> also, functions will slip through
+[07:01] <isaacs> and they're byref
+[07:02] <kriskowal> oh, not what i meant
+[07:02] <CIA-77> node: 03isaacs 07master * r46a47d2 10/ test/mjsunit/test-multipart.js : Add some puts() to test-multipart.js to show what it's doing. - http://bit.ly/a9mlab
+[07:02] <CIA-77> node: 03Ryan Dahl 07master * rae85d9a 10/ (20 files in 4 dirs): 
+[07:02] <CIA-77> node: API: Make request/response object closer to stream interface
+[07:02] <CIA-77> node: - sendBody() renamed to write()
+[07:02] <CIA-77> node: - 'body' event renamed to 'data'
+[07:02] <CIA-77> node: - 'complete' event renamed to 'end' - http://bit.ly/aB5Nye
+[07:02] <kriskowal> o.hasOwnProperty(k) vs Object.prototype.hasOwnProperty.call(o, k)
+[07:02] <ryah> yes! broke all node programs!
+[07:02] <isaacs> oh, right
+[07:02] <isaacs> ryah: yikes!!
+[07:02] <cloudhead> omg
+[07:02] <isaacs> had to happen at some point.
+[07:02] <cloudhead> ACTION goes to fix his code
+[07:02] <mikeal> i know what i'll be doing tomorrow morning
+[07:03] <cloudhead> lol
+[07:03] <cloudhead> this is also for http right?
+[07:04] <mikeal> if this was Python, this change would be on a 4 year deprecation schedule :P
+[07:04] <ryah> its just for http
+[07:04] <mikeal> which is why I'm not writing Python :)
+[07:04] <micheil> woah. Grit is epic.
+[07:04] <cloudhead> ok
+[07:04] <ryah> mikeal: yeah - python can't do stuff like that
+[07:04] <kriskowal> and also why you'd better use python if you don't want to change all your programs all the time or hang out on irc to know you have to :P
+[07:05] <ryah> if node grows much bigger it wont be able to either
+[07:05] <mikeal> python can't fix basic problems
+[07:05] <bentomas> ryah: at some point I think you were talking about combining request and response into one object, are you still thinking of doing this?
+[07:05] <cloudhead> well, you can still have a 'stable' release, which changes much slower
+[07:05] <cloudhead> or have specific version dependencies
+[07:05] <ryah> bentomas: i like it - i have an imagination that people will complain loudly
+[07:05] <mikeal> i think keeping the base libraries small and not growing a huge standard library gets you out of most renames in the future tho
+[07:06] <ryah> mikeal: yeah
+[07:06] <bentomas> I like it too, what are the objections?
+[07:07] <ryah> well one objection is what do you call the object?
+[07:07] <mikeal> bentomas: i read your name like "fantomas", am I correct ;)
+[07:07] <mikeal> ryah: thing
+[07:07] <ryah> http-thin
+[07:07] <mikeal> thing.response.addListener :P
+[07:07] <ryah> message?
+[07:08] <bentomas> yeah, I see what you mean
+[07:08] <ryah> createServer(function (message) {  ... })
+[07:08] <creationix> ryah: http://gist.github.com/306382
+[07:08] <bentomas> mikeal: well the "etymology" would be "ben" + "thomas" - "h" 
+[07:09] <creationix> ryah: it's passing all tests and I think I found everything that needs renaming/changing
+[07:09] <mikeal> i know, but i was thinking you dropped the h in order for it to phonetically change
+[07:09] <mikeal> also, fantomas is a great band
+[07:09] <bentomas> mikeal: never heard of it
+[07:10] <bentomas> ryah: seems like you could just call the combined object a request
+[07:10] <bentomas> request.write(data)
+[07:10] <bentomas> to write data back to the request
+[07:10] <bentomas> request.startResponse(200, { /* headers */ });
+[07:11] <ryah> creationix: can you change "string_to_flags" to camel-case 
+[07:12] <creationix> ok, sure
+[07:12] <ryah> bentomas: yeah
+[07:13] edspencer has joined the channel
+[07:13] <bentomas> ryah: but I'll leave the api designing up to you. You've done a pretty stellar job thus far!
+[07:14] <tmpvar> night
+[07:14] <creationix> hmm, gitx's "amend" feature isn't doing what I expected, do I have to squash the commits afterwards?
+[07:15] bentomas has left the channel
+[07:15] <micheil> creationix: $ git commit --amend
+[07:15] <micheil> works far far easier
+[07:16] <creationix> that's what I thought I did through the gui, maybe it didn't work because I pulled in latest ry/master between
+[07:16] <isaacs> ryah: you'd call it "connection"
+[07:16] <isaacs> connection.read(cb) to get incoming chunks.
+[07:17] <ryah> mmm..
+[07:17] <isaacs> connection.write(blerg) to output stuff.
+[07:17] <ryah> but a request isn't a connection
+[07:17] <ryah> multiple requests can be had on a single connection
+[07:17] <isaacs> meh.  from the pov of tcp maybe not, but from the pov of http?  yeah, it kinda is.
+[07:17] <isaacs> but yeah, it does confound terms.
+[07:17] <isaacs> all the http literature refers to the request and response as completely different objects.
+[07:18] <isaacs> but you might start the response while the request is still coming in.
+[07:18] <mikeal> keep-alive
+[07:18] <mikeal> no
+[07:18] <mikeal> you cannot start a new request while a response is still coming on the same connection
+[07:18] <inimino> call it a RoundTrip
+[07:18] <mikeal> bad things happen, socket disconnects
+[07:19] <isaacs> mikeal: not talking about a new request.
+[07:19] <ryah> mikeal: well, with node http you can
+[07:19] <inimino> mikeal: that's pipelining
+[07:19] <mikeal> it'll just queue it?
+[07:19] <ryah> yes
+[07:19] <mikeal> that's awesome
+[07:20] <isaacs> mikeal: i'm talking about, i 403 your face while you're trying uploading a giant file
+[07:20] <isaacs> i can start the response before you're done
+[07:20] <mikeal> ahhh
+[07:20] <mikeal> ok, yeah, that makes sense
+[07:20] <inimino> ryah: you could just call it Request, since it's from the perspective of a server... the object represents a request, not a response
+[07:21] <isaacs> inimino: the issue there is request.write("foo")
+[07:21] <mikeal> ryah: is there a way to check if the connection is still waiting on a response to finish
+[07:21] <ryah> inimino: what about from the perspective of the client?
+[07:21] <isaacs> inimino: or request.sendHeader(200, {...}_
+[07:21] <isaacs> )
+[07:21] <inimino> hm...
+[07:21] <isaacs> http.createServer(function (conversation) { ... })
+[07:22] <creationix> ryah: git rebase -i is really cool.  gist is updated http://gist.github.com/306382 
+[07:22] <ryah> http://groups.google.com/group/commonjs/msg/af47041cc1b52371
+[07:22] <inimino> well, it's a request, with bundled methods for dealing with it
+[07:22] <ryah> creationix: that includes my changes
+[07:22] <inimino> you might end up renaming some of those methods
+[07:23] <isaacs> inimino: but a request has a sender and a receiver.
+[07:23] <creationix> really?
+[07:23] <creationix> crap, I'll try again, I really need to learn this git thing
+[07:23] <ryah> creationix: not a big deal, i can camel case it 
+[07:23] <isaacs> inimino: in the http conversation, once the connection and request has been made, it's mostly a response-related thing...
+[07:24] <isaacs> inimino: and the server is doing the sending then... it's just weird.
+[07:24] <ryah> creationix: or should i let you? :)
+[07:24] <inimino> meh
+[07:24] <ryah> creationix: learning git-crap is good
+[07:24] <inimino> naming is hard ;-)
+[07:24] <isaacs> i love how we're already bikeshedding this thing...
+[07:24] <inimino> anyway, make it all one object, it's cleaner
+[07:24] <creationix> ryah: I'll try one more time, I use git for work, so I need to know this
+[07:24] <inimino> who cares what it's called ;-)
+[07:25] <isaacs> inimino: sure
+[07:25] <isaacs> call it X
+[07:25] <ryah> mikeal: like if you're in a webserver - to see if the server is responding to a previous message still?
+[07:25] <mikeal> no, i was actually thinking for a client pool
+[07:26] <mikeal> so i check a connection pool to see if i have a connection to host x, but if it's busy I add another one to the pool
+[07:26] <inimino> isaacs: works for me, the X represents how the flow is going in both directions :)
+[07:26] <mikeal> then i can keep the connections concurrent to the number that I need them at any given time
+[07:26] <isaacs> inimino: exactly!
+[07:26] <isaacs> inimino: <-> isn't a valid identifier
+[07:27] <ryah> mikeal: well if it's an http1.1 server you can just pump requests at it without waiting for repsonses
+[07:28] <ryah> http recommends you send one request, get the response - check the http version of the server
+[07:28] <ryah> then if it's 1.1 you can pipeline the rest
+[07:28] <mikeal> that's not ideal in this case
+[07:29] <creationix> ryah: I think I got it, I just did a hard reset to before my changes and applied my own patch, then I updated it and amended it
+[07:29] <mikeal> but I can see how that would be better in most cases
+[07:32] <ryah> creationix: okay
+[07:32] <ryah> mikeal: yeah the http client could be improved
+[07:32] <ryah> it should do what i just described
+[07:33] <felixge_> nice patches coming in, gotta dix my app :)
+[07:34] <mikeal> for me, i don't get any performance gain from pipelining
+[07:34] <mikeal> because the connections are cheap and after i start them i'm done with the tcp slow start lag
+[07:35] <mikeal> and i actually need the responses
+[07:35] <ryah> so we still need to rename finish to close
+[07:36] <ryah> and by we i mean i
+[07:37] piranha has joined the channel
+[07:42] gwoo has joined the channel
+[07:45] <creationix> well, I'm off to bed
+[07:45] <creationix> ryah: Thanks for letting me help with the fs api, it's been bugging me for a long time
+[07:46] <ryah> creationix: oh did you give me the updated patch?
+[07:46] <creationix> It was the same gist, updated
+[07:47] <creationix> http://gist.github.com/306382
+[07:47] <creationix> would you rather I email it to the list?
+[07:47] <ryah> okay
+[07:47] <ryah> nope - that's fine
+[07:48] <ryah> thanks
+[07:48] <creationix> cool, I'll work on the blog ideas later, they will take some time
+[07:50] <micheil> damn I hate it when he does that.
+[07:56] dekz_ has joined the channel
+[07:57] <ryah>  13 files changed, 124 insertions(+), 240 deletions(-)
+[07:57] <ryah> like those numbers
+[07:58] <ryah> s/^/i /
+[07:58] <CIA-77> node: 03Tim Caswell 07master * r6115df6 10/ (13 files in 5 dirs): 
+[07:58] <CIA-77> node: File API tweaks
+[07:58] <CIA-77> node: - Rename fs.cat to fs.readFile
+[07:58] <CIA-77> node: - Move file.write to fs.writeFile
+[07:58] <CIA-77> node: - Allow strings for the flag argument to fs.open
+[07:58] <CIA-77> node:  ("r", "r+", "w", "w+", "a", "a+")
+[07:58] <CIA-77> node: - Remove the unused 'File' module / class - http://bit.ly/au2FSI
+[07:59] <ryah> okay. that's enough destruction for one day
+[08:20] jed has joined the channel
+[08:25] tisba has joined the channel
+[08:41] <piranha> hmm... require is a function and an object simultaneously. Is this possible with plain js?
+[08:46] <jed> piranha: every function is also an object, no?
+[08:47] <piranha> jed: ah, so just can do qqq = function() {}; qqq.paths = []; ?
+[08:47] <jed> yessir.
+[08:47] <piranha> really
+[08:47] <piranha> it's so easy... :))
+[08:47] <jed> there are a few things you can't override.
+[08:48] <jed> for example, don't try this: a = function(){}; a.length = 2;
+[08:48] <piranha> aha, length is number of arguments, right?
+[08:48] <jed> right.
+[08:48] <piranha> ok
+[08:48] <jed> i banged my head up against that for 2 hours today.
+[08:48] <piranha> hah :-)
+[08:48] <jed> you can override it for arrays, but not for functions or strings.
+[08:48] <piranha> anyway, that's nice
+[08:48] <piranha> eh, javascript is nice, but where's my __getattr__? :-(
+[08:49] <jed> heh, it's coming eventually.
+[08:49] <piranha> eh, really?
+[08:49] <jed> it's already in firefox, IIRC.
+[08:49] <jed> (haven't used it much yet)
+[08:54] <felixge_> WAHH, why did the file module get deleted?
+[08:54] <felixge_> makes me angry
+[08:54] <felixge_> :(
+[08:57] <micheil> Is there any fs.realpath / fs.expand_path?
+[08:57] <felixge_> micheil: require('path').realpath exists I think
+[08:58] <micheil> path.normalize
+[08:58] <felixge_> right
+[08:58] <felixge_> that should do it
+[09:05] weepy has joined the channel
+[09:05] <weepy> Hiya
+[09:06] <weepy> does anyone know what the 'net2' in the net2 branch of node means ?
+[09:07] <felixge_> weepy: it's the 2nd implementation of the networking layer in node
+[09:07] <felixge_> which will succeed the first one
+[09:07] <weepy> ah a reworking
+[09:07] <weepy> what will it fix / change ?
+[09:09] <felixge_> weepy: more stuff moves from C++ -> JS. Easier to maintain & tweak
+[09:09] Tim_Smart has joined the channel
+[09:09] <felixge_> also a few new features, like unix sockets
+[09:09] <felixge_> but for most parts it is a refactoring
+[09:09] <Tim_Smart> rawr :o Stupid Snow Leopard won't install
+[09:09] <weepy> ah cool thanks for the info
+[09:09] <felixge_> Tim_Smart: try: "sudo lol cat"
+[09:10] <Tim_Smart> ACTION tries for the lulz
+[09:10] <Tim_Smart> sudo: lol: command not found
+[09:10] <felixge_> haha
+[09:10] <felixge_> it is mocking you
+[09:10] <felixge_> :)
+[09:11] <Tim_Smart> I am using a burnt 10.6.1 disc, so I might try a retail one tomorrows
+[09:14] <felixge_> maybe you ripped it poorly
+[09:14] <felixge_> but I had success making Leopard copies with Disk Utility before
+[09:14] <felixge_> so I don't know if they even use any copy protection shit
+[09:14] dekz has joined the channel
+[09:14] dekz has left the channel
+[09:17] teemow has joined the channel
+[09:18] <piranha> felixge_: they don't as far as I know
+[09:18] rtomayko has joined the channel
+[09:20] <micheil> ryah_Away: can we get a new build of api?>
+[09:20] <felixge_> When I used windows, I often had bootleged Software. But I feel on the mac most stuff that has a price tag is actually worth it :)
+[09:21] <felixge_> micheil: I think ryan updates the docs with the releases
+[09:21] tisba_ has joined the channel
+[09:21] <micheil> okay
+[09:22] rictic has joined the channel
+[09:22] <felixge_> micheil: but you should be able to run make docs locally
+[09:22] <felixge_> micheil: make docs/index.html
+[09:22] <felixge_> maybe
+[09:22] <micheil> true
+[09:22] <micheil> asciidoc docs/api.txt
+[09:24] <micheil> hmm..
+[09:24] <micheil> can path.exists return a promise?
+[09:25] <micheil> ACTION needs to block on something
+[09:25] <micheil> (sadly)
+[09:25] <felixge_> micheil: nope, but you can just call fs.stat 
+[09:25] <micheil> hmm..
+[09:26] <micheil> it's because of how I'm using it in a constructor
+[09:32] <weepy> Hiya
+[09:32] <weepy> I'm running a node server in Live
+[09:32] <weepy> in production i mean
+[09:32] <weepy> and it's hitting some kind of error at some point and exitting.
+[09:33] <weepy> is there a way to log STDERR or similar ?
+[09:33] <micheil> oh, that works epically felix..
+[09:33] Tim_Smart has joined the channel
+[09:33] <micheil> node myscript > log.txt
+[09:33] <micheil> just pipe the STDOUT
+[09:34] <weepy> ive got the STDOUT, 
+[09:34] <weepy> I'm using upstart
+[09:34] <weepy> but I'd like to see the error
+[09:34] edspencer has joined the channel
+[09:35] <weepy> which I presume as it's not in STDOUT should be in STDERR ?
+[09:35] <Tim_Smart> weepy: Just pipe the STDOUT to a file, like micheil suggested
+[09:35] <Tim_Smart> STDERR uses STDOUT I think
+[09:35] <Tim_Smart> well in a way
+[09:35] <weepy> is it possible to do that in upstart ?
+[09:35] <Tim_Smart> yes
+[09:35] <weepy> I'm using your tutorial ;)
+[09:36] <Tim_Smart> I did a blog on node and upstart
+[09:36] <weepy> yes
+[09:36] <weepy> thing is
+[09:36] <weepy> if I stick a throw("error")
+[09:36] <weepy> somewhere
+[09:36] <weepy> upstart never outputs it to the log file
+[09:36] <weepy> it just stops
+[09:38] <Tim_Smart> There is a comment on the post that might work
+[09:39] <weepy> by Jacek ?
+[09:40] <Tim_Smart> yah
+[09:41] <Tim_Smart> Hmm actually I doubt it. Have a google around and see what you get for stderr
+[09:41] <weepy> well ill give it a go anyway
+[09:43] <weepy> yes that worked
+[09:43] <weepy> i get the errors and the non errors
+[09:47] dekz has joined the channel
+[09:48] <Tim_Smart> Nice, I might update the blog post then
+[09:48] <Tim_Smart> micheil: ping
+[09:48] <micheil> pang!
+[09:48] <micheil> whichidi wah?
+[09:48] <weepy> yeah i think you should
+[09:48] <Tim_Smart> you think you can make those additions ----^
+[09:48] <weepy> ? 
+[09:49] <micheil> Tim_Smart: sorry, I haven't been following.
+[09:49] <Tim_Smart> micheil: Blog post for howtonode
+[09:49] rtomayko has joined the channel
+[09:49] <Tim_Smart> Need to make some changes, but my laptop with all the stuffz is being repaired apparently
+[09:49] <micheil> Tim_Smart: just do a git pull --ff, then make your changes, commit them, and send a pull request
+[09:49] <weepy> it's defo worth updating - or it's tricky to track down bugs
+[09:49] <micheil> Tim_Smart: can you clone on the current computer?
+[09:49] voodootikigod_ has joined the channel
+[09:50] <Tim_Smart> are their git binaries for mac?
+[09:50] <Tim_Smart> *there
+[09:50] <micheil> umm..
+[09:50] mAritz has joined the channel
+[09:50] <micheil> http://code.google.com/p/git-osx-installer/downloads/list?can=3
+[09:50] <micheil> Tim_Smart: I'm just really busy atm
+[09:51] <Tim_Smart> ok np
+[09:51] <micheil> plus I don't really understand the issue quite
+[09:55] <micheil> wow... I'm managing to get some really awesome inheritance working here...
+[10:08] jed has left the channel
+[10:18] markwubben has joined the channel
+[10:21] Tim_Smart has left the channel
+[10:25] piranha has joined the channel
+[10:29] Netfeed_ has joined the channel
+[10:29] jspiros_ has joined the channel
+[10:35] orlandov has joined the channel
+[10:40] rictic has joined the channel
+[11:03] markwubben_ has joined the channel
+[11:05] Tim_Smart has joined the channel
+[11:11] ithinkihaveacat has joined the channel
+[11:15] Tim_Smart has left the channel
+[11:21] felixge has joined the channel
+[11:21] felixge has joined the channel
+[11:23] mahemoff has joined the channel
+[11:29] paulca has joined the channel
+[11:44] rolfb has joined the channel
+[11:49] pdelgallego has joined the channel
+[12:02] Connorhd has joined the channel
+[12:27] kennethkalmer has joined the channel
+[12:35] felixge has joined the channel
+[12:37] pdelgallego has joined the channel
+[12:38] alex-desktop has joined the channel
+[12:44] teemow has joined the channel
+[13:01] charlenopires has joined the channel
+[13:14] pmuellr has joined the channel
+[13:23] happyelephant has joined the channel
+[13:26] <micheil> hmm..
+[13:27] <micheil> I wonder how hard it'd be to get methods such as fs.exists() => bool, and fs.mkdir_p() => promise into node
+[13:27] <micheil> or even if we need them in the FS module
+[13:32] <Netfeed> where's fs.js located
+[13:32] <Netfeed> ?
+[13:36] jashkenas has joined the channel
+[13:41] piranha has joined the channel
+[13:43] mAritz has joined the channel
+[13:47] <micheil> it's not
+[13:48] <micheil> Netfeed: /src/node.js, /src/node_file.cc
+[13:48] pdelgallego has joined the channel
+[13:56] guan has joined the channel
+[13:57] <micheil> is it possible to change the type of fs op that happens, eg, recursive vs non-recursive
+[14:00] davidsklar has joined the channel
+[14:02] <mAritz> wow, Do is cool. at first i thought, that it is completely useless, but then i saw the examples. nice job :)
+[14:04] brosner_ has joined the channel
+[14:12] binary42 has joined the channel
+[14:12] pdelgallego has joined the channel
+[14:13] joshbuddy has joined the channel
+[14:16] quirkey has joined the channel
+[14:23] paulca has joined the channel
+[14:29] kriszyp has joined the channel
+[14:31] kriszyp_ has joined the channel
+[14:31] <Netfeed> micheil: thanks
+[14:37] nsm has joined the channel
+[14:41] jashkenas has joined the channel
+[14:41] <micheil> sir ryah_Away, I has a patch for you soon.
+[14:41] <micheil> for Libeio's chmod method
+[14:42] <micheil> (I'll be adding more soon)
+[14:44] <micheil> sir ryah_Away, here you go: http://gist.github.com/306662
+[14:44] <micheil> (I'll send to the mailing list as well.)
+[14:44] <micheil> and I'm not sure how to test it
+[14:46] mikeal has joined the channel
+[14:58] cloudhead has joined the channel
+[14:59] <micheil> cloudhead: you sir, do epic work.
+[15:00] <micheil> night' chaps.
+[15:00] <cloudhead> micheil: hey thanks
+[15:01] <micheil> cloudhead: btw, toto is a really good example of custom rack middleware, my own middleware (Hex) was heavily inspired by it
+[15:01] <micheil> (although, hex isn't going to be exactly what toto is, hex is going to support a few different kinds of syntaxes)
+[15:02] <cloudhead> oh yea, I've been playing with rack for a long time, always wanted to release something with no sinatra/rails bs
+[15:02] <cloudhead> cool
+[15:02] <cloudhead> let me know when you've got some code up
+[15:02] <micheil> yeah, the reason for hex is to replace my brother's current massive php forloop parser
+[15:02] <cloudhead> haha
+[15:02] <micheil> http://github.com/miksago/hex
+[15:02] <micheil> http://github.com/Miksago/Hex/blob/master/lib/hex.rb
+[15:03] <cloudhead> oh hm I know your name from somewhere
+[15:03] <micheil> That's implementing a base level system, using the same format as you do
+[15:03] <micheil> cloudhead: perhaps the novels?
+[15:03] <micheil> Hex, the computer built out of an ant nest with a mouse living in the middle
+[15:04] <cloudhead> ah yes, nice, I like what you've got going there
+[15:04] <micheil> http://en.wikipedia.org/wiki/Hex_discworld
+[15:04] <micheil> anyway, it's 2am, I need to be up by 7am.. night'
+[15:04] <micheil> :)
+[15:04] <cloudhead> aha, alrighty, night then!
+[15:13] drostie has joined the channel
+[15:16] brosner_ has joined the channel
+[15:16] brosner_ has left the channel
+[15:19] atcrabtree has joined the channel
+[15:41] steadicat has joined the channel
+[15:41] alexiskander has joined the channel
+[15:42] binary42 has joined the channel
+[15:49] qFox has joined the channel
+[15:54] <rolfb> cloudhead: are you one of the authors of More?
+[16:05] Booster has joined the channel
+[16:05] pavelz has joined the channel
+[16:07] <ryah> hi
+[16:07] bryanl has joined the channel
+[16:11] <felixge> ryah: morning :)
+[16:12] happyelephant has joined the channel
+[16:18] tisba has joined the channel
+[16:19] <olivvv> hi ryah. Is it planned to get windows support soon ?
+[16:24] <cloudhead> hopefully not..
+[16:24] <olivvv> why ?
+[16:25] <felixge> olivvv: I don't think ryan will have the time anytime soon, but if somebody was willing to do it, patches would be happily accepted
+[16:25] <olivvv> u anti-nnob ?
+[16:25] <cloudhead> rolfb: if you're talking about the unix utility, definitely not, I'm not that old : )
+[16:25] <cloudhead> olivvv: code-base pollution
+[16:25] <rolfb> cloudhead: talking about the less gem
+[16:25] <rolfb> for rails
+[16:25] <olivvv> felixge:ok, so it will happen only out of luck
+[16:26] <cloudhead> rolfb: ah yea, no, I wrote less, some guy wrote more, as a counterweight : )
+[16:26] <felixge> olivvv: it will happen, but it could be 1-2 month or 1-2 years.
+[16:26] <felixge> :)
+[16:26] <rolfb> this guy being augustl?
+[16:26] <cloudhead> rolfb: no I actually can't remember his name, let me find it
+[16:26] <cloudhead> augustl wrote the first rails plugin
+[16:26] <olivvv> I know linux is cool, but i develop on windows, like many many ppl
+[16:26] <cloudhead> then someone wrote 'more'
+[16:26] <cloudhead> and they kinda merged his plugin in
+[16:27] <rolfb> hmm
+[16:27] <rolfb> ok
+[16:27] <felixge> olivvv: well, for now you should be able to get something running in cygwin
+[16:27] <ryah> olivvv: i don't have the bandwidth to do the port - but i'd love to have it done
+[16:27] <rolfb> neat anyhow
+[16:27] <rolfb> :)
+[16:27] <rolfb> we are going for less at our company now
+[16:27] <cloudhead> rolfb: http://github.com/logandk
+[16:28] <rolfb> but this is probably not the forum for discussing this :P
+[16:28] <cloudhead> awh awesome
+[16:28] <ryah> i think having it cygwin port is a good first step
+[16:28] <cloudhead> rolfb: you'll be happy to know then that I'm working on a js port : )
+[16:28] <cloudhead> for node + browser
+[16:28] <rolfb> less for js?
+[16:28] <cloudhead> yes
+[16:28] <rolfb> i.e js parser?
+[16:28] <olivvv> felige:any tut or blog post explaining this ? last time I had to deal with cygwin, I had loads of issues
+[16:28] <cloudhead> ie a .less parser written in js
+[16:29] <rolfb> right, so it doesn't need ruby anymore
+[16:29] <cloudhead> yeh
+[16:29] <rolfb> that's cool
+[16:29] <rolfb> i don't really care, but it'll help those poor designer people on windows
+[16:29] <cloudhead> hehe
+[16:30] <rolfb> was that bad of me?
+[16:30] <rolfb> :P
+[16:30] <jashkenas> cloudhead: what are you doing the parser with?
+[16:30] <cloudhead> yea, it's mostly cause I don't feel like supporting the ruby version anymore
+[16:30] <cloudhead> jashkenas: I wrote it by hand
+[16:30] <olivvv> felixge: I mispelled your nick in my question above
+[16:31] <cloudhead> I needed it to be as fast as possible, cause I want to it to run in the browser
+[16:31] <cloudhead> -to
+[16:31] <felixge> olivvv: no, it may not even run right now without changes to node itself. I guess using a virtual machine with ubuntu would be less of a headache
+[16:31] <rolfb> cloudhead: javascript is the future :)
+[16:31] <cloudhead> jashkenas: hey I just realized who you were : )
+[16:32] steadicat_ has joined the channel
+[16:32] <cloudhead> rolfb: yea for sure, I'm in the process of moving from ruby, so I'm porting lots of stuff over
+[16:32] <jashkenas> jashkenas: Yep, we've got that port-a-ruby-parser-to-javascript bit in common.
+[16:33] <cloudhead> jashkenas: inimino has a really cool looking PEG parser too, which does streaming
+[16:33] <jashkenas> yeah, I was looking at it too after he suggested it.
+[16:33] <jashkenas> But I started from a LALR parser, with a ton of left-recursion, and converting the grammar to PEG would be quite difficult.
+[16:34] <cloudhead> ah yea
+[16:34] <olivvv> felixge:thanks, now I know what it takes
+[16:34] <jashkenas> Jison's working beautifully for me now -- we worked out a lot of the issues last week.
+[16:34] <cloudhead> jashkenas: you're thinking of porting cs to js?
+[16:34] <cloudhead> node or browser?
+[16:34] <jashkenas> It's done.
+[16:34] <cloudhead> ah awesome
+[16:34] <felixge> olivvv: you should try VirtualBox, it's free and awesome. I use it every day (on OSX)
+[16:34] <jashkenas> If you checkout the current master, it's all written in CS. 
+[16:34] <jashkenas> grammar.coffee is the Jison grammar
+[16:35] <rolfb> cloudhead, jashkenas: what are all these abbreviations of yours?
+[16:35] <cloudhead> ah right, which you can then distribute as js
+[16:35] <jashkenas> And it's running in the browser on the documentation page.
+[16:35] dnolen has joined the channel
+[16:35] <jashkenas> http://jashkenas.github.com/coffee-script/#try_coffee
+[16:35] <cloudhead> jashkenas: nice, is it fast enough to parse js on the fly?
+[16:35] <felixge> rolfb: I think CS = coffee script
+[16:35] <jashkenas> yep.
+[16:35] <jashkenas> to parse coffee on the fly, absolutely.
+[16:35] <rolfb> oh noes
+[16:36] <ashb> jashkenas: how did you find jison?
+[16:36] <rolfb> significant white space
+[16:36] <olivvv> felixge:thanks!
+[16:36] <jashkenas> rolfb: sorry about htat.
+[16:36] <ashb> oh jison isn't the one i was thinking of
+[16:36] <rolfb> jashkenas: its ok, just not for me
+[16:36] <rolfb> :)
+[16:36] <jashkenas> rolfb: It didn't use to, originally we had periods to end blocks, like potion, but this is really much nicer.
+[16:36] <cloudhead> jashkenas: awesome, do you have any figures, for how fast the parser is?
+[16:37] <cloudhead> I'd like to get an idea
+[16:37] <ashb> there are only two figures you care about 'fast enough' or 'not' ;)
+[16:37] <jashkenas> rolfb: And I don't come from a python background, so I'd like to think that I'm not prejudiced towards it.
+[16:37] <rolfb> jashkenas: i agree, but i tried bringing haml to my team once ... they killed the idea faster than a bug
+[16:37] <jashkenas> cloudhead: just a sec.
+[16:37] adamv has joined the channel
+[16:37] <ashb> rolfb: did you point out that they almos always follow the whitespace rules already?
+[16:38] <rolfb> ashb: sure, but there are times we don't have the time to follow them exactly
+[16:38] <ashb> dont have time? since when does indenting take up time?
+[16:38] <rolfb> ashb: if you are moving code between projects and don't have the time to indent all the code, or the editor fucks up
+[16:39] <rolfb> either way, i like the option of not having to care
+[16:39] <ashb> i dont follow.
+[16:40] <ashb> nm
+[16:41] <rolfb> :)
+[16:41] <rolfb> pasted coffescript link to a teammate now
+[16:42] <rolfb> first comment
+[16:42] <rolfb> "another one that is based on text-indentation?"
+[16:42] <jashkenas> cloudhead: I'm afraid I can't give you good numbers on just the parsing time. But it's fast enough. I can compile the entire CoffeeScript codebase to JavaScript in 2.1 seconds.
+[16:42] <jashkenas> Which is 2500 LOC total.
+[16:42] <cloudhead> hmmm ok
+[16:42] happyelephant has joined the channel
+[16:42] <jashkenas> But most of that time is probably my fault -- our token rewriting and code generation isn't optimized for speed at all.
+[16:43] <cloudhead> I think I'll stick with my parser hehe
+[16:43] <jashkenas> Sure, PEGs are definitely more elegant if you can swing it.
+[16:43] <jashkenas> (or handrolled, in your case) -- is speed a major concern?
+[16:43] <cloudhead> I just wrote a top-down parser
+[16:43] <cloudhead> yea
+[16:43] <cloudhead> cause
+[16:43] <rolfb> what are PEG?
+[16:43] <rolfb> :D
+[16:43] <jashkenas> Parsing Expression Grammars
+[16:43] <ashb> Parsing Expression Grammar
+[16:44] <cloudhead> if people are going to use less.js, they're not gonna like it if it impacts page load time
+[16:44] <cloudhead> or css load time, rather
+[16:44] <rolfb> :D
+[16:44] <rolfb> is this related to SEXP somehow?
+[16:45] <jashkenas> I didn't realize you were planning on having them parse it in the browser -- that seems like a pretty hard sell.
+[16:45] <cloudhead> so if css takes an additional 500ms to be generated because of less.js, it's kinda of a bummer
+[16:45] <cloudhead> jashkenas: yea
+[16:45] <cloudhead> hard sell in some ways, but if it works well, the workflow will be greatly simplified
+[16:45] <cloudhead> no file watching/generation nothing
+[16:45] <jashkenas> Yeah, good luck -- that seems like a huge challenge.
+[16:45] <cloudhead> just use .less files
+[16:45] <cloudhead> yea
+[16:46] <rolfb> its interesting for an app like gmail which "boots"
+[16:46] <rolfb> imho
+[16:46] <cloudhead> it'll also be a great solution for static sites
+[16:46] <cloudhead> rolfb: good point
+[16:46] <cloudhead> not needing a ruby/php backend to use .less would be a huge win
+[16:47] <felixge> I need to play with less :)
+[16:47] <felixge> but I'm sure I'll stay posted on the latest progress in here :)
+[16:47] <cloudhead> felixge: yah for sure
+[16:49] <cloudhead> the plan's to have a node.js and a browser wrapper for it
+[16:50] <rolfb> wouldn't that be considered a backend?
+[16:50] <rolfb> :P
+[16:50] RayMorgan has joined the channel
+[16:50] <cloudhead> rolfb: yea it'll be both
+[16:50] <cloudhead> you chose if you want to run it frontend or backend
+[16:51] <cloudhead> it'll just be two 'adapters', one for the browser, one for node
+[16:51] <cloudhead> you could even decide to use the browser adapter in dev
+[16:51] <cloudhead> and node in prod
+[16:51] <jashkenas> cloudhead: have you thought about how you're going to deploy/install it yet?
+[16:51] <cloudhead> jashkenas: a little, but that's the scariest part tbh : )
+[16:52] <cloudhead> on the browser that is
+[16:52] <jashkenas> cloudhead: I wrote a quickie installer for CS last night that just copies everything to /usr/local/lib, and adds bin/coffee and bin/cake
+[16:52] <cloudhead> ideally, from a user's perspective, he would just have some <rel> tags
+[16:52] <cloudhead> ohh
+[16:52] <cloudhead> yea, haven't thought of that part
+[16:52] <jashkenas> But hopefully we'll have a standardized way to install node projects soon.
+[16:52] <cloudhead> yea
+[16:53] <cloudhead> I think I'll use makefiles until then
+[16:53] <jashkenas> ryah: I don't know if you already have recommendations on that front -- where node projects should be installed in the directory tree.
+[16:53] <cloudhead> haven't written any standalone node apps yet
+[16:53] nefD has joined the channel
+[16:53] nsm has joined the channel
+[16:55] <cloudhead> ACTION needs to start following js/node people on twitter to stay in the loop
+[16:56] <cloudhead> http://wiki.github.com/ry/node/node-users is very awesome
+[16:57] <inimino> ACTION should probably tweet occasionally
+[16:58] <cloudhead> inimino: do you have a twitter?
+[16:59] <cloudhead> it's not on the list
+[16:59] <cloudhead> ;p
+[16:59] <ryah> jashkenas: ~/.node_libraries ?
+[16:59] scudco has joined the channel
+[17:00] <cloudhead> hmm in that case why not just ~/.node/lib
+[17:00] <jashkenas> ryah: how about if you've got a custom command that wraps node, not a JS lib.
+[17:00] <inimino> cloudhead: twitter/inimino ... low-volume
+[17:00] <cloudhead> I like low-volume : )
+[17:00] <jashkenas> Along the lines of a Ruby gem's bin dir.
+[17:00] <cloudhead> I unfollow people who tweet more than is necessary
+[17:00] <ryah> jashkenas: then to your path?
+[17:01] <jashkenas> sounds good
+[17:01] <cloudhead> inimino: lol.
+[17:01] <cloudhead> low-volume?
+[17:01] <cloudhead> you mean
+[17:01] <cloudhead> no-volume : )
+[17:04] <inimino> cloudhead: :)
+[17:10] bpot has joined the channel
+[17:12] joshbuddy_ has joined the channel
+[17:12] joshbuddy_ has joined the channel
+[17:16] pdelgallego has joined the channel
+[17:20] edspencer has joined the channel
+[17:23] steadicat has joined the channel
+[17:25] kennethkalmer has joined the channel
+[17:43] jspiros has joined the channel
+[17:43] stephenlb has joined the channel
+[17:50] brandon_beacher has joined the channel
+[17:52] edspencer has joined the channel
+[17:59] bpot has joined the channel
+[18:19] eikke has joined the channel
+[18:22] mikeal has joined the channel
+[18:22] felixge has joined the channel
+[18:25] ericflo has joined the channel
+[18:29] guan has joined the channel
+[18:43] bronson has joined the channel
+[18:44] Harrison has joined the channel
+[18:46] technoweenie has joined the channel
+[18:52] scudco has joined the channel
+[18:53] Tim_Smart has joined the channel
+[18:53] <Tim_Smart> omgz a fassl!
+[19:03] bentomas has joined the channel
+[19:04] <bentomas> ryah: sorry if I have asked you this before, but can we depend on the process.fs module sticking around, or since that is undocumented should we avoid it?
+[19:06] tlrobinson_ has joined the channel
+[19:11] maritz has joined the channel
+[19:11] <CIA-77> node: 03Ryan Dahl 07master * r5013bf1 10/ (18 files in 3 dirs): API: OutgoingMessage.prototype.finish() renamed to close() - http://bit.ly/cnkTSc
+[19:12] <ryah> bentomas: no
+[19:13] <bentomas> no, we can't depend on it, or no we shouldn't avoid it?  :)
+[19:13] <ryah> don't depend on it
+[19:13] <bentomas> ahh, shucks, okay
+[19:14] <bentomas> are you still thinking of supplying a low level file api that doesn't use Promises?
+[19:16] Tim_Smart has joined the channel
+[19:16] <ryah> bentomas: yeah - just not sure how to present it
+[19:17] <ryah> 'fs-basic' module?
+[19:17] <ryah> maybe process.fs is a good way to do it
+[19:17] <ryah> then it doesn't depend on the module system
+[19:18] <ryah> bentomas: just use process.fs for now :)
+[19:18] <ryah> and let me know if you have some good ideas for how to do it
+[19:19] <bentomas> I think making it apart of process.fs is certainly useful, for say if you want to write your own module loader, but I think having it be apart of the module system is "cleaner".  I'm no help.
+[19:19] <bentomas> but I'll think about it
+[19:22] Tim_Smart has joined the channel
+[19:25] <ryah> i think with the new partial snapshots we'll be able to compile scripts 
+[19:25] <ryah> like into executables
+[19:26] <ryah> i wonder if that's what it is
+[19:33] richtaur has joined the channel
+[19:37] piranha has joined the channel
+[19:53] kriskowal has joined the channel
+[20:01] brandon_beacher has joined the channel
+[20:06] dnolen has joined the channel
+[20:06] bentomas has left the channel
+[20:08] mattly has joined the channel
+[20:12] bentomas has joined the channel
+[20:12] Tim_Smart has joined the channel
+[20:13] bentomas has left the channel
+[20:18] rictic has joined the channel
+[20:18] davidsklar has joined the channel
+[20:21] richtaur has left the channel
+[20:27] <gsf> cloudhead: just saw cradle -- neat stuff
+[20:27] rtomayko has joined the channel
+[20:28] <gsf> cloudhead: is it vador rather than vader in the readme on purpose?
+[20:29] <gsf> cloudhead: forgive me if that's a spelling i'm not aware of
+[20:31] <gsf> cloudhead: i appreciate the star wars narrative, btw
+[20:35] <cloudhead> gsf: hah you're right, will correct
+[20:35] <cloudhead> gsf: I enjoy adding narrative to my docs
+[20:37] <gsf> cloudhead: they're easy to follow
+[20:38] Tim_Smart has joined the channel
+[20:42] mikeal has joined the channel
+[20:42] eikke has joined the channel
+[20:49] felixge has joined the channel
+[20:49] <CIA-77> node: 03Ryan Dahl 07master * rf57b0e9 10/ doc/asciidoc-xhtml11.js : Add asciidoc-xhtml11.js for use with asciidoc 8.5.1 - http://bit.ly/b95RCG
+[20:50] <micheil> ryah: If you want, I'll amend that patch, if the code sample on the ML is correct?
+[20:54] <ryah> micheil: the patch looked fine
+[20:54] <ryah> and yes, there are a lot of libeio functions that need to be exposed still
+[20:54] <ryah> oh wait just saw your email
+[20:55] <ryah> micheil: chmodSync() - like the other functions in 'fs'
+[20:55] <ryah> oh right - you haven't done the TODO
+[20:55] <ryah> you should call chmod(2) directly
+[20:56] <ryah> chmod(const char *path, mode_t mode); <--
+[20:57] <ryah> also - rename your 'flags' variable to 'mode'
+[20:57] <ryah> and use 'mode_t' instead of 'int'
+[21:07] <micheil> okay
+[21:08] jashkenas has joined the channel
+[21:12] <micheil> wow, c++ is actually fickle about semicolons and things like that, neat.
+[21:14] <micheil> righteo, just formatting patch.
+[21:14] caolanm has joined the channel
+[21:15] <caolanm> is there any way to get the filename of a required module? I can't seem to work it out!
+[21:16] <caolanm> something like: var foo = require('foo'); foo.__filename
+[21:16] <ryah> caolanm: hm...
+[21:17] <micheil> ryah: http://gist.github.com/306662
+[21:17] <ryah> caolanm: i don't think there is an interface to that
+[21:17] mikeal1 has joined the channel
+[21:17] <caolanm> is that for a good reason I haven't thought of? :)
+[21:17] <ryah> micheil: stringToFlags?
+[21:18] <micheil> ryah: would you like documentation added for those as well
+[21:18] <ryah> caolanm: no, it's a good feature
+[21:18] <micheil> if I'm correct stringToFlags is needed to allow: fs.chmod(file, "g-w");
+[21:18] <micheil> style stuff.
+[21:18] <micheil> or does mode_t handle that?
+[21:19] <ryah> micheil: em.. no - just pass the 'mode' directly people can use hex
+[21:19] <micheil> you can still use hex
+[21:20] <micheil> stringToFlag returns the value back out if it's not a string
+[21:20] <ryah> micheil: but it doesn't parse 'g-w' 
+[21:20] <ryah> stringToFlag is for a totally different syntax
+[21:20] <micheil> ah, yeah, good catch
+[21:21] <micheil> I did implement this really early this morning, so .. heheh 
+[21:21] <ryah> yes docs woud be good
+[21:21] <ryah> tests would be better
+[21:21] <micheil> I'll write them up this afternoon
+[21:21] <micheil> as for tests, I'm not sure the best way to actually test it
+[21:22] <micheil> the mode that fs.stat returns isn't a hex type mode
+[21:22] <ryah> just set a flag on fixtures/x.txt 
+[21:22] <micheil> ie, it's 16895
+[21:22] <ryah> .toString(16)
+[21:23] <micheil> so surely I'd need to do one fs.stat before running the test, to get the previous value, then run fs.chmod, fs.stat and then compare the two stats.
+[21:23] <micheil> I'll try that.
+[21:23] <ryah> 16895 isn' a valid permission though
+[21:23] <ryah> (or is it?)
+[21:24] <ryah> node> (16895).toString(16)
+[21:24] <ryah> "41ff"
+[21:24] <ryah> r-rwx-rwx ?
+[21:24] <micheil> yeah
+[21:24] <ryah> er
+[21:24] <micheil> something like that
+[21:24] <ryah> duh .toSTring(8)
+[21:24] <ryah> not hex :)
+[21:24] creationix has joined the channel
+[21:24] <ryah> node> (16895).toString(8)
+[21:24] <ryah> "40777"
+[21:25] <ryah> rwx-rwx-rwx
+[21:25] <micheil> so just check the last three values?
+[21:25] <ryah> yeah
+[21:25] <inimino> js> (16895).toString(8)
+[21:25] <gbot2> inimino: "40777"
+[21:25] <micheil> ryah: okay, I'll leave a todo in the code, and do that this afternoon
+[21:26] <ryah> micheil: just mode & 0777 to get the last 3
+[21:26] eikke has joined the channel
+[21:26] <ryah> node> (16895 & 0777).toString(8)
+[21:26] <ryah> "777"
+[21:26] <micheil> (16895) & 0777
+[21:26] <micheil> js> (16895) & 0777
+[21:26] <gbot2> micheil: 511
+[21:26] <micheil> js> (16895) & 0700
+[21:26] <gbot2> micheil: 448
+[21:27] <ryah> oh .. we have a bot?
+[21:27] <ryah> rad
+[21:27] <micheil> js> (16895 & 0700).toString(8)
+[21:27] <gbot2> micheil: "700"
+[21:27] <micheil> that. erm
+[21:27] <ryah> js> process
+[21:27] <gbot2> ryah: Error: ReferenceError: process is not defined 
+[21:27] Tim_Smart has joined the channel
+[21:27] <ryah> hm
+[21:27] <inimino> ryah: it's spidermonkey :)
+[21:27] <gsf> ryah: tests now failing because of fs.cat calls in test-tcp-tls and test-http-tls
+[21:27] <ryah> heresy
+[21:28] <inimino> ;)
+[21:28] <micheil> ryah: it's true, because they use the old fs.cat
+[21:28] <ryah> gsf: oh thanks
+[21:28] <gsf> ryah: np
+[21:28] <micheil> ACTION really wishes process.exit() was global in node-repl
+[21:29] <ryah> micheil: control-d
+[21:29] <micheil> :P
+[21:29] <creationix> ryah: did I miss one? sorry
+[21:29] <micheil> two
+[21:31] <ryah> creationix: it's my fault. i'm on a new computer without gnutls
+[21:31] <CIA-77> node: 03Ryan Dahl 07master * rdf94c76 10/ (Makefile doc/api.txt): documentation clean up - http://bit.ly/8ZwcTv
+[21:31] <CIA-77> node: 03Ryan Dahl 07master * rd9b0eb3 10/ doc/api.txt : Remove references to wait() in docs - http://bit.ly/ck8faf
+[21:31] <micheil> ryah: is it a mac?
+[21:31] <ryah> yes
+[21:31] <creationix> ahh, that makes sense
+[21:31] <micheil> brew install libgpg-error
+[21:31] <micheil> ;P
+[21:32] <creationix> thanks, I needed that too
+[21:32] <creationix> hmm, no I already have that installed and my tls stuff still doesn't configure
+[21:32] <micheil> hmm.. odd
+[21:32] <ryah> what's the difference between brew and ports?
+[21:32] <micheil> brew search gpgme
+[21:33] <micheil> ryah: brew uses github and a better build script
+[21:33] <micheil> brew is also written in ruby
+[21:33] <creationix> but is newer, so it's a give and take
+[21:33] <micheil> I've got, glib, libgcrypt, libgpg-error, gpgme, gnutls, gnupg installed
+[21:34] <creationix> I find brew loads less stupid dependencies than macports
+[21:34] <micheil> brew install gnutls libgpg-error libgcrypt gnupg
+[21:34] <micheil> should do it
+[21:34] <creationix> ok, installing gnupg first, I don't have that one
+[21:34] <micheil> I should add that on the installation nodes on the working
+[21:34] <micheil> *wiki
+[21:36] <creationix> hmm, not sure this is going to work
+[21:36] <creationix> Checking for gnutls >= 2.5.0             : ok 
+[21:36] <creationix> Checking for library gpg-error           : not found 
+[21:37] <creationix> I've got a fresh clone, so it's got to compile V* real quick
+[21:41] <micheil> ryah: I'll do one patch per libeio interface missing
+[21:41] <caolanm> ryah: is the github issues page an appropriate place to add a feature request?
+[21:41] <ryah> micheil: okay
+[21:41] <ryah> caolanm: sure
+[21:41] <caolanm> ryah: thanks :)
+[21:42] <creationix> micheil: I've got all four of those installed and no tls support still 
+[21:42] <micheil> try gpgme
+[21:42] <micheil> something gave me gnutls / tls support on mac os x
+[21:42] <creationix> alright, I'm trying glib first, I didn't have that one
+[21:43] <micheil> I know I did make libgpg, although, I removed it after I found it in brew
+[21:44] mattly has joined the channel
+[21:44] felixge has joined the channel
+[21:44] felixge has joined the channel
+[21:45] <micheil> something called macgpg, but it was faulty, so I don't recommend messing with it
+[21:47] <creationix> hmm, still nothing, I tries glib and gpgme
+[21:47] <ryah> creationix: make sure your LD_LIBRARY_PATH is correct
+[21:48] <creationix> it's empty in bash, how do I check it?
+[21:49] <ryah> creationix: i mean - WAF needs to know where to look for the libraries - so if you're installing them in /opt/local/lib - you might want t add that to LD_LIBRARY_PATH
+[21:50] <creationix> brew does something funny with them, it puts most libraries unlinked into folders that it only knows about
+[21:51] <adamv> Brew questions, you can ask in #machomebrew if you want.
+[21:51] paulca has joined the channel
+[21:55] <micheil> anyway, must run chaps. bye.
+[21:58] <CIA-77> node: 03Ryan Dahl 07master * rc622142 10/ doc/index.html : Add note about gnutls and libgpg-error in installation instructions - http://bit.ly/cyZ4xj
+[21:58] <CIA-77> node: 03Ryan Dahl 07master * r0b823dc 10/ wscript : 
+[21:58] <CIA-77> node: Add /opt/local/lib as a search path for gpg-error
+[21:58] <CIA-77> node: Why doesn't WAF just search LD_LIBRARY_PATH? - http://bit.ly/bNtiip
+[22:00] <adamv> Oh, interseting; we may need to update the node script for brew to slot in our HOMEBREW_PREFIX then to work w/ non-"/usr/local" installs.
+[22:01] isaacs has joined the channel
+[22:01] JoePeck has joined the channel
+[22:02] <CIA-77> node: 03Ryan Dahl 07master * r92292c8 10/ (test/mjsunit/test-http-tls.js test/mjsunit/test-tcp-tls.js): Rename a few remaining fs.cat calls. - http://bit.ly/dDm9JQ
+[22:03] <ryah> any patches that need to get in before a release?
+[22:05] <isaacs> ryah: docs and examples updated already for the fs/posix stuff?
+[22:05] <isaacs> also, the http stuff.
+[22:05] creationix has joined the channel
+[22:06] <ryah> isaacs: yes
+[22:07] <spiralout> :q
+[22:07] <isaacs> cool.  i guess i oughtta update ejsgi..
+[22:15] gwoo has joined the channel
+[22:19] hassox has joined the channel
+[22:33] Tim_Smart has joined the channel
+[22:44] morgan has joined the channel
+[22:45] isaacs has joined the channel
+[22:47] JoePeck has joined the channel
+[22:50] <isaacs> hahaha, i just realized.... response.write
+[22:50] <isaacs> that's what ASP had, but it was Response.Write
+[22:50] <isaacs> it's like microsoft predicted the future.
+[22:52] cmlenz has joined the channel
+[22:52] gf3 has joined the channel
+[22:59] <rektide> any suggestions for a less optimized / less low level http parser, either in js or something i can use to write one in js?
+[23:00] <ryah> rektide: split("\r\n")
+[23:00] <mikeal> haha
+[23:01] <ryah> rektide: why?
+[23:01] <rektide> dont forget the split(":",1)
+[23:01] <rektide> or is it 2?
+[23:02] <rektide> probably 2
+[23:02] <ryah> rektide: i want to serve all your http needs
+[23:02] <rektide> well, getAllResponseHeaders() is my current need
+[23:02] <rektide> grok'ing that
+[23:02] <ryah> hm?
+[23:02] <rektide> http://www.w3.org/TR/XMLHttpRequest/#the-getallresponseheaders-method
+[23:03] <ryah> rektide: response.headers
+[23:04] brandon_beacher has joined the channel
+[23:04] <rektide> agreed its much better
+[23:06] cadorn has joined the channel
+[23:07] <isaacs> ryah: so, maybe it'll go in the next release, but i should get a chance to wrap up the http header thing soon.  how would you feel about a cookie util?
+[23:10] <Tim_Smart> isaacs: Did support for multiple header fields get landed?
+[23:11] joshbuddy has joined the channel
+[23:11] joshbuddy has joined the channel
+[23:14] <isaacs> Tim_Smart: not yet.  multipart was a blocker, so i worked on that, and IT landed, but then i got distracted by other things, and didn't finish the http header stuff.
+[23:15] <isaacs> it's close, though
+[23:16] <mikeal> ACTION cracks whip
+[23:17] <mikeal> http://yuiblog.com/yuitheater/
+[23:17] <mikeal> that's useful
+[23:21] VeXocide has joined the channel
+[23:21] <CIA-77> node: 03Ryan Dahl 07master * r0314a10 10/ (2 files): Clean up and rename test-stat-handler - http://bit.ly/cAC3f5
+[23:21] <CIA-77> node: 03Ryan Dahl 07master * r217b60a 10/ Makefile : sed -i 's/git-/git /g' Makefile - http://bit.ly/aFHFA6
+[23:21] <CIA-77> node: 03Ryan Dahl 07master * r87d5e5b 10/ (ChangeLog doc/api.txt doc/index.html wscript): bump version - http://bit.ly/aAcsvF
+[23:21] <CIA-77> node: 03Ryan Dahl 07master * r916d592 10/ Makefile : Fix 'make website-upload' - http://bit.ly/9LozT8
+[23:22] Spot_ has joined the channel
+[23:30] <ryah> isaacs: yeah - i'll look at that soon
+[23:31] <ryah> isaacs: i want to rewrite multipart again
+[23:31] <ryah> too
+[23:31] <isaacs> ryah: sure, what're you thinking?
+[23:31] <ryah> i think it should have a more sax.js-like api
+[23:31] <isaacs> cool.
+[23:31] <ryah> not coupled to http messages
+[23:31] <isaacs> yeah, that makes sense
+[23:32] eikke has joined the channel
+[23:32] <isaacs> i've been thinking it'd make sense to do something similar for querystring parsing, as well.
+[23:32] <isaacs> it's not as often that it really matters a lot, since you usually have the whole query string for GET requests, but post bodies can get quite large.
+[23:32] <isaacs> posting a really long form or something.
+[23:33] <ryah> yeah. querystring, i think should be toned down and possibly combined into the url lib
+[23:33] <ryah> i don't think it should support deep objects
+[23:34] <ryah> although i might be wrong
+[23:34] <ryah> the big task for the next release is getting rid of wait()
+[23:34] <isaacs> ryah: cool.
+[23:34] <ryah> i removed it from the docs
+[23:34] <isaacs> ryah: yeah, passing objects around on the qs is quite handy in some cases.
+[23:35] <isaacs> ryah: but you can always use json blobs for that
+[23:35] <isaacs> ?d={some-object}
+[23:35] <mikeal> that's what we do for CouchDB
+[23:35] <isaacs> or even just ?{"here":"is","my":{"deep:"object"}}
+[23:38] <mikeal> oh wow, i didn't even know this happened "Allow strings for the flag argument to fs.open"
+[23:38] <mikeal> thank you!
+[23:44] dekz has joined the channel
+[23:44] <gwoo> congrats ryah! 
+[23:45] creationix_ has joined the channel
+[23:45] <ryah> yey shoving my api preferences down your throats
+[23:45] <ryah> ;)
+[23:45] <gwoo> haha
+[23:46] <deanlandolt> ryah: the benefits of benevolent dictatorship :D
+[23:46] <gwoo> short, simple, consistent, i think we all seem to share that goal
+[23:48] <Spot_> Quick Q: is there anything in node which would prevent a method addition to the Array object?
+[23:49] <ryah> Spot_: no
+[23:49] <Spot_> Interesting
+[23:49] <Spot_> ok
+[23:49] <Spot_> thanks
+[23:49] <ryah> bbiab
+[23:50] dnolen has joined the channel
+[23:50] charlenopires has joined the channel
+[23:55] paulca has joined the channel

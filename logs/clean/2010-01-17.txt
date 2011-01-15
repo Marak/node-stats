@@ -1,0 +1,833 @@
+[00:05] mikeal has joined the channel
+[00:15] mies_ has joined the channel
+[00:19] un0mi has joined the channel
+[00:22] kriskowal has joined the channel
+[00:38] <JimBastard> so if the node instance is shutting down assume something like (SIGINT) is it possible to guarantee a POSIX call to complete? 
+[00:38] <JimBastard> or will the instance shut down before the call is complete?
+[00:40] <kriskowal> if node behaves as i'd expect (which i don't expect) when you register a SIGINT callback, node would set up a low level SIGINT handler that would arrange for your callback to be called in a future turn.  if that's the case, even if the system interrupt occurs while executing another function, it would be guaranteed to complete.
+[00:41] <kriskowal> it would be the responsibility of the javascript signal handler to exit gracefully
+[00:41] <kriskowal> JimBastard^
+[00:41] <JimBastard> reading
+[00:42] <JimBastard> so im doing, process.addListener("SIGINT", function(){  application.end();});
+[00:42] <JimBastard> and in application.end() i have a posix write call that logs the application shutdown
+[00:42] <JimBastard> in some cases it winds up empty, which it should never be
+[00:42] <kriskowal> i think you need to explicitly exit in the handler, but that looks right to me.
+[00:42] <JimBastard> hrmm
+[00:43] <JimBastard> ill debug more and see if i can catch it then
+[00:43] <JimBastard> thanks
+[00:43] <kriskowal> also, i could be wrong about my assumptions about what node does when you add a sigint listener.  i could read the code to verify.
+[00:45] <kriskowal> looks like node calls down into EV to register the signal handler.  it's very likely that it works as i described.
+[00:45] <JimBastard> so kriskowal i'm actually already logging all the posix calls, and they arent being called in certain cases
+[00:45] <JimBastard> it seems that when node is hanging from another error somewhere
+[00:46] <JimBastard> and i kill it with a CTRL-C, the posix calls dont make it
+[00:46] <kriskowal> does it actually exit?
+[00:46] <JimBastard> how do you mean? does node stop?
+[00:46] <kriskowal> right
+[00:46] <JimBastard> yeah, ill show you a pastie
+[00:46] <kriskowal> if you intercept sigint and don't explicitly exit, it should not stop
+[00:47] <kriskowal> so, if it stops, your handler is probably not getting called
+[00:47] isaacs_mobile has joined the channel
+[00:47] <JimBastard> http://gist.github.com/279107
+[00:47] <kriskowal> bearing in mind that i'm inferring a lot from experience with signals elsewhere, not from studying node
+[00:48] <JimBastard> maybe ive fucked up the POSIX calls? kinda a POSIX noob
+[00:48] alex-desktop has joined the channel
+[00:48] <JimBastard> it seems to work in most cases though
+[00:49] <kriskowal> what are your typical and atypical results
+[00:50] <kriskowal> if they differ, there's a race condition
+[00:50] <JimBastard> typical results is the application variable serializing into JSON and storing in a file, atypical is the file getting blanked out
+[00:50] <kriskowal> and your code sample looks good to me, unless write events call back before the data has been fully flushed and the stream closed
+[00:50] <JimBastard> it should never be blank, as application always has data in it
+[00:50] <JimBastard> thats what im not sure about
+[00:51] <JimBastard> as i am a posix and node noob
+[00:51] <kriskowal> does node provide an explicit close that returns a promise?
+[00:51] <JimBastard> no clue
+[00:51] <JimBastard> i think the error tends to happen when node is already hanging from something else (like not finishing / closing an http request somewhere)
+[00:51] <kriskowal> probably does.  try putting the exit in a callback for posix.close(fd)addCallback(function () {…
+[00:52] <kriskowal> ACTION forks your gist
+[00:52] <JimBastard> i'm confused, you mean add a handler to .write for .close?
+[00:52] <JimBastard> then call exit in .close?
+[00:53] <JimBastard> ohh thats sweet i didnt know you could fork gists
+[00:54] <kriskowal> https://gist.github.com/279108/a5c70077e2433b437f8ad40d44452e2ef63e61d8
+[00:56] <JimBastard> trying it out and getting tacos, brb
+[01:00] isaacs has joined the channel
+[01:03] mikeal has joined the channel
+[01:04] teemow has joined the channel
+[01:06] okito has joined the channel
+[01:07] <JimBastard> so kriskowal i think that might be working....its hard to test as the nature of the issue. i'll let you know if it comes up again
+[01:07] <JimBastard> thank you
+[01:07] <kriskowal> np
+[01:07] <JimBastard> GUESS WHO HAS A NEW GITHUB FRIEND
+[01:07] <JimBastard> ;-)
+[01:17] <JoePeck> it looks like the LICENSE was out of date, since parseUri has been gone for a while. It was removed December 18th => http://bit.ly/6e2c4a
+[01:17] jamiew_ has joined the channel
+[01:17] <JoePeck> patch => http://bit.ly/7ARQ8O
+[01:30] sprsquish has joined the channel
+[01:31] <isaacs> JoePeck: thanks!
+[01:31] <isaacs> i updated the docs and tests, but forgot about hte license.
+[01:31] <JoePeck> isaacs: sure =)
+[01:32] <JoePeck> are there easier ways to put up patches? I could have made a github fork, but from following the list I've seen a lot of people using gists
+[01:33] r11t has joined the channel
+[01:34] <isaacs> JoePeck: i'm a fan of having your own fork, and then sending a link to a commit rather than putting the patch on github.
+[01:34] r11t has joined the channel
+[01:34] <isaacs> but ryah's pretty liberal about it, afaict
+[01:35] <JoePeck> isaacs: okay, I'll do that in the future. I'm still building up some github-fu when working with other people's forks
+[01:35] <JoePeck> cheers
+[01:35] <isaacs> suresure
+[01:36] r11t has joined the channel
+[01:36] <isaacs> gist patches are pretty darn easy to apply, though.
+[01:36] <isaacs> git apply <(curl http://gist.github.com/raw/279121/db762fcdeac4fca58edba99f8a7e5bd4e9104643/gistfile1.diff)
+[01:36] <JoePeck> heh, I figured people would do that
+[01:37] r11t has joined the channel
+[01:38] <isaacs> JoePeck: http://github.com/isaacs/node/commit/fc30f0f16d10a238f0e07c40e34e10ec0fdb609e
+[01:38] r11t has joined the channel
+[01:39] <JoePeck> isaacs: awesome, thanks =)
+[01:39] cloudhead has joined the channel
+[01:39] <isaacs> sending contribs to the list is pretty good because it at least keeps it all going through one channel.
+[01:39] <isaacs> (i just sent my commit to the list)
+[01:40] inimino has joined the channel
+[01:40] <JoePeck> k, I figured something this simple could be mentioned in irc, but I see what you mean, with all the forks that are available
+[01:41] jamiew_ has joined the channel
+[01:46] FoxFurry has joined the channel
+[01:47] FoxFurry has joined the channel
+[01:48] FoxFurry has joined the channel
+[01:48] steadicat has joined the channel
+[01:48] <isaacs> JoePeck: yeah, if one of us are in here, and you don't feel like doing all the hullabaloo of forking and cloning and pushing etc, then that's fine.
+[01:49] FoxFurry has joined the channel
+[01:50] FoxFurry has joined the channel
+[01:52] FoxFurry has joined the channel
+[01:53] FoxFurry has joined the channel
+[01:55] FoxFurry has joined the channel
+[01:55] FoxFurry has joined the channel
+[01:56] FoxFurry has joined the channel
+[01:57] FoxFurry has joined the channel
+[01:57] teemow has joined the channel
+[01:59] teemow has left the channel
+[01:59] un0mi has joined the channel
+[01:59] jspiros has joined the channel
+[01:59] mikeal has joined the channel
+[02:02] mikeal has joined the channel
+[02:27] mikeal has joined the channel
+[02:27] un0mi has joined the channel
+[02:39] eviltwin has joined the channel
+[02:41] mikeal has joined the channel
+[02:48] un0mi has joined the channel
+[02:48] inimino has joined the channel
+[02:49] inimino has joined the channel
+[02:51] inimino has joined the channel
+[02:51] cloudhead has joined the channel
+[02:52] r11t has joined the channel
+[02:52] inimino has joined the channel
+[02:52] cloudhead has joined the channel
+[02:53] r11t has joined the channel
+[02:54] inimino has joined the channel
+[02:56] spoob has joined the channel
+[03:14] jamiew has joined the channel
+[03:27] achew22 has joined the channel
+[03:48] steadicat has joined the channel
+[03:55] cadorn has joined the channel
+[03:55] rauchg has joined the channel
+[04:08] <JimBastard> ugh not having proper middle ware is kinda annonying right now for this app
+[04:08] <JimBastard> ive got to keep track of a shit ton of places where the request could end
+[04:09] <isaacs> joshthecoder: are you joshbuddy?
+[04:12] <isaacs> guess not.
+[04:20] steadicat has joined the channel
+[04:22] <joshthecoder> isaacs, nope
+[04:22] <isaacs> kk
+[04:23] un0mi has joined the channel
+[04:29] rtomayko has joined the channel
+[04:47] JoePeck_ has joined the channel
+[04:50] <JimBastard> inimino you alive
+[05:02] sprsquish has joined the channel
+[05:12] <micheil> JimBastard: node-smtp now sends mail fine.
+[05:21] Yuffster has joined the channel
+[05:25] <JimBastard> nice micheil
+[05:25] <micheil> yeah
+[05:26] <JimBastard> whats up with the usage docs
+[05:26] <JimBastard> ;-)
+[05:26] <JimBastard> ahh i see now
+[05:33] <micheil> yeah, no docs.
+[05:33] <micheil> look at the source, it's all promise based
+[05:54] un0mi has joined the channel
+[06:31] kriskowal has joined the channel
+[06:50] scudco has joined the channel
+[06:57] mikeal has joined the channel
+[06:57] jed has joined the channel
+[07:19] technoweenie has joined the channel
+[07:20] jamiew has joined the channel
+[07:24] steadicat has joined the channel
+[07:51] richtaur has joined the channel
+[07:51] richter has joined the channel
+[07:54] qFox has joined the channel
+[07:56] jamiew_ has joined the channel
+[08:19] <JimBastard> soo uhh whats up with http://jackjs.org/ and node
+[08:25] mikeal has joined the channel
+[08:27] <jamiew_> hey hey pkg mgmnt
+[08:27] <jamiew_> re. jack/narwhal.js
+[08:28] <JimBastard> has anyone tried http://github.com/raycmorgan/gateway yet?
+[08:34] mikeal has joined the channel
+[08:55] jamiew_ has joined the channel
+[09:01] felixge has joined the channel
+[09:29] brosner has joined the channel
+[09:35] felixge has joined the channel
+[09:50] piranha has joined the channel
+[10:02] <micheil> JimBastard: I think the api would be better as: var builder = new Gateway.Builder();
+[10:03] <JimBastard> i havent tried it out
+[10:03] <JimBastard> i dont really have time to mess with middleware right now
+[10:03] <JimBastard> i think jack just needs to get ported to node
+[10:09] <JimBastard> micheil did you post the node-smtp update on the mailing list yet?
+[10:09] <micheil> no, I haven't
+[10:10] <JimBastard> you should fancy up the readme a little, maybe show some usage
+[10:10] <micheil> First I really want to get tests working
+[10:10] hassox has joined the channel
+[10:11] <micheil> I just changed the readme to use markdown as a step towards that
+[10:11] <micheil> github's lagging
+[10:11] <JimBastard> aye
+[10:12] <micheil> hmm.. a git client in pure node js?
+[10:12] <micheil> not possible until ssh is written and until setSecure works on the client
+[10:12] <micheil> If I knew more about ssl, I'd implement setSecure on the client tcp socket
+[10:13] <JimBastard> i say push it working with localhost
+[10:13] <micheil> I'm looking at implementing a schema less datastore soon, which should be fun: http://bret.appspot.com/entry/how-friendfeed-uses-mysql
+[10:13] <JimBastard> and get people using it
+[10:13] <JimBastard> the majority of usage will be localhost
+[10:13] <micheil> true
+[10:13] achew22 has joined the channel
+[10:13] <JimBastard> someone might even come along and help
+[10:13] <JimBastard> you know
+[10:14] <JimBastard> ill blog about it and post on hackernews or something
+[10:14] <micheil> hmm.. I really need to get a jekyll site up..
+[10:14] <JimBastard> github is fine
+[10:14] <JimBastard> just get the readme looking fancy
+[10:14] <micheil> something simple for brandedcode.com instead of that placeholder
+[10:14] <achew22> Is there a function that will do print_r or var_dump in node.js?
+[10:14] <micheil> (I'm meaning so that I can blog about it)
+[10:15] <JimBastard> achew22 where are you debuggint to? the console?
+[10:15] DamZ has joined the channel
+[10:15] <achew22> Yeah, into the console
+[10:15] <micheil> achew22:sys.puts(sys.inspect(Object))
+[10:15] <JimBastard> yeah
+[10:15] <JimBastard> so you could do this
+[10:15] <JimBastard> sys.puts(JSON.stringify(sys.inspect(Object)));
+[10:15] <JimBastard> maybe
+[10:15] <JimBastard> thats a cheat
+[10:16] <micheil> technoweenie: your semi-colon-less javascript annoys me.. :(
+[10:16] <JimBastard> you should try out one of the web console debuggers
+[10:16] <micheil> CI for node :D
+[10:16] <micheil> that'd be epic.
+[10:16] <JimBastard> ?
+[10:16] <JimBastard> achew22 http://maraksquires.com/node_debug/
+[10:17] <JimBastard> that will give you clickable / async debuggable objects
+[10:17] <JimBastard> so you can debug.log() large objects and click through to inspect them
+[10:17] <JimBastard> in a browser
+[10:17] <JimBastard> sys.puts will only take you so far
+[10:19] <micheil> what are simplex and picard? could someone fill in there descriptions? http://wiki.github.com/ry/node/modules
+[10:19] <JimBastard> ummm
+[10:20] <JimBastard> i dunno
+[10:20] <JimBastard> clever framework gets clever framework name + 1
+[10:22] <achew22> micheil: They exist in the section labeled "Web frameworks"
+[10:23] <micheil> achew22: so they should be web frameworks?
+[10:23] <micheil> ACTION organised that page, but wants every module to have a short description with it
+[10:25] <micheil> *sigh* Hashlib looks great, although, I'd rather use a js module I can submodule and require, without compiling.. 
+[10:26] <JimBastard> yeah micheil that is a whole other can of worms
+[10:27] <JimBastard> i was thinking about doing continious intergration instead of hot swapping of modules and shit
+[10:27] <micheil> that's my biggest issue with the difference between C++ / JS modules
+[10:27] <JimBastard> when you start doing dynamic modules / requiring you run into all the fun problems with dynamic langauges
+[10:27] <JimBastard> depenency hell
+[10:28] <JimBastard> dependency hell
+[10:28] <micheil> I mean, I could probably definitely get some large speed improvements in node-smtp by moving Queue.js to be a c++ module, but I don't want deps.
+[10:28] <JimBastard> im sure someone wrote that in c++ already?
+[10:28] <micheil> I guess I'll wait until we have a solid way to consistently download / build / package things
+[10:28] <micheil> nup
+[10:28] <micheil> Queue is an array based runner
+[10:29] <JimBastard> no idea
+[10:29] <JimBastard> are you using that in node-smtp?
+[10:29] <micheil> so.. I push data to the queue, then it immediately triggers a process() 
+[10:29] <micheil> once the process feels it has a packet, it emit's an event
+[10:30] <micheil> yeah, Queue.js is at the core of node-smtp
+[10:30] <micheil> brb, getting my glasses.
+[10:30] <micheil> back
+[10:31] <micheil> I use queue as a way to ensure that whole packets / commands are received
+[10:31] <micheil> I may change it to be string based, rather then array based though
+[10:33] <JimBastard> have you tried running any blast emails?
+[10:33] <micheil> as in?
+[10:33] <JimBastard> like 1000 emails at once?
+[10:33] <JimBastard> 10,000? etc
+[10:34] <micheil> you can't
+[10:35] <JimBastard> so whats the limit
+[10:35] <micheil> because the smtp protocol is send/receive based
+[10:35] <JimBastard> etc
+[10:35] <JimBastard> durrrr
+[10:35] <JimBastard> work with me here
+[10:35] <JimBastard> a mail queue
+[10:35] <JimBastard> of 10,000
+[10:35] <JimBastard> to be blasted
+[10:35] <micheil> how ever, you could more then likely make a class to instantiate many clients
+[10:35] <micheil> I might make that into mailer.js
+[10:35] <JimBastard> well assuming you send them one at a time single threaded
+[10:36] <micheil> yeah
+[10:36] <JimBastard> will it work?
+[10:36] <micheil> the way it'd work is because all of node-smtp is using promises
+[10:36] <JimBastard> i would add a test case for like 1,000 
+[10:36] <micheil> promises and event emitters
+[10:36] <JimBastard> just to make sure smtp.client doesnt shit itself
+[10:36] <micheil> it shouldn't
+[10:36] <JimBastard> word
+[10:37] <micheil> due to the way the SMTP protocol is, it'd have to have either "threads" or a queue of impatient hamsters
+[10:37] <micheil> by "threads" I mean, it'd be multiple clients
+[10:38] <JimBastard> "workers"
+[10:38] <micheil> yeah
+[10:38] <JimBastard> thats the word
+[10:38] <micheil> same idea
+[10:39] <JimBastard> doesnt have to be that fancy i think
+[10:39] <micheil> so, lib/mailer.js would include a method for sending bulk / a queue
+[10:39] <JimBastard> it should probaly queue by default
+[10:39] <JimBastard> and everything goes through queue
+[10:39] <micheil> you could set into it the number of workers it's allowed to spawn, and then etc.
+[10:39] <JimBastard> yeah
+[10:39] <JimBastard> im sending your emails in javascripts
+[10:39] <JimBastard> awesome
+[10:40] <JimBastard> fucking awesome
+[10:40] <micheil> if you set it to spawn only one worker, then it'll queue the messages
+[10:40] <micheil> you could also make use of Queue.js in there
+[10:40] <JimBastard> thats what im saying
+[10:40] <micheil> Queue.js is much like a data pump
+[10:40] <JimBastard> since its just a process right
+[10:40] <JimBastard> or a promise
+[10:40] <JimBastard> just register it
+[10:41] <micheil> it's not a process or promise, it's a worker
+[10:41] <JimBastard> aight 
+[10:41] <JimBastard> not really sure what queue.js does
+[10:41] <micheil> have a read: http://github.com/miksago/Queue.js
+[10:41] <JimBastard> just read it
+[10:42] <micheil> right, so if you look at the example implementation there, I can replace the worker to do the sending of emails.
+[10:42] <JimBastard> so
+[10:42] <JimBastard> the queue (right now) will fire everything you register in it sequentially?
+[10:42] <micheil> well, you could do: new SMTP.workerClient(port, host, threads);
+[10:42] <micheil> yes
+[10:43] <micheil> how ever, that acts as a queue
+[10:43] <JimBastard> so when you email.send() it will add a job to the queue?
+[10:43] <micheil> we spawn many instances of SMTP.client() based on the threads
+[10:43] <micheil> yeah
+[10:43] <JimBastard> that sounds pimp
+[10:43] <JimBastard> if it works how i think it does
+[10:43] <JimBastard> im a little retarded
+[10:43] <micheil> it'll add it to the global queue, and then the first free SMTP.client will send the message
+[10:48] <micheil> woot!
+[10:48] <micheil> got subjects working..
+[10:48] <micheil> at some stage I broke them, but I got them working again
+[10:49] <JimBastard> im probaly gonna install your build in the next few days
+[10:49] <JimBastard> i have to do a friend import feature which will require sending out like 500 emails
+[10:49] <JimBastard> i dont think my code will handle it
+[10:49] <micheil> heh heh
+[10:49] <micheil> just use it as a git submodule
+[10:49] <JimBastard> sup
+[10:50] un0mi has joined the channel
+[10:50] <micheil> "sup" ?
+[10:51] <micheil> JimBastard: as a new form of ypu?
+[10:51] <micheil> *yup
+[10:51] <JimBastard> as in
+[10:52] <micheil> btw, what are you building with node JimBastard ?
+[10:52] <JimBastard> Kind sir, I am intrigued by what you are talking about and wish to inquire further about what a git submodule is and how it would be applicable to this situation in hence we are currently talking about.
+[10:52] <JimBastard> or
+[10:52] <JimBastard> sup
+[10:53] <JimBastard> custom application
+[10:53] <micheil> okay, are you managing with git?
+[10:53] <JimBastard> that requires large amounts of http requests and open requests
+[10:53] <JimBastard> yeah kinda
+[10:53] <JimBastard> im pretty bad though
+[10:53] <micheil> if you are: git submodule add git://github.com/miksago/node-smtp.git
+[10:53] <JimBastard> what will that do
+[10:53] <micheil> in the root of your application
+[10:53] <micheil> actually.
+[10:54] <micheil> git submodule add git://github.com/miksago/node-smtp.git vendor/node-smtp
+[10:54] <micheil> will add a node-smtp directory in the vendor directory of your root
+[10:55] <micheil> then when you do: git submodule update
+[10:55] <micheil> you'll automatically get the latest version of node-smtp
+[11:01] <JimBastard> word
+[11:01] <JimBastard> ill check it out later for sure
+[11:02] <JimBastard> i gotta build the logic to import before i can send out 500
+[11:02] <JimBastard> :-)
+[11:02] <micheil> heh heh
+[11:05] <micheil> JimBastard: It'll be a while before the API to Mailer is frozen, so watch out with thT
+[11:05] <micheil> *that
+[11:06] <JimBastard> well you know
+[11:06] <JimBastard> iterate often and shit
+[11:06] <JimBastard> right now i can send some emails
+[11:06] <JimBastard> way better then none
+[11:07] <achew22> Are there enough people working on node based projects to identify trends like pack leaders for most accepted webframework or anything like that?
+[11:10] <JimBastard> github followers
+[11:10] <JimBastard> express
+[11:11] <JimBastard> for most of what im doing, modules are king
+[11:11] <JimBastard> no point having a glue if you have nothing to glue together
+[11:12] <JimBastard> right now im working with session.js, application.js, route.js, email.js , debug.js , mime.js, mustache.js 
+[11:12] <JimBastard> http://github.com/visionmedia/express
+[11:13] <achew22> is it preferred to make a system wide folder that contains your libraries or is it better to git submodule them?
+[11:14] <JimBastard> i dunno
+[11:20] <JimBastard> mmmm break time
+[11:20] <JimBastard> bbl
+[11:26] <micheil> achew22: depends, I stick to putting any third party code into /lib/vendor
+[11:26] <micheil> to say, I may or may not have written this, but I use it
+[11:26] <micheil> and then where a git repo is available, I use submodules
+[11:49] BBB has joined the channel
+[11:56] un0mi has joined the channel
+[12:30] tisba has joined the channel
+[12:43] DamZ has joined the channel
+[13:01] felixge has joined the channel
+[13:12] felixge has joined the channel
+[13:19] markwubben has joined the channel
+[13:21] lifo has joined the channel
+[13:24] rolfb has joined the channel
+[13:38] <micheil> man, that is so the next protocol I'll be implementing. MPD
+[13:39] <mediacoder> you should try SPDY :-)
+[13:43] <micheil> I just "hacked" my brother's arch box because he had MPD running on localhost instead of loopback
+[13:43] <micheil> mediacoder: SPDY looks like something google related, right SPDY?
+[13:44] <micheil> faster http protocol or something
+[13:44] <mediacoder> yea, not at all mail related..just saw your love towards protokol implementations and rfcs :-)
+[13:44] <micheil> (besides, MDP uses a very similar reply structure to telnet)
+[13:44] richter has joined the channel
+[13:44] <micheil> not tlenet.
+[13:44] <micheil> SMTP
+[13:46] <micheil> but yes, protocol documentation / RFC's do make implementation much easier
+[13:49] <micheil> mediacoder: I'm not sure, but looking very quickly, I probably can't implement SPDY, as it requires SSL
+[13:51] <micheil> mediacoder: how much do you know about this SPDY protocol?
+[14:03] <micheil> hmm.. I reckon I can get a baseline implementation of MPD in about 2 days.
+[14:31] <mediacoder> micheil: nothing :-) i was rather kidding, but anyways SPDY might be interesting for node..being even more pioneering
+[14:32] <micheil> mediacoder: If you've seen my latest tweet, then you'll know I'm up for a challenge on protocols.
+[14:33] <micheil> http://github.com/Miksago/node-mpd-client/
+[14:33] <micheil> it has no code yet, but shouldn't take me too long to spec out
+[14:33] <micheil> although, I'll need to write a mock server for it first.
+[14:34] <micheil> it's not as documented as SMTP, although, it does have some documentation
+[14:35] <micheil> either that or fix up my pc with arch
+[14:42] <micheil> woot. finally found some screws for my old HDD..
+[14:42] JimBastard has joined the channel
+[15:05] <micheil> hmm..
+[15:07] alex-desktop has joined the channel
+[16:03] felixge has joined the channel
+[16:20] <felixge> has anybody used posix.sendfile to stream large files with node yet?
+[16:22] inkubus08 has joined the channel
+[16:31] felixge has joined the channel
+[16:33] sprsquish has joined the channel
+[16:35] <technoweenie> micheil: your semi-colon-full javascript annoys others too :)
+[16:35] <micheil> technoweenie: :P
+[16:35] <technoweenie> i personally don't care, i just figure there's no chance my js will be run in a browser so i dont mind if i leave semicolons out
+[16:35] <micheil> technoweenie: the only reason it annoys me is because one misplaced something and the js won't run at all
+[16:36] <micheil> odd.. hmm..
+[16:36] <micheil> I got a hang up on something that shouldn't have hung up
+[16:37] <micheil> technoweenie: any experience with MPD by any chance?
+[16:38] <technoweenie> no... unless you mean uh multiple personality disorder?
+[16:38] <felixge> looking for a metaphor for serving static files, anybody?
+[16:40] <micheil> Music Player Daemon
+[16:41] bryanl has joined the channel
+[16:41] <micheil> felixge: this is worse then a crossword
+[16:41] <felixge> micheil: why? Because I'm not limiting you to a certain amount of letters? :)
+[16:42] <micheil> yeah
+[16:42] <technoweenie> well maybe you should, it'd be another clue
+[16:42] <micheil> ;P
+[16:42] <felixge> I want to do a node.js module for serving files but 'static' is a reserved keyword in JS ... 
+[16:42] steadicat has joined the channel
+[16:42] <micheil> statik
+[16:43] <micheil> ?
+[16:43] <technoweenie> wow, it is?
+[16:43] <micheil> possiblylargeandnotmovingfile
+[16:43] <micheil> j/k
+[16:43] <micheil> yeah, Java's reserved keywords are reserved in javscript
+[16:43] <micheil> *javascript
+[16:44] <felixge> Not sure if v8 would complain, but either way it wouldn't be a very safe choice
+[16:44] <felixge> I like 'statik' so :)
+[16:44] <felixge> I'll use that
+[16:46] <micheil> hmm..
+[16:46] <micheil> ACTION is hooking up a library to allow node to control a music player :D
+[16:46] <micheil> I'm also experimenting with various closed / eof errors
+[16:47] Booster has joined the channel
+[16:47] JoePeck has joined the channel
+[16:48] <felixge> micheil: sounds like fun :)
+[16:48] okito has joined the channel
+[16:48] <micheil> felixge: it is, although, I don't have the music player available to me for me to test
+[16:48] <micheil> so I'm writing a "mock server"
+[16:49] <felixge> micheil: now why would you work on that?
+[16:50] <micheil> because, if I get one mock server working, I should easily be able to write on for node-smtp
+[16:50] <micheil> ;P
+[17:04] <jan____> felixge: what do you need the metaphor for?
+[17:04] <jan____> project name?
+[17:05] <felixge> jan____: yeah
+[17:05] <felixge> I want to write a module that detects mime type based on the file extension and properly streams the file to the client
+[17:05] <felixge> so you can easily build a node-app that also serves its own static assets from a webroot
+[17:06] <micheil> nice one felixge 
+[17:06] <micheil> felixge: make sure you add it to the wiki page of modules
+[17:07] <felixge> micheil: will do
+[17:13] <jan____> felixge: Paperboy
+[17:14] r11t has joined the channel
+[17:14] <felixge> jan____: I guess that could work :)
+[17:14] steadicat has joined the channel
+[17:14] <jan____> :)
+[17:15] <jan____> ACTION prepares an Awesome_Paperboy
+[17:16] <felixge> still kinda hard to make the metaphor go full circle
+[17:16] <felixge> but I think it will do
+[17:16] <jan____> :)
+[17:17] tisba has joined the channel
+[17:17] <felixge> paperboy.deliver(filename, res).before(fn).after(fn).otherwise(fn);
+[17:17] <felixge> I think will be the API
+[17:17] <jan____> :)
+[17:18] <jan____> add .whatever(fn) for good measre
+[17:18] <jan____> hmm
+[17:18] <jan____> try {} catch() {} whatever {}
+[17:18] <felixge> jan____: when would whatever fire?
+[17:18] <jan____> whenever ;D
+[17:19] <jan____> it makes more sense in a try-catch as a replacement for finally
+[17:20] Booster has joined the channel
+[17:21] stevestmartin has joined the channel
+[17:27] rolfb has joined the channel
+[17:36] <micheil> felixge: nice api you've got there
+[17:36] <micheil> it'd be interesting if I could do: paperboy.deliver("./public/*", res);
+[17:37] <micheil> although, that's probably something I should handle
+[17:37] <micheil> horaay! just got a pump based mock server and client working for node-mpd-client
+[17:42] bryanl has joined the channel
+[17:42] <micheil> hmm.. this mockServer + client works pretty good
+[17:42] <micheil> I've got it such that if either hangs up, the other knows
+[17:42] <felixge> hm I think the 'drain' event is broken
+[17:43] <micheil> if the client hangs up, the server stays online for 10 seconds and then exits
+[17:43] <micheil> if the server hangs up, then the client quits cleanly
+[17:43] <micheil> felixge: I think there was a bug about that.
+[17:44] <felixge> micheil: was it fixed? or delayed for the net2 branch merge?
+[17:44] <micheil> I'm not sure
+[17:44] <micheil> ryah: would have to answer that..
+[17:44] <micheil> I guess.
+[17:46] <micheil> I should head to bed.. it's 4:40am
+[17:46] BBB has joined the channel
+[17:47] <micheil> kennethkalmer: I'll probably rewrite some of the core socket parts of node-smtp later on today, based on what I've just learnt from these tests work mockServer / client
+[17:47] <micheil> G'night folks. felixge could you dm me on github when you release paperboy?
+[17:48] <micheil> (Miksago)
+[17:48] <felixge> micheil: k, will try to remember
+[17:48] <micheil> cheers
+[17:48] <micheil> I'll probably find it on github tomorrow or something
+[17:48] <micheil> when I read back to what I was doing now.
+[17:49] <micheil> night.
+[17:51] <kennethkalmer> micheil: looking forward to it, good night
+[17:52] <micheil> kennethkalmer: yeah, it's basically going to be a better queue/pump working, and have a better hangup / close connection system
+[17:52] <kennethkalmer> now go get some rest :)
+[17:53] <micheil> I'm still not sure if I should go to using string based pump over array based.. gotta sort that out and figure out which is quicker.
+[17:53] <micheil> night.
+[17:58] rictic has joined the channel
+[18:15] pdelgallego has joined the channel
+[18:18] bry has joined the channel
+[18:27] cloudhead has joined the channel
+[18:38] rictic has joined the channel
+[18:49] <technoweenie> hey when does a node.js call process.exit()
+[18:49] <technoweenie> is there a way to see whats running so i can see whats hanging the process
+[18:55] felixge has joined the channel
+[19:09] sztanpet has joined the channel
+[19:22] jamiew has joined the channel
+[19:25] jed__ has joined the channel
+[19:30] erichocean has joined the channel
+[19:34] <felixge> Released paperboy, a little #nodejs module for delivering static files: http://bit.ly/6DGVhF
+[19:34] <jan____> woot
+[19:35] <jan____> felixge: copy and paste fail in the License section of the readme
+[19:35] <felixge> I wouldn't use it for huge files so. Since I can't seem to get a 'drain' event for the tcp connection there is a good chance huge files might hock memory in the buffers
+[19:35] <jan____> also, no naming credit for me :D
+[19:35] <felixge> oh
+[19:35] <felixge> shit
+[19:35] <felixge> :)
+[19:35] <felixge> now you'll get two credits
+[19:35] <jan____> hehe
+[19:37] <felixge> jan____: both fixed
+[19:37] <felixge> :)
+[19:37] <felixge> sorry
+[19:38] <mediacoder> felixge: why didnt you go the sendfile way? :-) 8i was curious about its usage so i was looking forward to paperboy :-))
+[19:38] <felixge> mediacoder: because sendfile seems broken. It only streams parts of the file for me.
+[19:39] <mediacoder> ah, i see
+[19:39] <technoweenie> hey i have a question about conventions
+[19:39] <technoweenie> in a module i want to expose a class
+[19:39] <felixge> mediacoder: and since I don't have a drain event I cannot find out when the headers have been send
+[19:39] <technoweenie> exports.MyClass = MyClass = function(...) { 
+[19:39] <technoweenie> or
+[19:40] <technoweenie> exports.create = function() { return new MyClass(arguments) }
+[19:40] <technoweenie> var MyClass = require('my-class') ; var obj = MyClass.create(...)
+[19:40] <felixge> technoweenie: I recommend: var MyClass = exports.MyClass = function(...) {
+[19:41] <felixge> I think this works just as well so:
+[19:41] <felixge> exports.MyClass = function MyClass(...) {
+[19:41] <felixge> maybe I should use that
+[19:41] <technoweenie> yea i like the idea of just exposing the class instead of adding some little api on the exports object (the exports.create thing)
+[19:41] <technoweenie> felixge: nope...
+[19:41] <technoweenie> "exports.TwitterNode = function TwitterNode(options) {" gives me ReferenceError: TwitterNode is not defined
+[19:42] <technoweenie> because right below that function i'm doing: TwitterNode.prototype.track
+[19:42] <technoweenie> TwitterNode.prototype.track = function(...) {...}
+[19:42] <jan____> yeah, TwitterNode is not getting registered with the global object
+[19:43] <technoweenie> yea thats what i thought.  im going with felixge's first suggestion
+[19:43] <technoweenie> but my prototype declarations dont seem to be sticking
+[19:43] <technoweenie> hrm
+[19:45] <technoweenie> AH sys.inherits(TwitterNode, process.EventEmitter)
+[19:46] <technoweenie> that clears all my prototype methods
+[19:46] <inimino> felixge: I have sendfile working reliably, but there's some ugliness involved
+[19:47] <mediacoder> felixge likes it dirty :-) (id be interested, aswell, if you have it to show :-)
+[19:47] <jan____> lol
+[19:48] <inimino> haha
+[19:49] <mediacoder> (sorry for that one, felixge ;-))
+[19:49] <inimino> mediacoder, felixge: http://www.pastie.org/782207
+[19:49] <felixge> technoweenie: yeah, you have to call sys.inherits *before* adding your stuff to the prototype
+[19:49] <technoweenie> yea i see that now :)   http://github.com/technoweenie/twitter-node/commit/b2ccdb0008dcfaca7cf448fcab8cf608a06138a1
+[19:50] <inimino> I haven't benchmarked it against the regular way
+[19:50] <felixge> inimino: are you using that for http?
+[19:50] <felixge> inimino: how do you send the headers out and make sure they got send before invoking sendfile?
+[19:50] <jan____> technoweenie: oh hey, do you work with mattly?
+[19:50] <technoweenie> yea
+[19:51] <jan____> cools!
+[19:51] <inimino> felixge: yes
+[19:51] <technoweenie> yea i didnt realize you were the couchdb jan until #redis a few minutes ago :)
+[19:51] <jan____> :)
+[19:51] <jan____> seems like the cool kids all hang out in the same channels :)
+[19:52] <technoweenie> heh
+[19:52] <inimino> felixge: oh, there's some ugliness there too
+[19:52] <inimino> ACTION prepares a second paste...
+[19:52] <inimino> http://www.pastie.org/782212
+[19:52] <felixge> who needs redis if they can get dirty? :)
+[19:53] <felixge> inimino: you got a race condition there
+[19:54] <felixge> inimino: your code only works because posix.open() is usually slower then your connection.send() for the headers
+[19:54] <felixge> I think
+[19:54] <inimino> hm, you sure?
+[19:54] <felixge> unless connection.send() does some buffering of its own thats honored by sendfile
+[19:55] <felixge> inimino: well, try do the send() after posix.open() finishes and invoke the sendfile right after that
+[19:55] <inimino> I thought connection.send just synchronously dumps it into the kernel's send buffer for the socket
+[19:56] <felixge> inimino: looking at the code it seems you are right
+[19:56] <felixge> hm
+[19:58] <inimino> the ugliest thing about this is the if(e.message=='Resource temporarily unavailable'){...
+[19:58] <inimino> which you do need, without that you'll only get partial sends
+[20:00] <felixge> inimino: I guess I'll wait for the net2 branch before switching to sendfile
+[20:00] <felixge> I already have one dirty project : )
+[20:01] <mediacoder> hehe
+[20:02] <inimino> hehe, yeah, I'm ditching this too in favor of just using plain vanilla streaming
+[20:03] isaacs has joined the channel
+[20:03] <felixge> inimino: yeah, once 'drain' is working again it should be efficient "enough" for small web projects
+[20:04] <felixge> I'd go with nginx/lighttpd for more serious file serving needs anyway
+[20:04] <felixge> but I would like to do some benchmarking against them
+[20:04] <inimino> well, I may benchmark the two eventually
+[20:04] <felixge> yeah
+[20:04] <inimino> I'd kind of like to get sendfile working properly
+[20:04] <felixge> that'd be fun
+[20:04] <felixge> If sendfile works I think we would have a pretty good chance of being at least as fast as nginx
+[20:05] <felixge> I would imagine nginx to do much more when serving a regular file than node will on the minimum setup
+[20:05] <inimino> but it's not earning a spot on my TODO list just yet
+[20:05] <inimino> yeah, I'd say so
+[20:05] <inimino> yes, especially with fast routing :-)
+[20:08] <inimino> basically you have an incoming HTTP request going through http_parser, some request routing/dispatch, and then some JavaScript that's already been compiled to machine code by V8, kicking off some sendfile() and the kernel does the rest
+[20:08] <inimino> should be about as fast as anything else out there
+[20:10] <felixge> inimino: yeah, if that's the case node could actually replace traditional web servers all together for most parts :)
+[20:10] <felixge> we just need an async fcgi module
+[20:13] un0mi has joined the channel
+[20:13] <inimino> felixge: yep
+[20:13] <felixge> inimino: ryan is going to add support for passing sockets via sockets in net2
+[20:14] <felixge> this means you can have multiple web workers handling connections
+[20:14] <felixge> without occurring any communication overhead 
+[20:14] <inimino> yeah
+[20:14] <felixge> so sweet
+[20:14] <inimino> yeah, that will be awesome
+[20:14] <felixge> :)
+[20:14] <felixge> Node.js based load balancers would be awesome as well
+[20:15] <felixge> as you could trivially hack in any logic you need for sessions and stuff
+[20:15] <inimino> yep
+[20:16] Booster has joined the channel
+[20:19] jed__ has joined the channel
+[20:21] DamZ has joined the channel
+[20:23] <felixge> isaacs: is npm working right now?
+[20:23] <isaacs> felixge: define "working"?
+[20:23] <isaacs> i'm kinda blocked atm
+[20:24] <isaacs> working on getting unblocke.d
+[20:24] <felixge> isaacs: compatible with the latest version of node.js 
+[20:24] <felixge> isaacs: just saw your pull request
+[20:24] <isaacs> felixge: my npm master is compatible with latest node.
+[20:24] <isaacs> and it's going to be using commonjs-compatible package.json, extended with the "main" field.
+[20:25] <isaacs> main = "package entry point module", or "what you get when you do require(package)"
+[20:25] <felixge> cool
+[20:25] <felixge> :)
+[20:25] <isaacs> it can right now install a package if you give it a tarball and the name.
+[20:25] <isaacs> it doesn't do versioning yet, or install-by-name-only
+[20:25] <isaacs> since there's no registry, and i am 100
+[20:25] <isaacs> 5
+[20:25] <felixge> I really really want a package mamanger
+[20:25] <felixge> :)
+[20:25] <isaacs> since there's no registry, and i am 100% not going to have the package catalog live inside npm
+[20:26] <isaacs> it'll be a bit slower install-time to use a hosted package registry rather than a local one, but we can add caching, and it's worth it for the distributed factor.
+[20:26] <felixge> yeah
+[20:28] <isaacs> how's node-dirty coming?
+[20:28] bryanl has joined the channel
+[20:29] <isaacs> i'm planning on using that or some other kind of uber-simple key-value store.
+[20:29] <isaacs> dirty looks like it hits exactly the features i need for the npm registry, but without any of the features i don't need.
+[20:31] <jan____> felixge: looks like I can use dirty to implement awesome's store.js.
+[20:31] <jan____> on the other hand...I already have store.js :)
+[20:32] <felixge> jan____: its up to you if you want to be dirty :)
+[20:34] <jan____> felixge: hahaha :D
+[20:34] <jan____> felixge: I might want to argue that store.js is very dirty indeed
+[20:34] erichocean has joined the channel
+[20:34] <felixge> jan____: actually it would depend on how much of dirty you need
+[20:34] <felixge> need to look at store.js
+[20:35] <jan____> felixge: so far it is just an array of objects
+[20:35] <felixge> jan____: any disk persistence?
+[20:35] <jan____> and tons of helper methods for commands to operate on these.
+[20:35] <jan____> felixge: yeah, flush to JSON file
+[20:35] <felixge> k
+[20:35] <jan____> much like redis
+[20:36] <felixge> well I would argue that dirty is not meant to write something like redis
+[20:36] <felixge> for two reasons
+[20:36] <felixge> a) Redis already exists
+[20:36] <felixge> b) I believe it is stupid to send trivial questions like "what is the value of key x" over a network : )
+[20:37] <jan____> the first 50 LoC of store.js are all I need from Dirty
+[20:37] <jan____> a) it is extra infrastructure
+[20:37] <felixge> I want dirty to be the base for building network databases that answer real world questions directly via  a REST API
+[20:38] <jan____> b) remote, in-memory data structures are sexy
+[20:38] <felixge> jan____: I'd say keep what you have
+[20:38] <jan____> yea
+[20:38] <felixge> I'd be really interested in seeing a benchmark for awesome :)
+[20:38] <felixge> I got dirty up to 700k writes / sec
+[20:38] <felixge> but its cheating without networking
+[20:39] <jan____> I ran some of the redis benchmarks 
+[20:39] <jan____> as much as were supported by the subset of commands I support
+[20:39] <jan____> awesome was ca 2x slower than redis
+[20:39] <jan____> I hoped for 10x
+[20:40] <felixge> wow
+[20:40] <felixge> that would be fantastic
+[20:40] <felixge> I'm wondering how much net2 will make a difference
+[20:40] <jan____> yeah, busy on getting the rest fixed up to make real tests
+[20:40] <felixge> yeah
+[20:41] <felixge> you probably need to do some profiling anyway, its very easy to loose performance in high req/sec scenarios due to stupid things
+[20:42] <felixge> at least I didn't realize how I lost 600k writes / sec for quite a while *g*
+[20:43] <felixge> ACTION wishes there was a profiler for node/v8 yet
+[20:43] <jan____> lol
+[20:43] <jan____> yeah, I have tons of inefficiencies in there
+[20:44] <felixge> (hint: I was flushing more often than I thought I was which killed performance)
+[20:44] <jan____> most importantly, the operations don't have redis' big-o guarantees yet, since I haven't analysed the underlying implementation characteristics.
+[20:45] <felixge> jan____: does that matter for < 10 GB Ram?
+[20:45] <felixge> :)
+[20:45] <jan____> so there's ton of O(N) or worse in there where things could be O(log n) or O1)
+[20:45] <jan____> felixge: the more CPU I burn on that the less reqs I can handle :)
+[20:45] <jan____> (so no) :)
+[20:45] <felixge> I have to do some analysis for that for dirty as well
+[20:45] <felixge> I'd like to say dirty has O(YEAH) characteristics 
+[20:46] <jan____> HAHAHA
+[20:46] <jan____> awesome
+[20:46] <jan____> in the pretext, nebulously define E=... A=... Y=... and H=...
+[20:46] <jan____> and conclude the performance is O(YEAH)
+[20:47] <jan____> I'll do that :D
+[20:47] <jan____> felixge: which brings up the topic of missing implementation details in the API docs of all the JS engines
+[20:47] <jan____> granted it is unusual, but redis has it :)
+[20:47] <felixge> jan____: yeah I think you'll have to reverse engineer these
+[20:48] <felixge> john published this profiler thingy that kinda does that somewhat I think
+[20:48] <felixge> not sure if it was good enough so
+[20:49] <jan____> felixge: I'm hoping somebody else could do the gneering
+[20:49] <felixge> hehe
+[20:49] <jan____> open souce!
+[20:49] <felixge> ok, gotta sign off now - pretending to participate in a real world game of cards
+[20:50] <jan____> gnight!
+[20:50] <felixge> jan____: anything on the radar next week that could make for an excuse for hanging out with you guys
+[20:50] <jan____> (what game?)
+[20:50] <felixge> ?
+[20:50] <felixge> it was really fun at the js meetup
+[20:50] <felixge> jan____: romee
+[20:50] <jan____> felixge: The Gaggia is back in the office, so we have awesome coffee, you're welcome any time
+[20:50] <felixge> *spellfail
+[20:50] <jan____> darn, looking for Doppelkopf folks
+[20:51] <felixge> I'll play anything really
+[20:51] <felixge> : )
+[20:51] <felixge> Luck beats skill anytime
+[20:51] <felixge> :)
+[20:51] <felixge> ACTION really leaving now, gn8 folks
+[21:15] scudco has joined the channel
+[21:38] jamiew has joined the channel
+[21:45] stevestmartin has left the channel
+[22:00] sudoer has joined the channel
+[22:00] Booster has joined the channel
+[22:11] un0mi has joined the channel
+[22:12] bryanl has joined the channel
+[22:13] aho has joined the channel
+[22:19] Booster has joined the channel
+[22:20] Yuffster has joined the channel
+[22:22] inkubus08 has joined the channel
+[22:22] tlrobinson has joined the channel
+[22:22] inkubus08 has joined the channel
+[22:22] sprsquish has joined the channel
+[22:47] r11t has joined the channel
+[22:50] <jan____> the forced order of declarations is pretty annoying, what am I doing wrong?
+[22:51] <inimino> declarations?
+[22:51] r11t_ has joined the channel
+[22:52] <jan____> function foo() { bar(); } function bar() { ... }
+[22:52] <jan____> won't work
+[22:52] <jan____> I need to define bar first
+[22:53] <aho> and that's a big problem?
+[22:55] <inimino> jan____: nonsense, it works perfectly
+[22:55] <inimino> jan____: let me guess, you're using JSLint?
+[22:56] gbot2 has joined the channel
+[22:56] <inimino> if so, that's definitely what you're doing wrong
+[22:57] ibolmo has joined the channel
+[22:58] <ibolmo> can someone tell me if node.js' assert.ok returns anything?
+[22:58] <aho> i for one really like jslint
+[22:58] <ibolmo> rather.. if it returns assert again?
+[22:58] gbot2 has joined the channel
+[22:58] <ibolmo> in other words: can I do: assert.ok(true).ok(true)...
+[22:59] <isaacs> jan____: you can call functions before they're defined if you're defining them as named function declarations rather than var foo = function
+[22:59] <isaacs> an odd quirk of the language leading to some strange edge cases and utterly confounding ie<=7
+[22:59] gbot2 has joined the channel
+[23:02] Booster has joined the channel
+[23:03] mikeal has joined the channel
+[23:06] <jan____> inimino: not jslint.
+[23:06] <jan____> isaacs: that might be it. I have this.method = function() declarations
+[23:06] <jan____> sorry I wasn't exact
+[23:07] <isaacs> yep, that'd do it
+[23:07] hassox has joined the channel
+[23:07] <jan____> fucksticks
+[23:07] <jan____> it's annoying
+[23:07] <isaacs> i generally like naming functions, and caling them by name, just to avoid that situation.
+[23:07] <inimino> jan____: ah, what's giving the issue?
+[23:07] <inimino> jan____: ah...
+[23:07] <jan____> well, I'm building an object ;)
+[23:07] <inimino> yes
+[23:07] <isaacs> this.bar = bar;  function bar () { .. }
+[23:07] <ibolmo> I'm emulating the assert module. Does 'ok' return the instance, or assert? e.g. assert.ok(true).ok(true)...
+[23:07] <jan____> isaacs: I'll five that a shot
+[23:07] <hassox> morning ppls
+[23:07] bryanl has joined the channel
+[23:08] <isaacs> jan____: but you'll still have to not call this.bar until it's assigned.
+[23:08] <isaacs> you could always do bar.call(this, 1,2,3) or bar.apply(this, [1,2,3])
+[23:08] <isaacs> hassox: mornin, mate
+[23:08] <inimino> jan____: no reason you can't use function declarations and then build the object at the end
+[23:08] <hassox> hey isaacs  :)
+[23:09] <jan____> inimino: no reasons beside silly bookkeeping
+[23:09] <jan____> anyway, off to workarounds
+[23:09] <inimino> jan____: or return {foo:foo,bar:bar,baz:baz}; function foo(){...} function bar(){...} function baz(){...}
+[23:09] <jan____> thanks for all the suggestions :)
+[23:10] <isaacs> jan____: be wary of saying "grr, you can't <blah blah blah> in javascript!" around here. you'll be flooded with suggestions ;)
+[23:11] <jan____> isaacs: I wouldn't ask here if that wasn't a desired outcome :)
+[23:11] <inimino> hehe
+[23:11] <inimino> grr, you can't calculate the busy beaver in JavaScript!
+[23:11] <jan____> you could... wait a minute!
+[23:11] <jan____> nearly got me there
+[23:12] <inimino> hehe
+[23:12] ibolmo has left the channel
+[23:28] <jan____> hehe now this: a local variable defined before the function that uses it, but after the function that calls the function that uses it, causes that var to be undef
+[23:46] <inimino> jan____: if it's called before the definition is reached, yes
+[23:46] <jan____> yeah
+[23:46] <jan____> sucks :)
+[23:49] erichocean has joined the channel
+[23:51] <technoweenie> damn, async stuff is so hard to test right
+[23:51] <technoweenie> hassox: hey did you see my twitter-node project
+[23:51] <hassox> technoweenie: yes
+[23:51] <hassox> well
+[23:52] <hassox> I saw the repo but I didn't get a chance to go through it
+[23:52] <technoweenie> i just made it a single event emitter that you can tie into whatever
+[23:53] <hassox> :)
+[23:53] <hassox> awesome
+[23:53] <hassox> the api looked good :)
+[23:53] <hassox> it's pretty awesome that it can be done :)
+[23:54] <hassox> did you see I updated chain?
+[23:55] <technoweenie> no, i couldnt figure out what it was for
+[23:55] <technoweenie> i'm sticking to the bare metal on this crap before jumping into all these extractions people are writing
+[23:56] <technoweenie> twitter-node has no dependencies, and only uses a base64 module i ripped off some dudes presentatin
+[23:56] <hassox> technoweenie: :(
+[23:56] <hassox> dox are my worst thing
+[23:56] <hassox> it's a very simple rack level thing to build components on
+[23:56] <technoweenie> i'm getting a good feel for js again, so i'll probably take another look after i've got waldo in production
+[23:57] <hassox> it uses async methods to move from one middleware to another
+[23:57] <technoweenie> ah
+[23:57] <technoweenie> yea i used a 'simple rack level thing' for a ruby http connection lib
+[23:57] <technoweenie> its a great pattern
+[23:57] <technoweenie> i just cant visualize in my head how that might work w/ async stuff yet
+[23:58] <hassox> http://github.com/hassox/chain/blob/master/API.textile
+[23:58] <hassox> there's lots of options for _how_ to implement it
+[23:59] <hassox> but basically, you don't want to use callstacks to move about
+[23:59] <technoweenie> oh is chain for http servers

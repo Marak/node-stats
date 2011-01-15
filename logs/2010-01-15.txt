@@ -1,0 +1,1110 @@
+[00:12] RayMorgan has joined the channel
+[00:14] binary42 has joined the channel
+[00:16] okito has joined the channel
+[00:17] binary42 has joined the channel
+[00:19] un0mi has joined the channel
+[00:22] mikeal has joined the channel
+[00:33] steadicat has joined the channel
+[00:35] okito has joined the channel
+[00:35] orlandov: ryah: hey, i noticed that in node_postgres, in Connection::New you do a "Connection *connection = new Connection();", but I don't see a corresponding delete
+[00:37] orlandov: valgrind is complaining about it, and i was wondering if there was a way of cleaning up after ObjectWrap objects
+[00:39] orlandov: (the reason i mention this is i'm cargocult^Wfollowing the same pattern in the mongodb driver i'm writing
+[00:47] lvmike has joined the channel
+[00:49] grantmichaels has joined the channel
+[00:51] un0mi has joined the channel
+[00:57] ryah: orlandov: yeah objectwrap deletes it
+[00:57] ryah: when all references are lost
+[00:59] micheil: ryah: is there any wrappers for openssl in node?
+[01:00] micheil: (specifically openssl s_client)
+[01:01] micheil: because I've worked out the various options and how to actually do smtp with tls/ssl, I'm just wondering about implementing it: http://github.com/Miksago/node.js-smtp/blob/master/docs/smtp_notes.md
+[01:03] orlandov: ryah: ah great :)
+[01:19] jacobolus has joined the channel
+[01:32] jacobolus has joined the channel
+[01:54] un0mi has joined the channel
+[01:59] ryah: micheil: no
+[01:59] ryah: although i'm starting ot think about that
+[02:00] micheil: okay
+[02:00] ryah: in the net2 branch, i need to redo the gnutls binding. 
+[02:00] ryah: i may just switch to openssl...
+[02:00] ryah: it's just i don't know how to do non-blocking openssl
+[02:00] micheil: (tbh, I didn't even know my mac had openssl installed by defualt)
+[02:00] ryah: i've heard its possible
+[02:00] micheil: there's a flag for it
+[02:01] micheil: -nbio
+[02:01] ryah: its been over a year since i looked at it -i should probably do that again
+[02:01] micheil: although, using command line I can't get that flag to work
+[02:02] micheil: it'd be really good to see ssl/tls clients land
+[02:04] micheil: the way that I'm going to implement the smtp module will be to have a couple of options, and to have a toggle to switch whether the client will automatically assume and use ssl
+[02:04] charlenopires has joined the channel
+[02:05] micheil: from the examples I've seen of ssl in action, it's needed a new connection to be spawned, hence the events would need to be rebound
+[02:05] ryah: yeah
+[02:05] ryah: i want to support that
+[02:05] ryah: decouple the tcp from the ssl
+[02:05] ryah: at least somewhat
+[02:06] micheil: okay
+[02:06] ryah: socket.startSecureSesssion()
+[02:06] micheil: why not use the existing socket.startSecure()
+[02:06] ryah: er, yeah
+[02:07] ryah: but at the moment, we're sitting on evcom and evcom demands the entire connection is secure
+[02:07] ryah: so. yeah. net2
+[02:07] un0mi has joined the channel
+[02:09] micheil: at any rate, I'll try to make the API and code to my smtp module forward compatible
+[02:09] micheil: is there any existing work on github or something of net2?
+[02:10] ryah: micheil: yeah the branch is up there
+[02:10] micheil: okay
+[02:10] ryah: you might want to revert the last commit
+[02:10] ryah: the sendFD stuff.
+[02:11] ryah: it's not working well
+[02:12] ryah: yeah, maybe i'm going to do this with openssl
+[02:13] ryah: i forget what my problem was with it before... but it looks kind of okay now
+[02:15] micheil: does net2 change the javascript api much at all?
+[02:15] inkubus08 has joined the channel
+[02:15] ryah_away: not much
+[02:15] ryah_away: a bit
+[02:16] ryah_away: "receive" -> "data"
+[02:16] micheil: okay
+[02:16] micheil: hmm..
+[02:16] ryah_away: binary stuff is different
+[02:16] ryah_away: that's the buig change.
+[02:17] micheil: would it be possible to add a variable into the javascript scope to let the js know that we're using net2?
+[02:17] micheil: because then I could have the code working with both
+[02:17] ryah_away: ?
+[02:18] micheil: eg, socket.addListener(sys.isNet2 ? "data" : "receive", function(){...});
+[02:18] ryah_away: process.version
+[02:19] micheil: "See src/process.js for more information. "
+[02:20] micheil: src/process.js doesn't exist
+[02:27] charlenopires_ has joined the channel
+[02:30] jacobolu_ has joined the channel
+[02:56] steadicat has joined the channel
+[03:04] r11t has joined the channel
+[03:18] scudco has joined the channel
+[03:24] JimBastard has joined the channel
+[03:31] un0mi has joined the channel
+[03:33] pjb3 has joined the channel
+[03:34] micheil: JimBastard: I got node.js-smtp working
+[03:35] micheil: http://gist.github.com/277168
+[03:35] micheil: although, I have just wiped the repository so I can start clean on implementing v1.0
+[03:37] jamiew has joined the channel
+[03:46] inimino: ACTION encounters the syntax error exception issue ... ugly
+[04:02] cloudhead has joined the channel
+[04:05] JimBastard: micheil will it send emails now?
+[04:05] r11t has joined the channel
+[04:05] micheil: yeah, see the example I posts
+[04:05] micheil: *posted
+[04:05] JimBastard: i see
+[04:05] micheil: you'll need to check out the tag v0.5
+[04:06] JimBastard: i saw the gist you posted
+[04:06] micheil: although, it is a proof of concept
+[04:06] JimBastard: is that the final syntax?
+[04:06] micheil: no
+[04:06] JimBastard: i would really recommend wrapping some of the more common stuff in easy to call methods
+[04:07] JimBastard: did you peep the snytax im using now? http://github.com/Marak/node_mailer
+[04:07] micheil: I'm reimplementing everything for v1.0, which will have two layers, the low-level protocol.js and a higher level mailer.js
+[04:07] JimBastard: awesome!
+[04:08] JimBastard: i was talking about smtp support at nyc.js tonight a little
+[04:08] micheil: protocol.js will also have forward compatibility with node's net2, which hopefully will bring in availability of tcp client ssl/tls negotiation
+[04:08] JimBastard: the fab guy was there too
+[04:08] micheil: fab guy?
+[04:08] JimBastard: not sure what net2 is
+[04:08] JimBastard: jed maybe
+[04:08] micheil: net2 is a branch of node
+[04:08] micheil: from what I can gather, it'll be merged into master when it works
+[04:09] JimBastard: let me know if you need any help with doing the mailer api 
+[04:09] JimBastard: or if you want to talk about it at all
+[04:09] micheil: http://github.com/ry/node vs http://github.com/ry/node/tree/net2
+[04:09] JimBastard: got ya
+[04:10] micheil: currently I'm looking at going: var mymailer = new Mailer("server", "user", "secret", port)
+[04:10] JimBastard: well
+[04:10] micheil: then: mymailer.send(to, from, subject, body)
+[04:10] micheil: or something
+[04:11] JimBastard: would you want to create multiple mailer objects on one page?
+[04:11] micheil: although, for now, I'm just implementing the raw protocol
+[04:11] JimBastard: i was always a big fan of cfmail - http://livedocs.adobe.com/coldfusion/8/htmldocs/help.html?content=Tags_m-o_01.html
+[04:11] JimBastard: but CFML is tag based of course
+[04:12] JimBastard: i dont think the high level call for sending emails should be more complicated then the cfmail tag, or the email.send() method i whipped up
+[04:12] micheil: I'm still trying to figure everything in the protocol out
+[04:12] JimBastard: of course
+[04:12] JimBastard: like i said, let me know if you want any help with the high level api
+[04:12] JimBastard: namespaces, syntax, things like that
+[04:12] JimBastard: would be glad to help / talk it over
+[04:13] micheil: I mean, here's a few things I worked out protocol wise last night: http://github.com/Miksago/node.js-smtp/blob/master/docs/smtp_notes.md
+[04:14] micheil: the biggest challenge is making the whole thing non-blocking
+[04:14] micheil: because the smtp protocol is a send/response style protocol
+[04:14] JimBastard: ummm
+[04:15] JimBastard: i think mediacoder handled that already? http://github.com/Marak/node_mailer/blob/master/node_mailer.js
+[04:15] JimBastard: by creating a promise?
+[04:15] micheil: yeah, although there's other issues
+[04:16] JimBastard: like what? im not too familiar
+[04:16] micheil: (I'm actually using EventEmitter on all the internals, but it makes implementation slightly messy)
+[04:17] micheil: man.. I should really be working on http://onthetune.com..
+[04:17] micheil: + I need a coffee.
+[04:17] micheil: bbl. Feel free to write any ideas for the higher level api down... I'll create an issue for it..
+[04:18] micheil: also, node.js-smtp is a client not a server
+[04:19] micheil: http://github.com/Miksago/node.js-smtp/issues/#issue/2
+[04:19] micheil: add in anything you want in the comments
+[04:19] JimBastard: kk
+[04:25] quirkey has joined the channel
+[04:26] steadicat has joined the channel
+[04:31] hassox has joined the channel
+[04:31] Booster has joined the channel
+[04:35] binary42 has joined the channel
+[05:00] RayMorgan has joined the channel
+[05:01] unom1 has joined the channel
+[05:19] un0mi has joined the channel
+[05:22] sudoer has joined the channel
+[05:49] micheil: ryah_away: Could you add in the raising of errors in node_net.cc, so that if any error is encountered it triggers the event "error" with the data of the exception encountered?
+[05:50] micheil: I've got something that works locally to do that, although, it is on an older version of node
+[05:50] kriskowal has joined the channel
+[05:52] sudoer has joined the channel
+[05:53] gbot2 has joined the channel
+[05:55] gbot2 has joined the channel
+[05:59] mattly has joined the channel
+[06:02] gbot2 has joined the channel
+[06:07] jed has joined the channel
+[06:07] un0mi has joined the channel
+[06:07] gbot2 has joined the channel
+[06:11] Yuffster has joined the channel
+[06:13] micheil: man.. downloading the full node git tree on a 5-7KiB/s connection is not cool.
+[06:14] emyller has joined the channel
+[06:16] JimBastard: i blame au
+[06:18] emyller has joined the channel
+[06:22] micheil: hmm.. the process object is always available isn't it?
+[06:23] inimino: micheil: yes
+[06:23] micheil: good
+[06:24] micheil: I'm making v1.0 of node.js-smtp to be as modular as possible
+[06:24] micheil: so one of the major splits I'm doing is splitting the message queue off from the core
+[06:24] micheil: as queue's can be used else where and don't depend on smtp functionality
+[06:25] micheil: I'm going for something like: smtp -> tcpQueue -> Queue
+[06:25] micheil: or something
+[06:25] hassox has joined the channel
+[06:26] kriskowal: i don't suppose you'd object to some day having to grab the process object from a module?
+[06:26] micheil: huh?
+[06:26] inimino: sounds pretty good
+[06:26] kriskowal: nm.  probably not relevant in this context.
+[06:28] inimino: anything that needs it is probably going to be non-portable anyway
+[06:29] kriskowal: for sure
+[06:29] hornbeck has joined the channel
+[06:32] micheil: I don't suppose there's anything like exports.__self__ where you can then just do: require("mylib"); and have direct access?
+[06:33] inimino: micheil: direct access?
+[06:33] micheil: well, if the exported symbol is a function
+[06:33] micheil: (ie, a constructor)
+[06:35] micheil: http://gist.github.com/277859
+[06:36] inimino: ah, that
+[06:36] inimino: not currently, as far as I know
+[06:36] kriskowal: micheil isaacs is experimenting with module.setExports, which would do the trick.
+[06:36] kriskowal: but it's not likely to be picked up by commonjs
+[06:37] kriskowal: i'm probably going to take it out of narwhal
+[06:37] inimino: maybe there will be a setExports or some such function soon
+[06:37] inimino: yeah, I'm not that crazy about the idea
+[06:37] kriskowal: but, for the sake of argument, you would module.setExports(Queue) in that case, and then require() would return Queue
+[06:40] micheil: yeah
+[06:40] micheil: rather then doing require("lib/queue").Queue
+[06:40] micheil: I mind, I don't mind doing that, but it's a little unintuative
+[06:42] gbot2 has joined the channel
+[06:42] gbot2 has joined the channel
+[06:46] kriskowal: micheil what language are you coming from?
+[06:46] kriskowal: ruby, i presume?
+[06:46] micheil: frontend javascript
+[06:47] micheil: :P
+[06:47] kriskowal: i see.
+[06:47] micheil: I know some of each of php, ruby, python, bash, etc though
+[06:47] kriskowal: aye.
+[06:47] micheil: I'm currently a bit of a dojo contributor & in past was a jQuery UI contributor
+[06:48] kriskowal: i was curious what informed your intuition.
+[06:48] micheil: hmm?
+[06:49] kriskowal: "from queue import Queue" would be very intuitive coming from python or ML, but i can't think of an analog in PHP, Ruby, or Bash
+[06:49] kriskowal: in Ruby, require is very different.  more like a "from module import *", if i'm not mistaken
+[06:49] steadicat has joined the channel
+[06:49] micheil: well, just the fact that there's so much repetition in the way I'm currently importing
+[06:49] kriskowal: PHP is more like a C #include or <script>
+[06:50] kriskowal: yeah.  it is a bit awkward.
+[06:50] kriskowal: i'm looking forward to deconstructors in es-harmony.
+[06:50] kriskowal: let {Queue} = require("queue");
+[06:50] kriskowal: doesn't make it much less awkward, but it's closer to the python analog anyway
+[06:50] micheil: I'm just a fan of not repeating myself..
+[06:51] kriskowal: yeah, reduces error
+[06:51] micheil: I also often rewrite things from the ground up just because I think I can make them better.
+[06:51] kriskowal: yeah, me too
+[06:51] micheil: hmm..
+[06:51] micheil: SMTP or SMTPClient as the constructor..
+[06:52] micheil: considering it's in the protocol part, probably SMTP
+[06:52] kriskowal: at least, i used to.
+[06:52] micheil: I wouldn't expect anyone to try and implement an SMTP Server
+[06:52] kriskowal: you might consider var SMTP = require("smtp"); and SMTP.Client and SMTP.Server
+[06:52] micheil: hmm..
+[06:52] kriskowal: at least, with the implication of the latter
+[06:53] micheil: yeah, you just gave a totally new perspective
+[06:53] micheil: time to rename files...
+[06:57] micheil: kriskowal: so.. what's your involvement in narwhal?
+[06:58] kriskowal: i got into narwhal when i noticed that tom had implemented my module system proposal for commonjs
+[06:58] kriskowal: since then, i've written about half of it.  tom and i are working on getting it to run on node.
+[06:58] micheil: ah,okay
+[06:58] JimBastard: yeah isnt narwhal blocking though?
+[06:59] JimBastard: feel free to ignore me im a noob
+[06:59] kriskowal: i also wrote tusk.  tom's working on porting a pure-js zip lib, which would be really cool since it would permit narwhal and tusk to run on a lot more engines without special embedding
+[07:00] micheil: JimBastard: probably wouldn't mean that the module system couldn't work in node
+[07:00] kriskowal: narwhal does provide some blocking apis.
+[07:00] micheil: JimBastard: Our module system is also blocking, as it isn't callback oriented (ala RunJS)
+[07:00] JimBastard: got ya
+[07:01] kriskowal: it's my hope to have an async module system in narwhal on node
+[07:01] spoob has joined the channel
+[07:01] micheil: kriskowal: so what, module("abc", function(){ module code });
+[07:01] micheil: or?
+[07:01] kriskowal: well, our client-side module system has an async option
+[07:01] kriskowal: module.async(id) returns a promise
+[07:02] kriskowal: module.async(id).then(resolve, reject)
+[07:02] micheil: uhh..
+[07:02] kriskowal: or Q.when(module.async(id), callback, errback).  same idea
+[07:02] kriskowal: it's basically the same
+[07:02] micheil: lost me, I'm used to working with client side module / loaders
+[07:03] kriskowal: yeah.  promises are just grown up callbacks.
+[07:03] JimBastard: is there a good list of CommonJS / narwhal modules? perhaps something to look at if i was doing node development?
+[07:03] kriskowal: require.async(id).then(function (module) {…}) if you will
+[07:04] kriskowal: narwhal has a bunch of packages that could work with node, i think.
+[07:04] elliottcable: ACTION ponders
+[07:04] JimBastard: ive had to rebuild a bunch of stuff / beg people in here for help for a lot of stuff that might have already been solved as a narwhal module
+[07:04] JimBastard: not sure though
+[07:05] kriskowal: yeah, probably.  let me pull of the catalog
+[07:05] kriskowal: you can search the catalog with the tusk command, but there's a json file…
+[07:05] elliottcable: I suppose I need to build a proper dictionary datastructure now >,<
+[07:05] kriskowal: http://github.com/280north/narwhal/blob/master/catalog-2.json
+[07:05] kriskowal: elliottcable, i've got one.
+[07:06] elliottcable: kriskowal: link link?
+[07:06] kriskowal: you will hate it, but here it is: http://github.com/kriskowal/chiron/blob/master/lib/chiron/dict.js
+[07:06] kriskowal: perhaps you can steal the good bits
+[07:06] elliottcable: something that can replace my misunderstood application of an Object here: http://github.com/elliottcable/Percival/blob/Master/lib/Percival.js#L49-177
+[07:06] micheil: you could also compile dojo and use it's datastores
+[07:07] kriskowal: it's a subclass of chiron.Set and overrides its eq and hash internals to use the key of each tuple only.
+[07:07] kriskowal: yeah, there are a few issues to be aware of with dictionaries…
+[07:08] elliottcable: kriskowal: ah?
+[07:08] kriskowal: you'll need to create an API that mediates get/set/del/has/&c
+[07:08] elliottcable: oh, yeah, of course
+[07:08] kriskowal: it's best to use an Object internally, but you'll want to prefix the keys with something like "~" to guarantee that there are no "hash" collisions
+[07:08] elliottcable: best to use an Object internally, eh?
+[07:09] kriskowal: toString makes a decent hash key, but you'll want to permit user-types to override it.
+[07:09] elliottcable: That doesn’t seem like a good idea; how do you decide how to map individual objects to strings?
+[07:09] micheil: kriskowal: I guess in some ways that Queue system of mine is a bit of a datastore, although, not in the same strictest sense
+[07:09] elliottcable: … that sounds like a horrible idea. It’d be quite, quite easy (and common) to end up with two things that make the same string
+[07:09] kriskowal: you'll also want to have buckets for collisions
+[07:09] elliottcable: which is the exact same problem as using a normal Object
+[07:10] kriskowal: right, so you apply the same principles as a hash table data structure: resolve collisions with a list
+[07:11] kriskowal: at least, that's the only collision resolution system that doesn't depend on a numeric key-space
+[07:11] elliottcable: I don’t quite understand.
+[07:11] elliottcable: Mind you, I’m no algorithms and data structures guy; I dropped out of all the CS courses. I just code.
+[07:11] unonick has joined the channel
+[07:11] kriskowal: suppose you're using an array as the key
+[07:11] elliottcable: My solution was probably going to be something simple, like two arrays of objects
+[07:11] kriskowal: dict.get([1,2,3])
+[07:12] micheil: dude.. wtf? "Narcissus: Javascript implemented in JavaScript"
+[07:12] kriskowal: [1,2,3].toString() is "123" and [1,23].toString() is also "123"
+[07:12] kriskowal: micheil: brendan eich wrote it
+[07:12] elliottcable: kriskowal: yes, hence why not using toString to associate keys and values
+[07:12] micheil: kriskowal: yeah, I saw that, but why? and what's it do?
+[07:13] kriskowal: ideally, dict.get([1,2,3]) would give you one value, and dict.get([1,23]) would give you the other.
+[07:13] micheil: you could do: key.join("-"); or something
+[07:13] kriskowal: micheil: the most useful reason for narcissus is creating a parse tree from a javacript program
+[07:13] elliottcable: kriskowal: yes, of course… hence why not to use toString, that’s a horrible association method
+[07:13] kriskowal: it's not perfect
+[07:13] micheil: giving you 1-2-3 & 1-23
+[07:13] JamesHayton has joined the channel
+[07:13] elliottcable: kriskowal: what about inimino’s JavaScript PEG grammer?
+[07:14] kriskowal: no matter what you use as your hashing function, you'll still need to resolve collisions
+[07:14] kriskowal: i won't discourage you from exploring better hash algorithms
+[07:14] elliottcable: I wasn’t intending to use hashing functions to get a string out of it…
+[07:14] elliottcable: because relying on storing an object as a string will always have collisions
+[07:15] kriskowal: the point is that get(key) needs to take the internal[hash(key)] and iterate through that for an exact match of the key
+[07:15] elliottcable: I would probably just go with an array of 2-tuples
+[07:15] elliottcable: the same thing Paws uses for its ‘dictionary’ sort of thing
+[07:15] kriskowal: you could do that, if you want to use a numeric hash key for all objects
+[07:15] elliottcable: a ‘numeric hash key?’
+[07:15] kriskowal: the nice thing about using an object is that it's already a hash table under the hood, and it's written in C, so it's fast
+[07:16] elliottcable: I’m almost entirely not worried about speed
+[07:16] kriskowal: i see.
+[07:16] kriskowal: well, it's going to be really slow if you do a linear search
+[07:16] elliottcable: yeah
+[07:16] elliottcable: well, computers are fast. I have yet to ever have anything that people warned me of being a speed problem, *actually* be a noticable problem
+[07:17] elliottcable: I can deal with it if it becomes necessary
+[07:17] kriskowal: uh huh.  ok
+[07:18] micheil: kriskowal: I guess elliottcable isn't like me, I'll try and get things faster then 1ms.. 
+[07:18] kriskowal: yeah, where were we
+[07:28] micheil: anyone know who Brainfucker from github might be on IRC?
+[07:29] jamiew has joined the channel
+[07:35] JimBastard: negative
+[07:36] qFox has joined the channel
+[07:38] hassox: haha
+[07:40] howardr has joined the channel
+[07:42] micheil: Does this look like a better organization of the modules / libraries available? http://wiki.github.com/ry/node/
+[07:44] micheil: should the modules go on a separate page?
+[07:44] howardr has joined the channel
+[07:45] micheil: (considering the number we're starting to have)
+[07:46] jamiew_ has joined the channel
+[07:48] howardr has joined the channel
+[07:48] howardr has left the channel
+[07:48] unomi: out of curiosity, anyone know of anyone doing anything regarding yui3 on node.js?
+[07:49] howardr has joined the channel
+[07:50] JimBastard: micheil wait until the modules start going into dependency hell
+[07:50] JimBastard: give it time
+[07:51] micheil: ACTION just reorganised it some what because we have things all over the place
+[07:51] hassox: micheil: you missed chain :(
+[07:52] micheil: hassox: Add it in then
+[07:52] hassox: oh
+[07:52] micheil: I just reorganised it
+[07:52] hassox: you can add stuff to any wiki?
+[07:52] micheil: yeah
+[07:52] hassox: I didn't know that :)
+[07:52] micheil: :P
+[07:52] micheil: JimBastard: looks good? http://github.com/Miksago/node.js-smtp/issues/#issue/2/comment/110439
+[07:55] scudco has joined the channel
+[07:57] micheil: JimBastard: I think I'll move the modules off to a new page, so we have two pages: modules and wanted-modules
+[08:00] micheil: hassox: Chain is a web framework yeah?
+[08:02] JimBastard: micheil ill have to think on it a bit more
+[08:02] JimBastard: but that looks good so far
+[08:03] JimBastard: id like to see the syntax sugar of one call, but i could see how that would be problematic to implement
+[08:03] JimBastard: ill try and respond in the next day or so
+[08:05] micheil: Just created: http://wiki.github.com/ry/node/modules
+[08:05] micheil: JimBastard: okay, well, yeah, if the mail server doesn't need authentication, then it is one call
+[08:07] unomi: what are some good ways of debugging js running on node.js?
+[08:07] micheil: I'll also make it so it's a bit more option based, eg, var email = new Mailer(port, host, {user: "user", secret: "secret", auth: "plain"})
+[08:15] qFox has joined the channel
+[08:15] JamesHayton has joined the channel
+[08:15] unomi has joined the channel
+[08:15] gbot2 has joined the channel
+[08:15] emyller has joined the channel
+[08:15] Yuffster has joined the channel
+[08:15] mattly has joined the channel
+[08:15] RayMorgan has joined the channel
+[08:15] pjb3 has joined the channel
+[08:15] JimBastard has joined the channel
+[08:15] sveimac has joined the channel
+[08:15] n8o has joined the channel
+[08:15] deanlandolt has joined the channel
+[08:15] onar has joined the channel
+[08:15] tiglionabbit has joined the channel
+[08:15] webben has joined the channel
+[08:15] micheil has joined the channel
+[08:15] voodootikigod has joined the channel
+[08:15] hober has joined the channel
+[08:15] aurynn has joined the channel
+[08:15] brandon_beacher has joined the channel
+[08:15] xantus_ has joined the channel
+[08:15] tlockney has joined the channel
+[08:15] erichocean has joined the channel
+[08:15] bjartek has joined the channel
+[08:15] mayerbacher has joined the channel
+[08:15] frodenius has joined the channel
+[08:15] wil has joined the channel
+[08:15] jacobat has joined the channel
+[08:15] orlandov has joined the channel
+[08:15] [k2] has joined the channel
+[08:15] keeto has joined the channel
+[08:15] sveisvei has joined the channel
+[08:15] evilhackerdude has joined the channel
+[08:15] ryah_away has joined the channel
+[08:15] bengl has joined the channel
+[08:15] halorgium has joined the channel
+[08:15] rektide has joined the channel
+[08:15] taf2 has joined the channel
+[08:15] skampler has joined the channel
+[08:15] CIA-78 has joined the channel
+[08:15] FoxFurry has joined the channel
+[08:15] zimbatm has joined the channel
+[08:15] JimBastard: ACTION ducks
+[08:15] JimBastard: its really helpful for debugging big nested objects
+[08:15] JimBastard: no i swear
+[08:15] unomi: :)
+[08:15] JimBastard: its not DW
+[08:15] JimBastard: i put the thing together on a shitty machine with jing
+[08:15] JimBastard: the video kinda sucks imho
+[08:15] unomi: its a retroskin for vim no doubt
+[08:16] micheil: Okay, I added in page anchors so we can point to a specific section.. http://wiki.github.com/ry/node/modules
+[08:17] unomi: well, it looks very cool, thanks again :)
+[08:17] micheil: unomi: http://wiki.github.com/ry/node/modules#debugging
+[08:18] micheil: unomi: what platform are you on?
+[08:19] unomi: debian lenny
+[08:19] unomi: btw, I keep getting this on a bunch of scripts : TypeError: Cannot read property 'path' of undefined
+[08:20] unomi: http://pastebin.com/m48f458af
+[08:20] unomi: the server will start up fine, but if I navigate to localhost:8081 it dumps what I pasted
+[08:21] micheil: #
+[08:21] micheil:     at Server.<anonymous> (/home/unomi/projects/tools/node.js/node_debug/node_debug/fu.js:28:33)
+[08:21] micheil: is node_debug located there?
+[08:21] unomi: yes
+[08:21] micheil: okay
+[08:22] JimBastard: is this my code?
+[08:22] unomi: unomi@freelancer:~/projects/tools/node.js/node_debug/node_debug$ ls
+[08:22] unomi: bk  css  debug.js  example.js  fu.js  index.html  jquery.treeview.css  js  README.md  screen.css
+[08:22] unomi: yes
+[08:22] JimBastard: there could be a absolute / relative pathing issue
+[08:22] JimBastard: i might have hardcoded a path?
+[08:22] JimBastard: hrmm
+[08:23] JimBastard: one sec
+[08:23] unomi: tried renaming the node.js to nodejs just to see, but same deal
+[08:23] JimBastard: naaah
+[08:23] micheil: unomi: nah, that's not it
+[08:23] JimBastard: are you using the server.js i included or your own?
+[08:23] unomi: yours
+[08:24] JimBastard: its pretty sure its a pathing issue, i seem to remember this
+[08:24] unomi: all I did was change 8080 to 8081
+[08:24] JimBastard: was it working before that?
+[08:24] unomi: I have something I can't take down on 8080
+[08:24] JimBastard: i doubt that port change made a diffirence
+[08:24] JimBastard: understood
+[08:24] JimBastard: one sec
+[08:26] JimBastard: hrmmm
+[08:27] JimBastard: thats a really strange line to error out at
+[08:27] JimBastard: how are you trying to run the debugger?
+[08:27] JimBastard: do you have an existing node app in play already?
+[08:27] micheil: ACTION compiles the latest node..
+[08:27] unomi: http://pastebin.com/m25588dbd
+[08:27] unomi: this is my ./configure
+[08:27] unomi: I reknd it was 'good enough'
+[08:27] unomi: I do, yes
+[08:27] JimBastard: the debugger might really want to be in your node root under node_debug
+[08:27] JimBastard: instead of node_debug/node_debug
+[08:28] micheil: hmm..
+[08:29] unomi: earlier I was running 2 node irc bots concurrently with no issues, while other bots would fail with similar messages
+[08:29] micheil: woot! 100% test pass.
+[08:29] unomi: micheil: first I compiled from git, then I pulled the tgz because I thought the HEAD might have caused it, but the binary atm is 1.25
+[08:30] JimBastard: unomi i want to help but im not sure if the error is coming from the node_debug package or something else
+[08:30] JimBastard: im gonna pull a fresh copy from git and see what happens
+[08:32] JimBastard: yeah unomi i can run that code successfully
+[08:32] micheil: unomi: I use head and have never had any problems
+[08:32] JimBastard: are you having any other issues?
+[08:32] JimBastard: with other packages?
+[08:32] unomi: other than node related? no
+[08:33] JimBastard: i mean node modules
+[08:33] JimBastard: aside from my debugger
+[08:33] JimBastard: you can try downloading and installing the OG one @ http://github.com/Connorhd/node_debug
+[08:34] JimBastard: let me know if that works for you and mine doesnt
+[08:34] JimBastard: but i just got a clean copy of mine from git and put it in a random directory, worked beatifully
+[08:34] unomi: but I am getting similar errors when running: http://github.com/fwg/nodejs.irc/tree/master/bot/
+[08:35] JimBastard: :-\
+[08:36] micheil: it might be an os related issue
+[08:38] unomi: changing example.js to use 8081 and going to localhost:8081 gives me the same deal
+[08:38] unomi: TypeError: Cannot read property 'path' of undefined
+[08:38] JimBastard: thats really strange....
+[08:38] unomi:  at Server.<anonymous> (/home/unomi/projects/tools/node.js/debug/connorhd/node_debug/fu.js:28:33)
+[08:40] hornbeck has joined the channel
+[08:42] JimBastard: its not the port i dont think, if path isnt defined it seems like the request object wasnt defined?
+[08:43] JimBastard: and if thats the case your install is probaly fubar
+[08:43] unomi: yeah
+[08:43] unomi: I am going to work on resolving the configure notices
+[08:44] unomi: any hints on what packages I need?
+[08:44] JimBastard: yeah
+[08:44] hornbeck has joined the channel
+[08:44] JimBastard: umm
+[08:46] JimBastard: well i have my install script for ubuntu
+[08:46] JimBastard: and apt-get
+[08:46] JimBastard: whats your system?
+[08:46] JimBastard: also is there installation guides on the github yet?
+[08:46] unomi: debian lenny 
+[08:46] micheil: ACTION is sick of the lack of easy testing for node..
+[08:47] JimBastard: i remember getting my from a blog post
+[08:48] teemow has joined the channel
+[08:49] mikeal has joined the channel
+[08:51] felixge has joined the channel
+[08:54] unom1 has joined the channel
+[08:54] unom1: do you remember which blog post?
+[08:56] JimBastard: unom1 it was for ubuntu
+[08:57] JimBastard: apt-get update
+[08:57] JimBastard: and all apt-get
+[08:57] JimBastard: apt-get dist-upgrade
+[08:57] unom1: ugh
+[08:57] JimBastard: apt-get install build-essential libc6-dev-i386 lib32stdc++6
+[09:08] rolfb has joined the channel
+[09:14] un0mi has joined the channel
+[09:34] un0mi has joined the channel
+[09:34] rektide has joined the channel
+[09:41] mikeal has joined the channel
+[10:06] markwubben has joined the channel
+[10:12] hober has joined the channel
+[10:13] DamZ_ has joined the channel
+[10:18] mahemoff has joined the channel
+[10:22] inimino:  <unomi> TypeError: Cannot read property 'path' of undefined
+[10:22] inimino: something is trying to read the old request.uri.path, and someone is running HEAD, which doesn't have it anymore
+[10:23] inimino: someone needs to port their code to the new URL parsing API
+[10:43] JimBastard: ohhh shiiit
+[10:43] JimBastard: inimino
+[10:43] JimBastard: that makes a lot of sense
+[10:45] JimBastard: whats with this url parsing api
+[10:45] JimBastard: im using the old version on a ton of shit
+[10:48] JimBastard: un0mi you still there
+[10:50] JimBastard: fucking having session.js issues ugh
+[10:55] JimBastard: wtf /w00tw00t.at.ISC.SANS.DFind:
+[10:56] JimBastard: did someone just try to root my node instance with a DLINK exploit?
+[10:56] JimBastard: im bugging out man, im looking at my node_debug instance and some random person hit up my dev server ip
+[10:57] felixge has joined the channel
+[11:21] JimBastard: fffffffuuuuuuuu
+[11:21] JimBastard: inimino are you still awake? im having issues with session.js. its working on one server and one install and not holding sessions on another
+[11:21] JimBastard: same code
+[11:23] inimino: JimBastard: different node versions?
+[11:23] inimino: JimBastard: btw the DFind thing is one of the most common probes on the net, don't worry about it
+[11:23] JimBastard: i figured about DFind
+[11:23] JimBastard: yes
+[11:23] JimBastard: its working on the older version, not on the new version
+[11:24] JimBastard:  if(ownProp(sessions,id)){ doesnt seem to ever want to be true
+[11:24] JimBastard: which makes me think the cookie isnt setting
+[11:24] JimBastard: also the cookie isnt setting in the browser
+[11:24] JimBastard: any clues? 
+[11:25] inimino: hm, could be something to do with setting the cookie header?
+[11:25] inimino: I don't think the node API changed around setting headers, but...
+[11:26] inimino: try curl, see what's getting sent
+[11:26] inimino: or if you're still stuck tomorrow ping me and I'll try to take a closer look
+[11:26] JimBastard: aight ill debug more
+[11:32] JimBastard: inimino im running the server on an IP address instead of a domain, would that matter?
+[11:33] un0mi has joined the channel
+[11:36] inimino: JimBastard: yes, the browser almost certainly is just dropping them in that case
+[11:42] mediacoder: JimBastard: hm, i dont have problems with cookies and IPs. (node HEAD)
+[11:43] JimBastard: hrmm
+[11:44] rtomayko has joined the channel
+[11:46] micheil: that is very odd.. Node's EventEmitter's addListener do not return an object or handle for the event like DOM or Dojo events do
+[11:47] micheil: also.. addOnce is awesome. now to create a patch and ask for a merge.
+[11:51] un0mi: JimBastard: hi
+[11:51] un0mi: was afk
+[11:53] JimBastard: what inimino said
+[11:53] JimBastard: using HEAD
+[11:53] JimBastard: there is a new url parser api or something 
+[11:53] JimBastard: so req.uri.path is probaly breaking
+[11:53] JimBastard: its working on my version, but im not using the most up to date right now
+[11:54] micheil: does `make clean` work with node?
+[11:55] charlenopires has joined the channel
+[11:56] un0mi: strange, I am running 0.1.25 
+[11:56] micheil: god damn. I've got a clean copy of HEAD, yet it's dirty..
+[11:57] un0mi: node --version
+[11:57] un0mi: 0.1.25
+[11:58] un0mi: yet connerhds debug is doing the same thing
+[11:59] micheil: arghh... fricking whitespace
+[12:00] micheil: hopefully one day I'll be able to format my patch.
+[12:02] micheil: inimino: the latest HEAD version of node is v0.1.24-38-gc4397b8, isn't it?
+[12:02] JimBastard: im using v0.1.22-15-g8fd46a3
+[12:03] micheil: um.. odd
+[12:03] micheil: oh wait
+[12:03] micheil: yeah.. I'm just wanting to make sure I'm at the latest
+[12:04] micheil: woot. after testing, my process.EventEmitter.prototype.addOnce works
+[12:06] micheil: righteo.. in coming patch :D
+[12:09] un0mi: I will try to make 1.23 .. but surely more people would have said something if heaps of things got broken at 1.25 ?
+[12:13] micheil: un0mi: I'm not sure where you're getting this 1.25 from..
+[12:13] micheil: the latest that I see is v0.1.24
+[12:14] micheil: 31st of dec.
+[12:14] un0mi: http://nodejs.org/#download
+[12:14] un0mi: 2010.01.09 node-v0.1.25.tar.gz
+[12:14] micheil: grab it from here: http://github.com/ry/node/downloads
+[12:14] micheil: I've never had troubles with git clones of node
+[12:15] un0mi: well, I built head earlier
+[12:15] micheil: head works
+[12:15] un0mi:  node --version
+[12:15] un0mi: v0.1.23
+[12:15] micheil: it'd be the code your trying
+[12:15] micheil: that's not head
+[12:15] micheil: head is..
+[12:15] un0mi: I realize :)
+[12:16] un0mi: but I was having the same issue when on head
+[12:16] micheil: v0.1.24-38-gc4397b8
+[12:16] un0mi: http://github.com/creationix/node-topcloud-chat/ had the same issue for me
+[12:16] micheil: try uninstalling node and reinstalling, cause something funky's happing there.
+[12:17] micheil: because head should be that above, that's a fresh clone as of about 5 hours ago
+[12:17] micheil: and as there hasn't been any commits since, it'll be the latest
+[12:24] un0mi has joined the channel
+[12:25] un0mi: and JimBastards debugger is working as well
+[12:26] un0mi: So I guess my system wasn't completely fubared
+[12:26] micheil: so what did you do?
+[12:27] un0mi: reset my git clone to 1.23 and built / installed
+[12:27] un0mi: et voila
+[12:27] micheil: now reset to HEAD^
+[12:30] un0mi: not entirely sure how to do that :p
+[12:31] micheil: cd .. && git clone git://github.com/ry/node && ./configure && make && make install
+[12:32] micheil: erm, I missed a step there, but you get my point
+[12:32] micheil: addOnce is very very awesome..
+[12:32] micheil: :D
+[12:32] micheil: very useful for when you need to do something and then check it triggers an event.. 
+[12:33] un0mi: how does it work?
+[12:33] JimBastard: ill have to find a use for that micheil lol
+[12:33] micheil: JimBastard: I'm using it in my new work with node-smtp
+[12:34] micheil: JimBastard: it works nicely because I need to send a command to the server, then get trigger a callback if I get an okay type response
+[12:35] LordMetroid has joined the channel
+[12:37] LordMetroid: I have become MOTU for ArchServer
+[12:37] micheil: MOTU?
+[12:38] un0mi: Master Of The Universe
+[12:38] LordMetroid: Master of The Universe, like in He-Man
+[12:38] micheil: uh, righteo
+[12:38] LordMetroid: Id est, package maintainer
+[12:38] micheil: does that mean that you build the package.. yeah
+[12:38] LordMetroid: yes
+[12:38] micheil: so what's ArchServer include?
+[12:38] micheil: I've got a box I'm installing arch on soon
+[12:39] LordMetroid: We just started so at the moment we got almost nothing http://wiki.archserver.org/index.php/Packages
+[12:39] un0mi: I have been considering arch, debian is slightly too encumbered sometimes
+[12:39] un0mi: either that or gentoo :p
+[12:39] micheil: man.. from what I've heard, arch is pretty decent for servers
+[12:39] un0mi: sadly openBSD will likely be too much of a heartache thse days
+[12:40] LordMetroid: ArchServer is a community driven server distribution based on ArchLinux, for more stability rather than frontier packages
+[12:40] LordMetroid: But I really like ArchLinux too
+[12:40] micheil: LordMetroid: and I agree with your exclusions
+[12:40] un0mi:  node --version
+[12:40] un0mi: v0.1.24-38-gc4397b8
+[12:40] micheil: un0mi: that's it!
+[12:41] micheil: now, make test
+[12:41] micheil: check it all works
+[12:41] un0mi: TypeError: Cannot read property 'path' of undefined
+[12:41] LordMetroid: Is node.js stable?
+[12:41] micheil: LordMetroid: umm.. I guess so
+[12:41] LordMetroid: I like node.js and am considering if it wouldn't be interesting to include it... But the question is, if it stable enough for the main repositories or if it should go into the community repositories
+[12:41] micheil: LordMetroid: It's not going to stuff an os if that's what you mean by stable
+[12:42] micheil: put it in main, but pull from a tag
+[12:42] LordMetroid: pull from a tag?
+[12:42] micheil: the tags are normally stable, the edge branch isn't always stable, but I've never had problems with master
+[12:42] un0mi: Not compiled with TLS support.
+[12:42] un0mi: Command: build/default/node /home/unomi/projects/tools/node.js/node/test/mjsunit/test-tcp-tls.js
+[12:42] un0mi: [00:28|% 100|+  61|-   1]: Done 
+[12:43] micheil: un0mi: that's fine.
+[12:43] micheil: we really need that test disabled if there's no tls support
+[12:43] un0mi: are there only 62 tests?
+[12:44] jed has joined the channel
+[12:44] un0mi: ah ok, I see it did continue before, just worried that it might stop on the first fail
+[12:45] micheil: there are..
+[12:45] un0mi: well, the tests pass, but the scripts bail
+[12:45] un0mi: not all, but a fair few
+[12:45] un0mi: probably like inimino was saying, there was an infrastructure change
+[12:46] micheil: I guess 62.. although when running I get up to 90
+[12:46] un0mi: ..?
+[12:46] micheil: LordMetroid: looks like a good package that you have there
+[12:46] LordMetroid: It is a start
+[12:47] micheil: LordMetroid: you're missing ssh
+[12:47] micheil: openssh / openssl
+[12:47] LordMetroid: micheil: yeah, I we know
+[12:47] micheil: k
+[12:47] micheil: you'll also need to include gnutls for node tls support
+[12:47] JimBastard: ahhh i see now
+[12:47] JimBastard: arch linux
+[12:47] JimBastard: halo
+[12:48] micheil: ACTION is mac os x, but has a server that will be running arch
+[12:48] LordMetroid: No, not ArchLinux, this is ArchServer
+[12:48] JimBastard: penguins
+[12:48] micheil: JimBastard: you?
+[12:49] JimBastard: been working on firefox plugins errr
+[12:49] micheil: JimBastard: no, what os?
+[12:49] micheil: btw, which plugins? a while back I did a fair bit of mozilla hacking
+[12:50] micheil: LordMetroid: might also want to add in Ruby Enterprise edition
+[12:50] LordMetroid: micheil: good poitn
+[12:50] micheil: and.. I'm not sure about sendmail / smtp
+[12:50] micheil: does mailman do those?
+[12:51] alex-desktop has joined the channel
+[12:51] micheil: no
+[12:56] micheil: LordMetroid: ArchServer is able to be used for production servers already, isn't it?
+[12:56] LordMetroid: No
+[12:57] micheil: like, it's not super unstable
+[12:57] micheil: is it?
+[12:57] LordMetroid: We just got the first vbox image up
+[12:57] micheil: vbox? virtualbox?
+[12:57] LordMetroid: yes
+[12:57] LordMetroid: ArchServer is still in the alpha stage
+[12:57] LordMetroid: Anyone who wants to help is welcome to
+[12:58] micheil: well, I mean, if I have a box in my house that isn't really for production (just storage), I could use archserver without worries
+[12:59] LordMetroid: No, we have not even released a base system yet
+[12:59] micheil: oh
+[12:59] micheil: how long away is the first release?
+[12:59] LordMetroid: Yesterday the vbi was released
+[12:59] micheil: (like, a guess)
+[12:59] LordMetroid: We have a vote on the frontpage about what motto to have
+[13:00] LordMetroid: So we just started
+[13:00] LordMetroid: We have decided to release once a year with a 2 year support
+[13:00] LordMetroid: But I don't think we have decided on the release date for the first version yet
+[13:00] LordMetroid: I will bring that up
+[13:00] micheil: okay
+[13:01] micheil: because I'm looking for something that's aiming to be stable, preferably on top of arch
+[13:01] LordMetroid: So do I, hence why I am developing it
+[13:02] micheil: ACTION doesn't really know heaps about arch yet, so probably couldn't develop it
+[13:05] un0mi has joined the channel
+[13:17] pmuellr has joined the channel
+[13:24] allnickstaken has joined the channel
+[13:36] micheil: JimBastard: just pushed the very beginnings of node-smtp, it connects and that's about all for now.
+[13:38] steadicat has joined the channel
+[13:45] eviltwin has joined the channel
+[13:45] unomi has joined the channel
+[13:45] JimBastard: thats cool micheil
+[13:45] JimBastard: let me know when it can send emails :p
+[13:45] micheil: :P
+[13:46] micheil: well, it won't take me long to get it to that stage
+[13:47] micheil: just fragmented things out into client / server / other stuff
+[13:47] micheil: #2e565f3
+[14:08] kriszyp has joined the channel
+[14:09] charlenopires has joined the channel
+[14:09] unom1 has joined the channel
+[14:25] technoweenie has joined the channel
+[14:26] technoweenie: hey does anyone have experience testing the http server 
+[14:30] cloudhead has joined the channel
+[14:35] micheil: JimBastard: just added a blocking functionality in, although, it's an evented block
+[14:35] micheil: JimBastard: it's the event on the client of "idle"
+[14:38] un0mi has joined the channel
+[14:42] Booster has joined the channel
+[14:45] micheil: JimBastard: example of that in action: http://github.com/Miksago/node-smtp/blob/master/examples/example-client.js
+[14:46] micheil: it'll send that command when the client is idle
+[14:53] inimino: LordMetroid: if you want something stable for servers, why not try Debian?
+[14:58] micheil: JimBastard: One command away from sending mail.
+[14:58] technoweenie has joined the channel
+[14:58] micheil: inimino: because.. well, it's debain
+[14:58] micheil: *Debian
+[14:58] micheil: :P
+[14:58] micheil: The reason I was going arch was so that I could install everything myself
+[14:58] micheil: brb
+[14:59] micheil: JimBastard: The final mail sending command will probably land around this time tomorrow
+[15:01] micheil: gee... that'll be fun when it comes to writing tests — creating a "mock" mail server
+[15:02] technoweenie: is there a way to force synchronous http requests for testing purposes
+[15:03] micheil: technoweenie: not that I know of
+[15:03] micheil: unless you nest them
+[15:07] technoweenie: i've even tried called close() on the server, but the process is hanging
+[15:10] technoweenie: oh i call process.exit() from the server close event
+[15:15] cloudhead has joined the channel
+[15:15] micheil: night folks.
+[15:16] technoweenie: i think i can wrap it in a Promise 
+[15:17] mdg has joined the channel
+[15:20] mdg: Hi, when I run node-repl, it says "Enter ECMAScript at the prompt", does this mean "just write some code" or is it supposed to be like help() in python console?
+[15:20] mdg: When I type "ECMAScript", I get a ref error
+[15:22] webben has joined the channel
+[15:23] mdg: The wording has me confused, but I guess it means "just write some code" 
+[15:25] steadicat has joined the channel
+[15:25] r11t has joined the channel
+[15:32] inimino: mdg: ECMAScript is the name of the language
+[15:32] inimino: mdg: if it meant the latter, it'd have said "Enter "ECMAScript" at the prompt"
+[15:33] mdg: inimino: ah, yea makes sense
+[15:34] mdg: I recall some talk on the ML a week ago about documentation on ECMAScript.  I wasnt sure if this was some new help()-from-python-console type feature
+[15:34] mdg: because that would be truly awesome
+[15:35] inimino: it would, the REPL could use some attention if you want to hack on something :?
+[15:37] mdg: Perhaps when I get more comfortable with this.  I have been lurking for a while now and am just now writing some code.
+[15:45] inimino: :)
+[15:48] charlenopires has joined the channel
+[15:53] LordMetroid: inimino: I like Arch
+[15:53] mdg: Archlinux?
+[16:02] scudco has joined the channel
+[16:07] LordMetroid: mdg: Yes, ArchLinux
+[16:08] LordMetroid: mdg: I find the community to be more helpful than the Slackware community and it having an excellent packaging management
+[16:08] LordMetroid: mdg: But it is always on the frontier and release new versions of application on a rolling release so we(a subset of the ArchLinux community) is developing the ArchServer distribution
+[16:09] mdg: LordMetroid: yea totally, that has been my main distro for over 2 years now.  The community is great indeed.
+[16:10] alexiskander has joined the channel
+[16:10] mdg: LordMetroid: I thought they recently added a LTS kernel package ? 
+[16:11] LordMetroid: Hmm, I had not heard about that, ArchServer however aims to create one release every year with a set release dates and a support a release for two years.
+[16:13] inimino: LordMetroid: Debian is already a very stable distribution, well suited to server use
+[16:13] LordMetroid: inimino: yes, I know but it is not an ArchLinux
+[16:14] jed has joined the channel
+[16:14] inimino: LordMetroid: I tend to think there are too many distributions already, and so much time is spent creating new ones instead of improving the ones that already exist
+[16:14] LordMetroid: inimino: That is okay, you don't need to create a new one, we will do it for you
+[16:15] mdg: Arch is great though
+[16:23] deanlandolt has joined the channel
+[16:43] binary42 has joined the channel
+[16:47] un0mi has joined the channel
+[17:13] eddanger has joined the channel
+[17:20] rictic has joined the channel
+[17:21] Atm0z has joined the channel
+[17:24] ryah_away has joined the channel
+[17:30] un0mi has joined the channel
+[17:31] scudco has joined the channel
+[17:32] jamiew has joined the channel
+[17:34] jamiew has left the channel
+[17:45] felixge has joined the channel
+[17:48] technoweenie: hey dudes, i wrote down some of my experiences from hacking on node.js from last friday: http://techno-weenie.net/2010/1/15/node-js-for-my-tiny-ruby-brain
+[17:56] un0mi has joined the channel
+[17:56] rabble has joined the channel
+[18:00] technoweenie has joined the channel
+[18:01] ryah: technoweenie: cool
+[18:24] stephenlb has joined the channel
+[18:26] ericflo has joined the channel
+[18:29] aguynamedben has joined the channel
+[18:31] aguynamedben has joined the channel
+[18:33] eddanger has joined the channel
+[18:36] stevestmartin has joined the channel
+[18:38] un0mi has joined the channel
+[18:38] ericflo has joined the channel
+[18:47] CIA-78: node: 03Vanilla Hsu 07master * r6c5c808 10/ deps/evcom/evcom.c : use SUN_LEN to calculate length of unix address @ FreeBSD. - http://bit.ly/4pkbLt
+[18:47] CIA-78: node: 03Ryan Dahl 07master * r8e6dd52 10/ (src/node.cc src/node.js): 
+[18:47] CIA-78: node: Hack to display more useful SyntaxError exceptions.
+[18:47] CIA-78: node: For some reason v8 doesn't include the frame with the syntax error in the
+[18:47] CIA-78: node: stack trace - so have to special case it. - http://bit.ly/7B7SZr
+[18:56] rictic has joined the channel
+[18:58] ryah: felixge: ping
+[18:58] ryah: felixge: how's that sync require patch?
+[19:02] rolfb has joined the channel
+[19:10] isaacs has joined the channel
+[19:15] bryanl has joined the channel
+[19:16] felixge: ryah: should still be in you inbox, I think I have to tweak it a bit but I was waiting for some initial feedback from you first
+[19:18] ryah: ah okay
+[19:18] Booster has joined the channel
+[19:19] ryah: ACTION is finally going to be full-time on node now
+[19:20] mediacoder: yay
+[19:20] felixge: yippie :)
+[19:20] felixge: ryah: I've been working with kriszyp on his promise branch which is coming along nicely
+[19:21] ryah: felixge: did you see my reply?
+[19:21] felixge: ryah: no, just woke up from a nap
+[19:21] felixge: let me me check
+[19:24] felixge: ok read up on it
+[19:24] kriszyp: congrats on getting to go full time on node, ryah
+[19:25] felixge: ryah: I think the problem that this "chaining " tries to address is function composition
+[19:25] felixge: at least that is the use case I have had a need for over and over
+[19:26] ryah: kriszyp: thanks
+[19:26] ryah: felixge: like what?
+[19:26] felixge: ryah: making an example, 1 sec
+[19:29] felixge: ryah: https://gist.github.com/13ed69481e62694fa1b2
+[19:30] felixge: I find myself writing a lot of boilerplate code that creates new promises to build on existing ones
+[19:34] ryah: felixge: yeah... I'm not convinced that it's better
+[19:34] kriszyp: so is the promise looking to be in good shape?
+[19:34] kriszyp: promise branch...
+[19:35] mattly has joined the channel
+[19:35] ryah: what if we try to do chaining instead of with arguments and return, with a chain() function
+[19:35] felixge: ryah: I was thinking about this today as well
+[19:35] felixge: it would make the whole concept a bit easier
+[19:35] felixge: how would you make the API for that?
+[19:36] ryah: Promise.chain(stat(path), function (stat) { return stat.size > Math.pow(1024, 2); } )
+[19:37] ryah: Promise.chain(p1, p2, p3).addCallback(function () { puts("done"); })
+[19:38] ryah: in any case we definitely need a chain() and group()
+[19:38] kriszyp: calling not-chaining chain() doesn't make it a chain does it? :P
+[19:38] ryah: (where chain does it serial and group does it all at once)
+[19:38] ryah: maybe call it serial() ?
+[19:38] felixge: sequence()
+[19:38] ryah: serial() and parallel() ?
+[19:39] felixge: serial is good too
+[19:39] felixge: less typing
+[19:40] felixge: ryah: so Promise.serial() would take both promises as well as functions as its arguments?
+[19:40] felixge: and functions that return promises would delay the next function in the sequence being called until that promise fullfils?
+[19:40] ryah: yeah
+[19:41] ryah: functions for non-i/o ops
+[19:41] felixge: ryah: what about error handling?
+[19:42] ryah: if one fails then the seq is terminated
+[19:43] felixge: so you can't "catch" certain error cases
+[19:43] felixge: but I guess you could always go the oldschool route for that
+[19:43] ryah: you can still addErrback on them
+[19:43] ryah: individually
+[19:44] inimino: ryah: how would you feel about making promises a library and only using callbacks for all the core node async I/O?
+[19:44] ryah: inimino: shrug
+[19:45] ryah: inimino: the problem is adding errback
+[19:45] inimino: s/library/module/
+[19:45] inimino: ok
+[19:45] ryah: posix.stat(path)(callback, errback); <-- what you mean?
+[19:45] felixge: I think the lowest bindings should always take callbacks
+[19:46] felixge: ryah: I think just 1 callback that is passed an "instanceof Error" would do
+[19:46] inimino: what's the problem with adding errback?
+[19:46] inimino: ryah: ah, possibly that, yes
+[19:46] inimino: ryah: or possibly one function that gets the result in either case
+[19:46] felixge: Promises should only be present for abstraction layers on top of low level system calls
+[19:46] ryah: inimino: have you looked at the posix module?
+[19:47] ryah:   exports.close = function (fd) {
+[19:47] ryah:     var promise = new process.Promise();
+[19:47] ryah:     process.fs.close(fd, callback(promise));
+[19:47] ryah:     return promise;
+[19:47] ryah:   };
+[19:47] inimino: could be an instanceof Error, or it could explicitly pass the success/failure indication
+[19:47] inimino: ryah: yes
+[19:47] ryah: so the bindings to C are def going to be callback only
+[19:48] inimino: ryah: yes, basically I really like the way posix works, and the fact that process.fs is there
+[19:48] ryah: yeah, it's nice not to have the promise overhead
+[19:49] ryah: i'm not opposed to exposing that to the user
+[19:49] inimino: good
+[19:49] inimino: yeah
+[19:50] inimino: cool
+[19:50] ryah: could have both of course
+[19:50] ryah: posix and posix-promise
+[19:51] ryah: does anything else make promises?
+[19:51] ryah: just the posix module?
+[19:51] inimino: ryah: this is what I'm currently playing with for this: http://boshi.inimino.org/3box/asof/1263250371783/fileIO/README.html
+[19:51] inimino: yeah
+[19:51] ryah: i've seen that
+[19:52] ryah: truthfully, i'm not really a fan :)
+[19:52] felixge: ryah: I'll play with your idea of simplifying the promise stuff now
+[19:52] inimino: I think it's just posix
+[19:52] inimino: oh, cool
+[19:52] ryah: but having posix.stat(path, callback);
+[19:52] ryah: seems okay
+[19:53] ryah: object creation is something i constantly worry about
+[19:53] teemow has joined the channel
+[19:53] inimino: ryah: hehe, well it's pretty early yet
+[19:53] inimino: I posted something to the commonJS list; I'm hoping that what gets standardized, if anything, will be something lower-level like that
+[19:54] ryah: if you look at the html5 webdatabase stuff it doesn't attempt heavy promise stuff
+[19:54] ryah: and i think that's quite good.
+[19:54] inimino: yeah
+[19:55] felixge: ryah: object creation as in creating objects from a constructor function or plain JS objects?
+[19:55] ryah: felixge: both - they take up memory
+[19:55] ryah: force GC more often
+[19:55] RayMorgan has joined the channel
+[19:55] felixge: ryah: yeah, but creating them is still fairly fast in v8
+[19:56] felixge: ryah: did you see http://github.com/felixge/node-dirty yet?
+[19:56] ryah: creating them is fast - gc is not
+[19:56] ryah: and mmeory isn't free
+[19:57] felixge: yeah, but its getting cheap enough to compete with beer :)
+[19:57] felixge: that's: have all you can use without breaking the bank
+[19:57] un0mi has joined the channel
+[19:57] piranha has joined the channel
+[19:58] ryah: i'm going tocreate a new module called "fs" which exposes process.fs
+[19:59] felixge: ryah: sweet. that'd be very nice
+[19:59] inimino: felixge: actually hardware usage is getting more efficient as things become virtualized, and I think the days of memory being regarded as free (because everything interesting is CPU or I/O-bound) are coming to a close
+[20:00] inimino: ACTION could be wrong
+[20:00] inimino: ryah: yeah, that'd be great
+[20:00] inimino: ryah: also if you have any specific dislikes about the fileIO stuff I'd be interested to hear them
+[20:00] felixge: inimino: Not sure I can follow. Memory prices are going *down* while capacity is going *up* and I don't think that trend is gonna stop anytime soon
+[20:00] felixge: The price per GB RAM is dropping over time
+[20:01] ryah: i'm also going to create a module "events"
+[20:01] ryah: events.Promise
+[20:01] ryah: events.EventEmitter
+[20:01] r11t has joined the channel
+[20:01] ryah: they'll still be under process
+[20:01] felixge: ryah: would you still accept patches for Promises or would you rather take the topic from where it is?
+[20:01] deanlandolt: felixge: i think what inimino is saying is that people are filling up their huge multi-gb servers full of vms...the individual systems can still be quite constrained
+[20:02] felixge: deanlandolt: yeah, but that's just people getting smarter, not memory getting more expensive ;)
+[20:02] inimino: I'm going to be doing a round of work on actual projects trying to use what I have so far, then come back for another round of API work
+[20:02] inimino: felixge: yes, what deanlandolt said
+[20:02] ryah: felixge: i don't know. i think we should think about it more..
+[20:03] ryah: everyone cool with "events" and "fs"?
+[20:03] inimino: yeah, "events" and "fs" sound good
+[20:04] kriskowal has joined the channel
+[20:04] kriskowal has joined the channel
+[20:04] felixge: ryah: ok ... but lets try to get the promise promise to emit something at some point :)
+[20:04] felixge: events/fs +1
+[20:06] felixge: ryah: btw. was talking to a company doing sports bets that wants to use node.js for live updates
+[20:07] felixge: I think node.js is going to hit a Alexa Rank 25k site in production soon :)
+[20:07] cloudhead has joined the channel
+[20:07] ryah: yeah. lots of good stuff going on.
+[20:08] inimino: awesome
+[20:08] rtomayko_ has joined the channel
+[20:12] rtomayk__ has joined the channel
+[20:12] felixge: ryah: the syntax error patch is *awesome*. Thank you so much :)
+[20:13] rictic has joined the channel
+[20:13] isaacs_ has joined the channel
+[20:16] inimino: ACTION git pulls
+[20:18] micheil: ryah: any thoughts on the addOnce event listener?
+[20:18] micheil: oh, here we go, my emails didn't update.. >_>
+[20:19] inimino: micheil: I just read his reply on the list, have you seen it?
+[20:19] inimino: hehe
+[20:19] micheil: yeah
+[20:20] un0mi has joined the channel
+[20:22] PowerToExt has joined the channel
+[20:24] lifo has joined the channel
+[20:26] isaacs_ has joined the channel
+[20:33] eviltwin has joined the channel
+[20:40] micheil: inimino: hopefully this time it's all good :)
+[20:41] inimino: :)
+[20:42] mikeal has joined the channel
+[20:42] un0mi has joined the channel
+[20:44] evilclone has joined the channel
+[20:51] micheil: man.. I hate it when you reuse a nested variable and break things..
+[20:53] jamiew has joined the channel
+[21:33] micheil_mbp has joined the channel
+[21:35] un0mi has joined the channel
+[21:37] kriskowal has joined the channel
+[21:39] hassox has joined the channel
+[21:53] hassox has joined the channel
+[21:59] un0mi has joined the channel
+[22:06] hassox has joined the channel
+[22:13] inkubus08_ has joined the channel
+[22:14] ericflo has joined the channel
+[22:15] inkubus08_ has joined the channel
+[22:16] hassox has joined the channel
+[22:18] grantmichaels has joined the channel
+[22:23] erichocean has joined the channel
+[22:27] un0mi has joined the channel
+[22:42] hassox: Good morning folks :)
+[22:43] stephenlb: better than being stuck in PHP.
+[22:44] deanlandolt has joined the channel
+[22:44] sztanpet has joined the channel
+[22:45] emyller has joined the channel
+[22:45] halorgium has joined the channel
+[22:45] evilhackerdude has joined the channel
+[22:45] bengl has joined the channel
+[22:47] [k2]_ has joined the channel
+[22:50] sztanphet has joined the channel
+[22:52] hornbeck has joined the channel
+[22:52] deanlandolt has joined the channel
+[22:52] deanlandolt_ has joined the channel
+[22:54] mikeal has joined the channel
+[22:54] hornbeck has joined the channel
+[22:57] erichocean has joined the channel
+[22:57] hassox has joined the channel
+[22:57] orlandov has joined the channel
+[22:58] CIA-78: node: 03Ryan Dahl 07master * r70293a4 10/ (12 files in 4 dirs): API: Move Promise and EventEmitter into 'events' module - http://bit.ly/708X6z
+[22:59] hassox: Hey ryah :)
+[22:59] hober has joined the channel
+[22:59] sveisvei has joined the channel
+[23:03] DamZ has joined the channel
+[23:05] inimino has joined the channel
+[23:09] webben has joined the channel
+[23:12] tlockney has joined the channel
+[23:14] un0mi has joined the channel
+[23:14] wil has joined the channel
+[23:18] webben has joined the channel
+[23:18] DamZ has joined the channel
+[23:18] sveisvei has joined the channel
+[23:18] hober has joined the channel
+[23:18] hassox has joined the channel
+[23:18] mikeal has joined the channel
+[23:18] bengl has joined the channel
+[23:18] evilhackerdude has joined the channel
+[23:18] halorgium has joined the channel
+[23:18] emyller has joined the channel
+[23:18] un0mi has joined the channel
+[23:18] grantmichaels has joined the channel
+[23:18] ericflo has joined the channel
+[23:18] micheil has joined the channel
+[23:18] jamiew_away has joined the channel
+[23:18] evilclone has joined the channel
+[23:18] isaacs has joined the channel
+[23:18] RayMorgan has joined the channel
+[23:18] mattly has joined the channel
+[23:18] felixge has joined the channel
+[23:18] ryah has joined the channel
+[23:18] Atm0z has joined the channel
+[23:18] binary42 has joined the channel
+[23:18] alexiskander has joined the channel
+[23:18] mahemoff has joined the channel
+[23:18] zimbatm has joined the channel
+[23:18] FoxFurry has joined the channel
+[23:18] CIA-78 has joined the channel
+[23:18] skampler has joined the channel
+[23:18] wil has joined the channel
+[23:18] frodenius has joined the channel
+[23:18] mayerbacher has joined the channel
+[23:18] bjartek has joined the channel
+[23:18] xantus_ has joined the channel
+[23:18] aurynn has joined the channel
+[23:18] tiglionabbit has joined the channel
+[23:18] n8o has joined the channel
+[23:18] pjb3 has joined the channel
+[23:18] Yuffster has joined the channel
+[23:18] gbot2 has joined the channel
+[23:18] qFox has joined the channel
+[23:18] beppu has joined the channel
+[23:18] Pilate has joined the channel
+[23:18] tlrobinson has joined the channel
+[23:18] cadorn has joined the channel
+[23:18] mjard has joined the channel
+[23:18] RJ2 has joined the channel
+[23:18] jspiros has joined the channel
+[23:18] jan____ has joined the channel
+[23:18] elliottcable has joined the channel
+[23:18] CraigW has joined the channel
+[23:18] erikcorry|away has joined the channel
+[23:18] inimino has joined the channel
+[23:18] inimino has joined the channel
+[23:21] inimino has joined the channel
+[23:24] qFxo has joined the channel
+[23:24] iaurynn has joined the channel
+[23:24] _Pilate has joined the channel
+[23:24] stephenlb has joined the channel
+[23:24] eddanger has joined the channel
+[23:24] onar has joined the channel
+[23:24] taf2 has joined the channel
+[23:24] keeto has joined the channel
+[23:24] wil_ has joined the channel
+[23:25] mjard_ has joined the channel
+[23:27] aguynamedben has joined the channel
+[23:27] scudco has joined the channel
+[23:27] kriszyp has joined the channel
+[23:27] beppu has joined the channel
+[23:27] jacobat has joined the channel
+[23:27] jamiew has joined the channel
+[23:27] un0mi has joined the channel
+[23:27] ryah: hassox: hey
+[23:28] inimino has joined the channel
+[23:28] mikeal has joined the channel
+[23:33] sztanphet has joined the channel
+[23:34] jamiew_ has joined the channel
+[23:34] r11t has joined the channel
+[23:40] inimino has joined the channel
+[23:44] cloudhead_ has joined the channel
+[23:44] steadicat has joined the channel
+[23:49] jcrosby has joined the channel
+[23:53] steadicat has joined the channel

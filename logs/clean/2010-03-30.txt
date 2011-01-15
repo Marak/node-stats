@@ -1,0 +1,950 @@
+[00:01] <JimBastard> broofa: why would node itself need to log?
+[00:01] <JimBastard> logging is part of your application
+[00:01] <broofa> the patch is does not introduce logging - it introduces the hooks and state needed to easily add logging as part of your app.
+[00:01] <JimBastard> in hook.io we have logging implemented for our event emitters
+[00:01] <broofa> please see my response to aaron's message - he had the same misunderstanding.
+[00:02] <JimBastard> i still dont understand your issue
+[00:02] <JimBastard> can you give me a concrete example?
+[00:03] <broofa> JimBastard: Yeah.  The CLFLogger is that concrete example - it's a standard log format that requires to bits of state (among others) - the time the response *finished*, and the status code returned to the client.
+[00:03] <JimBastard> your gist seems to only address the http module
+[00:04] aryounce has joined the channel
+[00:05] <broofa> JimBastard: yeah, because that's where this is most meaningful (where else would you address this?)
+[00:05] <JimBastard> uhhh
+[00:05] rtl has joined the channel
+[00:05] <broofa> anyhow… currently in node, there's no good way to get notified when a response is closed, which is when you want/need to write the CLF log line.
+[00:05] <JimBastard> so let me understand, you want to apply a patch to node so that there is built in logging of http requests?
+[00:05] RayMorgan_ has joined the channel
+[00:05] <broofa> no.
+[00:06] <JimBastard> okay, so thats just an example
+[00:06] <broofa> right
+[00:06] <JimBastard> well
+[00:06] malkomalko has joined the channel
+[00:06] <broofa> "so that it's easy to bolt an external/app-specific logger on w/out having to completely wrap the node request API"
+[00:06] <JimBastard> i dont see the benefit of adding something like into node itself, it seems like you are making assumptions 
+[00:06] softdrink has joined the channel
+[00:06] <JimBastard> you dont have to touch the request api
+[00:07] <JimBastard> i think maybe you dont fully understand the evented nature of node
+[00:07] <JimBastard> or i am just a retard
+[00:07] <JimBastard> both are equally probable 
+[00:07] <broofa> *heh*
+[00:07] <broofa> 'pretty sure I understand the evented nature. :)
+[00:08] <broofa> in practical terms, the problem is there's no "close" event emitted by the Request object.  So no way of taking action when a request closes, for all requests, unless you write a wrapper API.  but that introduces other problems - e.g. if you use a 3rd party lib that doesn't use your wrapper, those req's wont get logged.
+[00:09] <JimBastard> broofa i think Tim's response might be the best
+[00:09] <_ry> broofa: request or response?
+[00:09] jashkenas has joined the channel
+[00:09] <broofa> sorry, response.  right.
+[00:10] <_ry> yeah, that seems like a problem
+[00:10] <broofa> damn keep getting those two mixed up :X
+[00:10] <_ry> doing middleware is hard
+[00:10] <broofa> the other, related, problem is that when the request is closed, there's also no (easy) way of knowing what response code was sent back.
+[00:10] <_ry> the api doesn't have much support ofr it
+[00:10] <jashkenas> broofa: good to see you in here ... you playing with node these days?
+[00:11] <_ry> one thing you can do is wrap the response object
+[00:11] <broofa> jashkenas: dude!  yeah, lovin' it!
+[00:11] towski has joined the channel
+[00:11] <_ry> so that you can get a hook into sendHeader and close
+[00:12] <jashkenas> broofa: I was talking to Will about it last Wednesday -- he seems to have plans. Hopefully you two can powwow.
+[00:13] <broofa> _ry: I guess I view logging as something that should (ideally) be completely orthogonal to app development.  i.e. my app server code shouldn't really have to know about the logger code, and vice-versa.
+[00:15] <_ry> broofa: i agree - but i think it's not unreasonable to present users with something more wrapped up than node's server
+[00:15] <_ry> there should be a 'web framework' of sorts which does that stuff
+[00:16] <broofa> Well… the down side is that it obligates the app developer to use whatever framework stack that logger is embedded in. 
+[00:16] <_ry> or i could just add the needed hooks to node :)
+[00:16] <JimBastard> close event for http request?
+[00:16] <mjr_> It is interesting though that HTTP is a "first class protocol in Node".
+[00:16] <broofa> Concrete examples: The CLF log format is common/standard.  Or a logger that aggregates logs across many servers.
+[00:16] <_ry> but i think adding hooks is a slippery slope
+[00:17] <broofa> the former is standard and shouldn't really have to be re-implemented for each framework.  the latter is non-trivial, and likely out of scope for many frameworks.
+[00:17] <broofa> in both cases, I'd argue that logger code should be a nice, tightly contained module that can be bolted on as part of any framework.
+[00:18] <_ry> mind you the web server doesn't even support multipart messages
+[00:18] <broofa> or, rather, in addition to any framework.
+[00:18] <_ry> it's very low-level
+[00:18] <jashkenas> http://rack.rubyforge.org/doc/classes/Rack/CommonLogger.html
+[00:18] <jashkenas> That would be the middleware approach.
+[00:18] <_ry> there are many http things you can call a standard - that you need lots of extra code to do with node
+[00:20] <_ry> not to say that i'm necessarally against adding hooks
+[00:20] <_ry> i just think it's debatable
+[00:20] <broofa> _ry: hooks slippery - yeah.  but server, response, request all being event emitters kinda means you're already on that slope.
+[00:20] <_ry> they're emitting very specific types of events though
+[00:21] <mjr_> It is also literally a one-line change.
+[00:21] <broofa> ACTION is wondering how a "close request" event is not spefic.
+[00:21] <broofa> sorry… to glib? :)
+[00:22] <jashkenas> _ry: what's wrong with broofa's patch?
+[00:22] <JimBastard> whats so bad about emitting a log event at the end of close? am i missing something? im feeling especially retarded now
+[00:22] <broofa> you can already listen to 'request' on server for what is essentially the "open" event for requests.  "close" is simply the counterpart.
+[00:22] <JimBastard> that part makes sense
+[00:22] <JimBastard> but whats so bad about just emitting your custom event?
+[00:23] <broofa> JimBastard: it's not a log event (which has a specific semantic) - it's "close" - i.e. the request is complete.  what listeners do with that is up to them.  a logger fires a log event, but there's all sorts of other uses.
+[00:23] <_ry> i guess my problem is that it's a 'writable stream' - and i haven't defined these to emit 'close' events
+[00:24] <mikeal> i just updated to node master
+[00:24] <mikeal> and my request.write() doesn't work anymore
+[00:24] <mikeal> no sorry, there is a size limit
+[00:24] <mikeal> over a certain size they do nothing
+[00:24] <_ry> mikeal: how big?
+[00:24] <mikeal> let me find out
+[00:26] <mjr_> _ry: if you get an HTTP chunk that's larger than 40KB, the size of a Buffer, does it still parse?
+[00:26] <JimBastard> so broofa what about something like this, http://gist.github.com/348604 ?
+[00:26] <mjr_> It seems like I have that problem, but I'm still digging into it.
+[00:26] <JimBastard> thats what you want to achieve just without having to create and manage the event yourself?
+[00:26] <JimBastard> im interested in what you are talking about
+[00:26] <mikeal> around 10 or 12 KB
+[00:28] kriskowal has joined the channel
+[00:28] <broofa> JimBastard: gimme a sec to grok that. :)
+[00:28] RayMorgan has joined the channel
+[00:28] <_ry> mjr_: it ought to - but it's possibly broken
+[00:29] <broofa> JimBastard: sorry, I think I may have confused things by saying 'request' earlier, when I meant, 'response'
+[00:29] bmizerany has joined the channel
+[00:29] <JimBastard> ahhh
+[00:29] <_ry> mjr_, mikeal: the problem was probably introduced here: d1b78c3f5d948728dcee852a9c2bfd59f4e01fbd
+[00:30] <broofa> _ry: a writable stream may not have a well defined close event, but an OutgoingMessage most definitely does.
+[00:30] <broofa> (… urr… right?)
+[00:30] <mikeal> yeah, it was working not too long ago
+[00:31] <mjr_> oh, hmm.  Maybe that is where mine started breaking as well.
+[00:31] <_ry> i would love a test case
+[00:32] <broofa> Isn't it even documented that http servers must insure that close() has to be called on all responses?
+[00:32] <_ry> broofa: well - you could apply the same reasoning to any stream - that everyone should be able to attach listeners to it to know when certain methods are called
+[00:33] <_ry> broofa: close() definitely needs to be called - the question is if it emits an event
+[00:33] <_ry> what about setEncoding() ?
+[00:33] <_ry> should it emit a 'setEncoding' event too?
+[00:33] <_ry> of course it could, but it's probably better to wrap the object
+[00:35] <broofa> I think there's a fundamental difference between events that represent configuration .vs. events that represent activity.
+[00:35] <_ry> in streams, all the events come from the kernel. if we introduce it - now we're using the events to notify our own code about what we're doing
+[00:35] jtoy has joined the channel
+[00:36] <broofa> e.g. the 'data', 'request', and 'response' events you already have.  could you make a counter-argument that those should be removed.
+[00:36] <broofa> ?
+[00:37] <jashkenas> Agreed with broofa's point -- you can always turn method calls into events or vice versa by wrapping the object. It's just inversion of control.
+[00:38] <jashkenas> And convenience for external objects that the core one shouldn't know about. So the argument should be whether "close" is something that needs to be notified externally, or if it should be considered a private event that's the writable stream's own business.
+[00:40] <jashkenas> fs.FileWriteStream
+[00:40] <jashkenas> ..,'s "drain" event being a good example of one that feels more private.
+[00:41] devinus has joined the channel
+[00:43] <_ry> okay, at some point i want people to wrap up node server
+[00:43] <_ry> web devs shouldn't be getting a raw req object
+[00:43] <_ry> it's too complex
+[00:44] <_ry> the question is where to draw that line
+[00:44] <_ry> personally i'd rather see the server focused on parsing headers and body
+[00:44] <_ry> and juggling the keep-alive
+[00:45] <_ry> but not things like parsing bodies or urls
+[00:45] brapse has joined the channel
+[00:46] <_ry> so - are you going to have logging before you want to do things like req.host ?
+[00:46] <_ry> because req.host requires wrapping
+[00:46] frodenius has joined the channel
+[00:52] Aria has joined the channel
+[00:52] <_ry> although - i could see the case be made that someone might want to know when stdout is closed
+[00:52] <_ry> ACTION shrugs
+[00:58] <broofa> _ry: I see where you're coming from.  keeping core tight/clean is a good thing.  But I think it's important to identify the key areas where 3rd party devs are going to need to integrate and acknowledge those pain points by providing APIs that make that integration _easy_.
+[00:59] isaacs has joined the channel
+[01:00] <broofa> as you said, this is all debatable, but I like to think that at least in this specific case, the value provided by a response "close" event is fairly evident.
+[01:00] <broofa> ACTION shrugs
+[01:04] Tim_Smart has joined the channel
+[01:04] <Aria> Hm. I need to write a method for url.js to format this-part-and-all-after of a URL
+[01:04] <Aria> path-and-qs especially.
+[01:05] devinus has joined the channel
+[01:05] <JimBastard> sup Aria?
+[01:06] <Aria> Hehe. Writing a web proxy using node.
+[01:06] <Aria> Trying to ressurect the old ruby project of _why's, hoodwink.d
+[01:08] <jashkenas> Aria: a worthy cause.
+[01:08] <Aria> Got it working, just a bit too much (url.pathname || '/') + (url.search || '')
+[01:10] <JimBastard> i feel so lost in here today. i think this is what i get for not going to sleep last night
+[01:11] <JimBastard> and CrockBot is gone! double fail
+[01:15] <fictorial> or not :)
+[01:15] <broofa> 'night all.  _ry thanks for your feedback.  I'm gonna chew on your points and see what I come up with.  Still feels like I'm on the One True Path, but I can't quite pin down why. ;-)
+[01:17] <_ry> broofa: night
+[01:17] <_ry> ACTION leaves too
+[01:19] <konobi> man... commonjs is such a headfuck to implement
+[01:19] broofa has left the channel
+[01:20] RayMorgan has joined the channel
+[01:21] gwoo has joined the channel
+[01:23] fizx has joined the channel
+[01:27] binary42 has joined the channel
+[01:28] ditesh|cassini has joined the channel
+[01:38] mikeal has joined the channel
+[01:39] brapse has joined the channel
+[01:40] towski has joined the channel
+[01:42] <Wes-> konobi: what seems to be the implementation problem?
+[01:42] kriskowal has joined the channel
+[01:48] technoweenie has joined the channel
+[01:55] <technoweenie> jed: hey, that path ternary example is wayyy different than the gist
+[01:56] <technoweenie> talking about the isGet method: http://gist.github.com/327241
+[01:56] <technoweenie> i see 4 levels of returned anonymous functions
+[02:04] dgathright has joined the channel
+[02:14] jed has joined the channel
+[02:19] sh1mmer has joined the channel
+[02:20] sh1m has joined the channel
+[02:36] pedrobel_ has joined the channel
+[02:37] silentrob has joined the channel
+[02:49] brapse has joined the channel
+[02:57] softdrink has joined the channel
+[03:02] jed has joined the channel
+[03:02] gwoo has joined the channel
+[03:05] kriskowal has joined the channel
+[03:07] brainproxy has joined the channel
+[03:29] <konobi> Wes-: cyclic stuff and require within require, etc.
+[03:29] devinus has joined the channel
+[03:37] isaacs has joined the channel
+[03:43] steadicat has joined the channel
+[03:53] Aria has joined the channel
+[04:07] fizx has joined the channel
+[04:09] charlesjolley has joined the channel
+[04:12] charlesjolley has joined the channel
+[04:14] aryounce has joined the channel
+[04:19] technoweenie has joined the channel
+[04:21] <atmos> anyone know how to test express apps ?
+[04:24] fizx has joined the channel
+[04:26] <technoweenie> i just start it up and hit it
+[04:26] <technoweenie> live integration style
+[04:27] <technoweenie> i have something that wraps up the http client so its just one event to setup
+[04:27] <technoweenie> though i may rewrite it so it uses a callback instead
+[04:27] <technoweenie> i have a dumb test client thing that makes http calls really simple 
+[04:28] <technoweenie> oops meant to paste http://github.com/technoweenie/wheres-waldo/blob/master/test/helpers/test_client.js
+[04:28] dgathright has joined the channel
+[04:28] <technoweenie> http://github.com/technoweenie/wheres-waldo/blob/master/test/api_test.js
+[04:28] <technoweenie> ah that uses promises, wont work, it'll have to be rewritten :)
+[04:30] joshbuddy has joined the channel
+[04:30] towski has joined the channel
+[04:35] <atmos> technoweenie: thanks yo
+[04:40] <technoweenie> atmos: did you just start w/ node.js?
+[04:41] jed has joined the channel
+[04:42] <technoweenie> fictorial: ping
+[04:42] <fictorial> technoweenie: pong
+[04:43] <technoweenie> hey i updated redis-node-client to use the new tcp stuff
+[04:43] <atmos> technoweenie: nope, been playing with it for a bit
+[04:43] <technoweenie> does the test stuff run clean for you?
+[04:43] <technoweenie> atmos: ah ok, well some of that wheres-waldo code uses promises which wont work on the latest node, so i kind of have to rethink my testing setup :)
+[04:44] BryanWB has joined the channel
+[04:44] <atmos> technoweenie: yeah i poked around the code there, gotta love api changes :)
+[04:45] <fictorial> technoweenie: ok - thanks. the ratio of changes in node and redis to my available time for supporting minor releases is too large lately
+[04:45] <technoweenie> fictorial: yea understandable :)  its on a branch in github
+[04:46] <fictorial> technoweenie: ok, can you send me a pull request?
+[04:46] <technoweenie> just did
+[04:47] jage has joined the channel
+[04:47] <fictorial> ok, thanks.  I will try to get to it before the end of the week.
+[04:54] brapse has joined the channel
+[04:56] <technoweenie> do the tests run all the way through for you?  i'm trying to figure out where it bombs
+[04:59] <mattly> atmos: fwiw i've been testing my stuff, built on top of http.createServer, by just feeding the app a mock request object (just something that looks like http.serverRequest) and a mock response object
+[04:59] <mattly> been using this as a test runner: http://github.com/cloudhead/vows.js/
+[05:00] <technoweenie> sounds like it uses promises
+[05:00] <mattly> no, it uses event emitters
+[05:01] <mattly> return an emitter that will emit success
+[05:01] <technoweenie> thats what a promise is
+[05:01] <technoweenie> well i cant find the verbage, github is down
+[05:01] <mattly> if the emitter has arguments it passes that on to the tests/nested setups
+[05:01] <technoweenie> Vows are run as soon as the promise completes, so the order in which they are run is undefined.
+[05:01] <technoweenie> thats exactly what a promise is :)
+[05:02] <mattly> ok, well i'll have to take your word for it, since i came to node after the removal of promises
+[05:03] <technoweenie> yea it looks like he took them out and wrote his own basically
+[05:03] <technoweenie> i used promises because they had a wait() function which would just return whatever emitted success.  but that wait() function is gone
+[05:03] <mattly> i guess the issue with promises was the whole wait() thing encouraged non-async programming
+[05:03] <mattly> aha
+[05:03] <mattly> yeah that's what i figured
+[05:04] <technoweenie> thats cool, i wonder how he got this to work
+[05:04] <technoweenie> i tried but ran into so many weird issues where node would just hang, and the only thing that worked was using wait()
+[05:05] <technoweenie> yea, this lib is a little nuts
+[05:05] <technoweenie> i hate test runners so much
+[05:06] <rektide> this is kind of weird
+[05:06] <technoweenie> oh neat, he's using process.nextTick
+[05:06] <technoweenie> man async tests seem like a nightmare, how do you deal w/ data
+[05:06] <mattly> heh
+[05:07] <mattly> yeah that's the hard part
+[05:07] <rektide> eval()'s sys.puts/print/debug/log from inside of an eval() is showing up after the contents of a sys.puts() placed after the eval()
+[05:07] <atmos> you guys are nuts
+[05:08] <technoweenie> tests dont need to be asynchronous really do they
+[05:08] <mattly> probably not
+[05:11] aguynamedben has joined the channel
+[05:12] <technoweenie> jesus, jspec is 1100 lines
+[05:12] <atmos> yeah em and jspec both have stuff that's kinda cool
+[05:12] <atmos> technoweenie: how long is nspec ?
+[05:12] <atmos> it does a ton of stuff
+[05:13] <technoweenie> dont know, ntest is 185: http://github.com/technoweenie/ntest/blob/master/lib/index.js
+[05:13] sudoer has joined the channel
+[05:16] <mattly> man jspec is crazy
+[05:17] <rektide> i've been working on my own testing all night. :/
+[05:17] <rektide> the base case works, not sure where to go from here
+[05:18] <technoweenie> whats your lib
+[05:18] mjr__ has joined the channel
+[05:19] <atmos> i've never gotten anything working beyond trivial stuff in jspec :(
+[05:20] fizx has joined the channel
+[05:24] <isaacs> wow, you guys still talking about test frameworks?
+[05:25] bpot has joined the channel
+[05:26] <mattly> isaacs: we're ruby guys, we're used to having a dozen and not being happy with them
+[05:26] <technoweenie> we have even more in node, and still not happy
+[05:26] <isaacs> ACTION is a javascript guy, used to having no test framework, and being happy with it.
+[05:27] <mattly> ACTION recoils in horror
+[05:27] <isaacs> actually, that's not quite true.
+[05:27] <isaacs> i posted my test framework in the room earlier today.
+[05:28] hassox has joined the channel
+[05:28] <isaacs> it's require("assert").  or, if you wanna be a little less hoity-toity and fancypants about it, just function assert (cond, msg) { if (!cond) throw new Error(msg) }
+[05:28] dgathright_ has joined the channel
+[05:29] joshbuddy has joined the channel
+[05:30] silentrob has joined the channel
+[05:30] <isaacs> here's an example of this powerful and awesome test framework in action: http://github.com/isaacs/npm/blob/master/lib/utils/semver.js#L78
+[05:30] <isaacs> it's sexy and feature efficient.
+[05:30] <isaacs> insanely scalable and crazy amazing.
+[05:33] <isaacs> the magic is in the test case collection, not in the test framework.  it's like trying to build the perfect kazoo when you could be playing a song.
+[05:33] <mjr__> I'm just sitting down to write myself my very first test in node
+[05:33] <technoweenie> except you have to build a different kazoo for every project
+[05:33] <isaacs> technoweenie: inorite!?
+[05:34] <isaacs> javascript supports "if" and "throw" natively.  there's your test framework.
+[05:34] <mjr__> I notice that most of the node tests use assert.equal instead of assert.strictEqual.  Why is that?
+[05:34] <isaacs> mjr_: cuz usually it doesn't matter.
+[05:34] <technoweenie> i'd rather not build a kazoo
+[05:34] <isaacs> technoweenie: you don't have to, you can just hum on your own.
+[05:35] <mjr__> I know, but accidental type coercion is exactly the kind of tricky little thing that I assume we need tests to help protect us against.
+[05:35] <technoweenie> if all i did was write libs that compare version strings, that'd be ok 
+[05:35] <mjr__> That's what Douglas Corckford says to do, right non-existent crockbot?
+[05:35] <isaacs> i mean, unless you have executives and you want to appease these corporate overlords with offerings of dashboards adorned with green and red rectangles
+[05:36] <technoweenie> i dont know what that means
+[05:36] <isaacs> but the execs won't know if you just hard code the dashboard markup and update it every so often.
+[05:37] <isaacs> technoweenie: i use the assert module in a lot of places.
+[05:37] <technoweenie> i use it a lot too
+[05:37] <mjr__> Are you somehow disparaging the very concept of blinkenlights?
+[05:38] <mattly> isaacs: eventually you're going to run into problems with state management
+[05:38] <mattly> probably not if you just keep comparing version strings, but eventually
+[05:38] <atmos> wha?
+[05:38] <isaacs> i'm being a little bit facetious, but really, my experience has been that you can get like 95% of the way there without a fancy test framework, and the fancy test framework takes time to learn and can sometimes have bugs itself.
+[05:38] <technoweenie> i like using a framework so thats its well understood how to write tests, how to run tests, how to add to them, etc
+[05:38] <isaacs> i've built very complex things with javascript, that weren't just version comparison libraries.
+[05:39] <mattly> right, but you admitted doing so without tests :p
+[05:39] <isaacs> mattly: no, never!
+[05:39] <isaacs> scroll up!
+[05:39] <technoweenie> he said w/o a test framework
+[05:39] <isaacs> i admitted doing so without a test FRAMEWORK
+[05:39] <isaacs> tests are essential.  test frameworks are a pointless masturbatory waste of precious time that could be used writing tests and working code
+[05:40] <mattly> ok sorry
+[05:40] <mattly> misread
+[05:40] <technoweenie> well, then why do any frameworks
+[05:40] <isaacs> hell, a significant portion of my contributions to node have just been writing tests for code that got in without coverage, or beefing up the coverage on various parts.
+[05:40] <technoweenie> raw tcp for everything
+[05:40] <isaacs> technoweenie: a framework to abstract away http and tcp and whatnot is one thing.  that's actually reducing complexity in the application code.
+[05:40] <isaacs> or at least, partitioning it
+[05:40] <isaacs> test frameworks take a simple thing and make it hard.
+[05:41] <isaacs> that's why i don't like them.
+[05:41] <technoweenie> i dont know, testing is really fucking hard :)
+[05:41] <isaacs> unless you need the blinkenlights.
+[05:41] <isaacs> then you need a framework
+[05:42] <isaacs> technoweenie: i disagree.  testing isn't hard at all.  being sure that you've tested what you need to test is hard, and no framework can give you that.
+[05:42] <technoweenie> i mean, if its just stateless string comparisons its super easy
+[05:42] <isaacs> technoweenie: have a look through node's test folder.
+[05:42] <technoweenie> yea, its voodoo to me
+[05:42] <isaacs> there are tests in there for all kinds of stateful things
+[05:42] <isaacs> module loading, http, multipart parsing, etc.
+[05:42] <technoweenie> i cant read much javascript code, its all so messy
+[05:43] <isaacs> technoweenie: now you're just calling the language names.
+[05:44] mikeal has joined the channel
+[05:45] <isaacs> mikeal!
+[05:45] <technoweenie> yea i guess the style is to break tests up into tons of files
+[05:46] <isaacs> mikeal: npm can't activate somethingorother?
+[05:46] <isaacs> technoweenie: sure.
+[05:46] <isaacs> technoweenie: but that's just for organizational purposes.
+[05:46] <isaacs> technoweenie: also, then you can write something that blows through all of them, and says whether each one passed or not.
+[05:46] <isaacs> technoweenie: like "make test" in node
+[05:47] <technoweenie> sure
+[05:47] <isaacs> or like the tests in sax-js
+[05:47] <isaacs> technoweenie: http://github.com/isaacs/sax-js/blob/master/test/self-closing-tag.js
+[05:48] <isaacs> i guess in this case, there is a sort of "framework", but only because every test was doing the same thing, so i wrapped it up into one module.
+[05:48] <technoweenie> yea, thats a framework
+[05:49] <isaacs> but it's tiny, and specific to that particular piece of code.
+[05:49] <isaacs> it's not a "hey, everyone, write every test for everything using this framework, which has every feature you'll need!"
+[05:49] <isaacs> it's "this is what is required to test sax-js, so i put it in one place"
+[05:49] <isaacs> node's tests do the same thing
+[05:50] <mattly> i may end up doing that eventually, when i need synchronous tests
+[05:50] <isaacs> and the entire common bit is 68 lines of js
+[05:50] <mattly> but for now vows is doing a good enough job of handling things
+[05:51] <mattly> hell maybe i'll just hack on an option to say "make this chunk of tests synchronous"
+[05:52] <technoweenie> well, ntest is 185 lines of clean code w/ comments and pretty colors
+[05:54] <technoweenie> hey what is process.mixin going to be replaced with
+[05:54] <isaacs> technoweenie: nothing
+[05:54] <mattly> oh yeah heh, vows uses that :/
+[05:54] <mattly> that basically merges one object into another, right?
+[05:55] <isaacs> technoweenie: it's replaced with for (var i in source) obj[i] = source[i[;
+[05:55] <isaacs> if you need a deep merge, there are a few implementations floating about.
+[05:55] <isaacs> choose your edge case handling preference.
+[05:55] <technoweenie> that sucks
+[05:56] <isaacs> the problem is that there are some edge cases with various folks making very informed and well-argued points about which behavior is "correct"
+[05:56] <isaacs> so the decision is that it shouldn't be part of node's core.
+[05:56] <technoweenie> deep vs shallow merging?
+[05:57] <isaacs> technoweenie: that, whether or not to merge properties that aren't simple values (getter/setters) and how to go about doing that, what the default target should be, etc.
+[05:57] <technoweenie> allright
+[05:57] <isaacs> usually, if there's a lot of valid points on all sides of an API bikeshedding session, Ryan'll be like "Ok, it goes."
+[05:57] <isaacs> qv. promises.
+[05:58] <isaacs> that keeps nodejs tight, which personally, i <3 a lot.
+[05:58] <isaacs> fewer features = win
+[05:58] <isaacs> or rather, well-chosen features.
+[05:58] <technoweenie> yea neither feature is vital 
+[05:58] <isaacs> right
+[05:59] <isaacs> but like, http isn't strictly essential, you could argue, since node has tcp support, but that'd be silly.
+[05:59] <isaacs> it also has fs and eval, but we still have commonjs style require(), which is really super handy.
+[06:05] <technoweenie> oh, node's test framework is written in python
+[06:20] brapse has joined the channel
+[06:22] jbrantly1 has joined the channel
+[06:34] juvenn has joined the channel
+[06:37] sh1mmer has joined the channel
+[07:05] jed has joined the channel
+[07:06] towski has joined the channel
+[07:08] <jed> does anyone know of any projects that have a build process to create libs for both server-side and client-side JS?
+[07:15] <jed> (<lowering the bar>) or even just a node project that very concisely manages dependencies for builds?
+[07:17] piranha has joined the channel
+[07:19] kixxauth has joined the channel
+[07:21] tisba has joined the channel
+[07:21] <inimino> isaacs: assert() is my favorite test framework :)
+[07:27] javajunky has joined the channel
+[07:29] cedric_ has joined the channel
+[07:29] teemow has joined the channel
+[07:40] qFox has joined the channel
+[07:43] felixge has joined the channel
+[07:43] felixge has joined the channel
+[07:57] <rektide> my script with three httpClient's is exiting before the last one ever gets a response
+[08:04] <rektide> i added a setTimeout to keep hte script from dying.  doesnt seem to have its response handler ever triggered.  but i can see the response coming in on wireshark.
+[08:22] cedricv has joined the channel
+[08:27] Gruni has joined the channel
+[08:31] keeto_ has joined the channel
+[08:32] tbassetto has joined the channel
+[08:35] hassox has joined the channel
+[08:36] xla has joined the channel
+[08:42] pdelgallego has joined the channel
+[08:43] sveisvei has joined the channel
+[08:57] jed has joined the channel
+[09:09] felixge has joined the channel
+[09:10] felixge has joined the channel
+[09:11] tisba has joined the channel
+[09:11] hassox has joined the channel
+[09:14] derbumi has joined the channel
+[09:16] maushu has joined the channel
+[09:20] TomY has joined the channel
+[09:26] <Wes-> konobi: I found the solution to both those problems fall away with a couple of tricks..1) memoize before executing module, 2) inject a new require into each module's scope, 3) treat the program module as least specially as possible
+[09:29] mpoz2 has joined the channel
+[09:58] javajunky has joined the channel
+[10:09] derbumi has joined the channel
+[10:20] lars_smit has joined the channel
+[10:20] lars_smit has left the channel
+[10:37] derbumi has joined the channel
+[10:51] sveimac has joined the channel
+[10:51] sveimac has joined the channel
+[10:56] ssteinerX has joined the channel
+[11:02] jed has joined the channel
+[11:03] piranha has joined the channel
+[11:05] tisba_ has joined the channel
+[11:16] <jfd> jed: Im working on a client-side server-side linker as we speak
+[11:17] <jed> jfd: ah, nice. is there somewhere i can see it?
+[11:17] <jed> jfd: i'm hand-rolling mine, was just looking for inspiration.
+[11:17] <jfd> jed: Sure thing, I started working on it last weekend. Got it to run yesterday.. Need to do some code-cleaning before pub release
+[11:18] <jfd> but I can give you a preview
+[11:18] <jfd> I'll send you a zip
+[11:19] <jed> jfd: neat. i ended up using a "requires" directory for each file, with symlinks in the directory pointing to the required files.
+[11:19] <jed> jfd: not sure if that's too much voodoo, but i'd rather not reinvent some sort of library right now.
+[11:20] <jed> jfd: where are you sending it to?
+[11:20] confounds has joined the channel
+[11:20] <jfd> jed: My tool analyses source files and "compiles" them to a single file, that can be imported by webbrowser. You can still use require (and hopefully some other node libs) 
+[11:21] <jfd> jed: tried to send you via irc
+[11:21] <jfd> but it doesnt seems to work
+[11:21] <jfd> Do you have an email?
+[11:21] <jfd> can I send via github, no?
+[11:21] <jfd> cool
+[11:22] <jed> jfd: i had no idea you could do that.
+[11:22] gwoo has joined the channel
+[11:22] <jfd> jfd: you are right, you can't! :-)   Im sending to your mail
+[11:22] <jed> ha ha, great!
+[11:24] <jed> jfd: my approach will be in (fab) by tomorrow. doesn't sound nearly as neat as yours, alas.
+[11:25] <jfd> jed: cool!   Im writing a quick introduction, you'll have the file in a couple of minutes
+[11:25] <jed> jfd: cool. what do you call it?
+[11:25] <jed> felixge: how's v0.2 coming?
+[11:26] <jfd> jed: no official name yet, but I calling node-link for now  :)
+[11:26] maritz has joined the channel
+[11:26] <jed> jfd: where did you look for inspiration? the best thing i could find was mootools and jquery ui.
+[11:27] broofa has joined the channel
+[11:27] <jfd> jfd: I have built it from my on experience.. My latest project used alot of shared code (client and server) So that is my current inspiration source (jfd.github.com/wpilot)
+[11:33] <jfd> jed: sent
+[11:33] <jed> jfd: cool, checking it out...
+[11:34] <jfd> jed: cool, let me know if you cant get it to run
+[11:38] keeto has joined the channel
+[11:39] <jed> jfd: how do you handle closures? like, if i have a file that exports something, do you cat the whole file for the client version?
+[11:39] keeto has joined the channel
+[11:41] keeto has joined the channel
+[11:43] <jfd> jed: Yes. I was first aiming for a slimmer linker, that takes just the required methods but that is more or less impossible when it comes to closures. So, today you are linking whole modules.  The price is higher when it comes to file-size. But, the flexible is greater. Im using it with "heavy-applications", that loads once. So the load pain isnt that much,  even if the source (minizied and gziped) is over 500kb (which is really large). You wi
+[11:43] <jfd> ll only load the file once, in one bundle
+[11:44] <jed> jfd: ah, i see. that makes sense. so basically, you're concatting all module files, and then reimplementing require in the browser?
+[11:45] <jfd> jed: basically, yes. :) 
+[11:46] <jfd> jed: But, I also want to reimplement some core node modules (such as sys and maybe http, repl, etc), but map the to the browsers api instead
+[11:46] <jed> jfd: holy cow, that sounds ambitious.
+[11:46] <jed> jfd: i'm doing something similar, porting my framework to jquery.
+[11:47] <jfd> jed: So, you can still import "sys" in browser, but it sys.puts, maps to console.log instead. Wouldnt take that much of a time to do. :) 
+[11:48] <jed> jfd: right. sounds like quite an effort to keep the abstraction from leaking too much.
+[11:49] <jfd> jed: Ah, I see.  Well jquery has it pros as well.. 
+[11:50] <jfd> jed: Ah, yes, all modules WILL NOT be supported though, just the basic onces. This will not be a transparent layer between nodejs core and the browser  
+[11:50] <jed> yeah, i'm basically using it for the history plugin and $.ajax library. would rather do something framework agnostic, but it's too much work. ;)
+[11:50] <jfd> jed: See it more as a helper, so that you don't have to rewrite server and client code
+[11:51] <jfd> jed: haha, yeah.. Browser quirks takes time to implement. jquery will help to a lot
+[11:51] <jed> jfd: indeed. i'd rather bring nodiness to jquery than the other way around. i'm sure you feel the same way...
+[11:52] <jed> jfd: once jquery has a proper require system, all this might matter less.
+[11:53] <jfd> jed: Absolutely, or what if the browser itself had a require system, that would be awesome! :) 
+[11:53] <jed> jfd: crazy talk.
+[11:53] <jfd> jed: haha.. true
+[11:55] <jed> jfd: i'll shoot you a link for the system i cook up when it's done.
+[11:55] <jfd> jed: Cool, i'll appreciate it!
+[11:56] <jed> jfd: nice. say hi to stockholm for me! (i lived in södermalm in 2005)
+[11:57] <jfd> jed: haha, cool.  Im sitting at södermalm right now, Åsögatan.   
+[11:57] <jfd> jed: for work or studying?
+[11:58] <jed> jfd: just hanging out and freelancing. you guys have an amazing cafe culture: http://www.flickr.com/photos/tr4nslator/sets/1288104/
+[11:59] <jfd> jed: That is what we do best, drinking coffee all day! :-)       Nice pictures
+[12:02] keeto has joined the channel
+[12:16] binary42 has joined the channel
+[12:23] philippbosch has joined the channel
+[12:24] Atmoz has joined the channel
+[12:52] jed has joined the channel
+[12:57] dnolen has joined the channel
+[12:58] tmpvar has joined the channel
+[13:02] <tmpvar> morning
+[13:02] <TomY> hi
+[13:03] <TomY> think i have found a problem with mixing require and require.async
+[13:03] <TomY> described here http://gist.github.com/349076
+[13:04] <TomY> can anyone confirm if this is a bug (i can send to mailing list if that's better)?
+[13:06] <tmpvar> strange
+[13:06] <tmpvar> perhaps its a module cache issue?
+[13:06] <TomY> yeah i expect so
+[13:06] <tmpvar> I would post to the ml (also include the output of ./node a.js and a node -v)
+[13:07] <tmpvar> er... node a.js
+[13:07] <TomY> i generally only use require.async, but i'm trying to use node-promise which uses sync require
+[13:07] <TomY> will do
+[13:07] <tmpvar> cool, sorry I can't be of more immediate help heh
+[13:07] hassox has joined the channel
+[13:08] <TomY> no worries, can work around it easily enough. Will post to the list.
+[13:15] <felixge> jed: I think I made up my mind on filter
+[13:15] <felixge> jed: so I just need to go ahead and implement that for 0.2
+[13:15] <felixge> then it's done
+[13:15] <felixge> ;)
+[13:16] <jed> felixge: oh yeah? nice nice. looking forward to it!
+[13:16] <jed> felixge: what were you debating with filter?
+[13:16] <felixge> jed: the problem is that (for var x in y) is very slow in v8 if you have millions of keys
+[13:16] <felixge> but I want O(n) performance for filter
+[13:17] rtl has joined the channel
+[13:17] <jed> felixge: so how do you solve that? use a separate array instead of a hash?
+[13:18] <jed> felixge: i always figured that'd be an inevitable downside with the approach.
+[13:18] jherdman has joined the channel
+[13:19] <jed> felixge: (i also figured that the filter function itself would be a bigger bottleneck than the iteration)
+[13:19] <felixge> jed: I think I can get the array keys cached
+[13:19] <felixge> * object keys
+[13:20] <jed> in v8land?
+[13:20] <felixge> well, with an additional array, but I think if I am smart about when I populate it, I should be able to keep the current set() performance
+[13:21] <felixge> gotta play around with it a bit
+[13:27] <jed> felixge: well, lemme know if you need any testing...
+[13:28] <felixge> jed: I will
+[13:28] <felixge> :)
+[13:43] jage has joined the channel
+[13:44] kriszyp has joined the channel
+[13:49] gf3 has joined the channel
+[13:51] gf3 has joined the channel
+[14:04] alex-desktop has joined the channel
+[14:17] technowe_ has joined the channel
+[14:19] sudoer has joined the channel
+[14:19] sveimac_ has joined the channel
+[14:19] tav has joined the channel
+[14:23] TheEnd2012 has joined the channel
+[14:29] rtl has joined the channel
+[14:31] aryounce has joined the channel
+[14:38] unomi has joined the channel
+[14:39] tbassetto has joined the channel
+[14:42] softdrink has joined the channel
+[14:43] broofa has joined the channel
+[14:45] ditesh|cassini has joined the channel
+[14:59] micheil_mbp has joined the channel
+[15:02] nsm has joined the channel
+[15:03] <maushu> I'm depressed.
+[15:04] <maushu> I think I will addict someone to tvtropes.
+[15:04] <maushu> http://tvtropes.org/pmwiki/pmwiki.php/Main/MurderTheHypotenuse
+[15:09] fictorial has joined the channel
+[15:13] binary42 has joined the channel
+[15:14] cedricv has joined the channel
+[15:17] alexiskander has joined the channel
+[15:17] <jed> fictorial: sorry for the random question, but do you know what font you used for your nodeRed image? http://github.com/fictorial/NodeRed/raw/master/NodeRed.png
+[15:19] joshbuddy has joined the channel
+[15:19] Aria has joined the channel
+[15:21] <fictorial> http://www.blambot.com/font_jackarmstrong.shtml
+[15:22] around_ has joined the channel
+[15:22] <jed> fictorial: thanks!
+[15:23] <around_> hello node ninjas
+[15:26] gf3 has joined the channel
+[15:26] gf3 has joined the channel
+[15:28] jspiros has joined the channel
+[15:30] fictorial has joined the channel
+[15:32] brapse has joined the channel
+[15:32] <around_> Did anyone built simple session-based auth with node?
+[15:32] <around_> I need code samples.. point me to your github
+[15:33] steadicat has joined the channel
+[15:36] <javajunky> around_:  not sure exactly what you're after, something like oauth or just 'sessions' in the common web server sense, if the latter then expressjs.com offers session support ? … didn't you ask this yesterday though ?
+[15:37] ssteinerX has joined the channel
+[15:45] <TomY> has anyone connected to a service via ssl with client certs?
+[15:45] <TomY> i'm trying to work out how to use client.setSecure
+[15:45] <TomY> i have a pem for the ca and one for the client
+[15:45] <around_> javajunky: just sessions
+[15:46] <TomY> ..i just don't know what crl_list is and what i need for the certificate parameter (the public key is also in the pem, right?)
+[15:46] <javajunky> around_: express uses them, I've written one backed by mongodb, but not finding much time to test it to bother pushing it upstream yet.
+[15:46] <around_> javajunky: yesterday i was pointed to couchdb auth support which turns out to be HTTP auth via mod_rewrite -- lame
+[15:46] <TomY> docs here: http://nodejs.org/api.html#_tt_http_client_tt
+[15:46] dandean has joined the channel
+[15:46] <around_> javajunky: can i have a peek pls
+[15:47] <TomY> ACTION reads the docs better and realises parameters are optional
+[15:48] <around_> ACTION refuses to believe noone around here uses trivial session-bases authentication in their node apps. You kind of need user profiles and stuff these days..no?
+[15:48] <Aria> I use HTTP-auth, sorry.
+[15:49] <Aria> Kinda hate sessions.
+[15:49] <javajunky> around_: ah ;) Right yes, no express doesn't implement any authentication atm I don't think, it iwll just create you a new session if you don't already have one, or use an existing one if you preovide the correct cookie, not really what you're after, implementing basic auth would be pretty easy though
+[15:49] <javajunky> if I get bored later I might write that
+[15:50] <Aria> Yeah, basic is trivial.
+[15:51] <javajunky> I've used flickr's auth , and there's examples of facebook connect about too …
+[15:51] <around_> javajunky: i will send you a beer or something if you write up a quick tut
+[15:51] <around_> javajunky: yeah, fb connect is great
+[15:52] <javajunky> beer ain't the issue, its time ;) 
+[15:52] <broofa> ACTION thinks time == money.  one beer !== money.
+[15:55] RayMorgan has joined the channel
+[15:59] mikeal has joined the channel
+[16:01] schuyler1d has joined the channel
+[16:01] demolithion has joined the channel
+[16:01] <around_> javajunky: how much money are we talking here?
+[16:01] <around_> ACTION thinks javajunky would spend 1/2 hour at most
+[16:04] <fictorial> Is there a common way to sanitize 3rd-party input that could be used as a key in an object to prevent say dangerous keys from being clobbered?  nick="joe"; users[nick] = { loginAt: ... }  is fine.  but nick="<anything>" seems like a bad idea.  
+[16:05] <schuyler1d> str.replace(/\W/,'_')
+[16:05] jed has joined the channel
+[16:05] <fictorial> What about say nick="__proto__"?
+[16:05] <fictorial> ACTION does not live and breathe javascript by any stretch
+[16:06] <javajunky> around_: doesn't know how long I might take ;)
+[16:07] <schuyler1d> Do we have to wait for the OpenSSL migration in node.js before re-implementing the setSecure() in http.js and/or net.js?
+[16:07] erikvold has joined the channel
+[16:08] trochala has joined the channel
+[16:09] sudoer has joined the channel
+[16:11] <fictorial> ACTION can check if the property exists already -- nevermind.
+[16:11] dnolen has joined the channel
+[16:14] silentrob has joined the channel
+[16:16] sh1mmer has joined the channel
+[16:24] bpot has joined the channel
+[16:25] dgathright has joined the channel
+[16:27] <inimino> fictorial: in ES5 this is designed to be perfectly safe
+[16:29] <inimino> fictorial: __proto__ is problematic for this reason, but you can still use Object.defineProperty
+[16:30] <binary42> Yeah. I don't think __proto__ should be accessible by property access at all.
+[16:30] BRMatt has joined the channel
+[16:30] <binary42> At the most I'd say Object.getPrototype(obj) would be better.
+[16:31] jtoy has joined the channel
+[16:32] <inimino> sure, if not for legacy code
+[16:32] <binary42> It could be faked in a shim pretty easily.
+[16:33] <binary42> And also made safe for certain cases.
+[16:35] <Wes-> Just wait for v8 to catch alls
+[16:35] <Wes-> then you can hide __proto__ 
+[16:35] <fictorial> I'm not an expert enough to know what would or wouldn't be a problem.  I just want to safely use an object as an associative array whose keys are user-given
+[16:36] <Wes-> and people will re-implement it
+[16:36] <Wes-> fictorial: I'm not an expert either, but I would suggest making sure that the prop is either undefined or an own property before taking it on to your object
+[16:37] <Wes-> (does v8 have hasOwnProperty yet?)
+[16:37] <fictorial> Yeah
+[16:37] <fictorial> It does - I was going to just check for the existence first and deny the key if it does exist already (extant! how often can you use that word?) but define property sounds more appropriate
+[16:39] <gf3> I didn't notice, but it also has getters/setters
+[16:39] <gf3> hot
+[16:41] dgathright_ has joined the channel
+[16:41] mikeal has joined the channel
+[16:44] maritz has joined the channel
+[16:47] ditesh|cassini has joined the channel
+[16:51] indiefan has joined the channel
+[16:57] sh1mmer has joined the channel
+[17:10] felixge has joined the channel
+[17:10] felixge has joined the channel
+[17:12] <inimino> fictorial: if you're using it as a hash, you're probably not going to call methods on it anyway (hopefully!)
+[17:13] <inimino> fictorial: in that case you don't even need to worry about __proto__ reassignment, and you can just go ahead and use it without worrying about these issues
+[17:13] <inimino> fictorial: just use Object.prototype.hasOwnProperty.call(o,p) instead of o.hasOwnProperty(p)
+[17:15] <fictorial> Not sure I follow. I seem to be able to change __proto__ so if I just did users[nickname] and nickname was "__proto__" ...
+[17:15] teemow has joined the channel
+[17:16] <inimino> fictorial: then you'd be setting, or getting, the __proto__ property of that object (and the prototype), which wouldn't matter at all if you are only using it as a hash
+[17:17] <fictorial> that's true... this one example is harmless.  but I worry that I'm missing something else...  defineProperty will do what I need I think
+[17:17] <inimino> as long as the only thing you're doing with it is setting properties on it, or reading them once you know they are own properties, then it doesn't matter what __proto__ is
+[17:18] <inimino> sure, the main reason to not do it that way would be for speed, or if you need to run in browsers
+[17:19] <inimino> if neither of those is an issue defineProperty is probably best
+[17:25] nsm has joined the channel
+[17:26] javajunky has joined the channel
+[17:28] juvenn has joined the channel
+[17:35] technoweenie has joined the channel
+[17:37] indiefan has joined the channel
+[17:38] piranha has joined the channel
+[17:39] charlesjolley has joined the channel
+[17:46] dgathright has joined the channel
+[17:48] aguynamedben has joined the channel
+[17:50] piranha has joined the channel
+[17:50] <rektide> _ry: i'm hitting an isue where multiple httpClient's, if they return "close" together, sometimes miss a 'response' event
+[17:51] <rektide> wget and wireshark both indicate the data's being sent fine, for whatever reason the program isnt getting called
+[17:51] <rektide> http://cgit.voodoowarez.com/pipe-layer/tree/src/tests/nodejs/common.js is the test driver and http://cgit.voodoowarez.com/pipe-layer/tree/src/tests/nodejs/test-queue.js is the test
+[17:53] devinus has joined the channel
+[17:54] mikeal has joined the channel
+[17:55] dnolen has joined the channel
+[17:59] <_ry> rektide: head or 0.1.33?
+[18:00] <rektide> _ry: head last night
+[18:05] charlesjolley has joined the channel
+[18:15] <devinus> can you guys give critique my LRU cache? http://pastie.org/895645
+[18:15] <devinus> i just want some feedback
+[18:18] drostie has joined the channel
+[18:30] towski has joined the channel
+[18:32] joshbuddy has joined the channel
+[18:32] joshbuddy has joined the channel
+[18:32] sveimac has joined the channel
+[18:34] <around_> devinus: nice work
+[18:34] <devinus> i was looking for simple LRU cache for JS and the ones i found were dumb and slow
+[18:35] kenneth_reitz has joined the channel
+[18:35] <around_> devinus are you sure you need to be implementing LRU yourself?
+[18:35] <around_> devinus: app level?
+[18:35] <around_> devinus: or framework level?
+[18:36] <devinus> around_: right now im using it as just a simple file dimensions cache
+[18:36] <devinus> around_: and making sure it doesnt use too much memory
+[18:36] schuyler1d has left the channel
+[18:36] <around_> devinus: you should offload that to framework, not your app
+[18:37] <devinus> around_: what kind of framework?
+[18:37] <around_> devinus: whatever it is you use on top of node..
+[18:38] admc has joined the channel
+[18:38] <devinus> around_: ah... i was thinking of just putting it out there as a commonjs module on github
+[18:38] teemow has joined the channel
+[18:38] <around_> devinus: yeah good idea
+[18:41] fizx has joined the channel
+[18:42] Gruni has joined the channel
+[18:43] <atmos> around_: devinus is it common to prefix variable names w/ the underscore like that in js ?
+[18:43] <_ry> rektide: could you patch with a test?
+[18:43] <_ry> rektide: :)
+[18:43] <_ry> report a bug: be put to work
+[18:43] <devinus> atmos: i see it a lot, yeah. it's for private variables that the user really shouldnt have to touch
+[18:44] <around_> atmos: it depends. see node repo for node- coding style
+[18:44] <rektide> _ry: i can run the patch in 3 hours? is that sufficient?  gotta run atm.
+[18:44] <rektide> _ry: rekitde@voodoowarez.com or whatever linkage you have to the patch
+[18:45] pavelz has joined the channel
+[18:45] <rektide> apologies for making you work. ;)
+[18:45] <_ry> rektide: sure
+[18:45] paul______ has joined the channel
+[18:46] <around_> atmos: you can add private attributes to constructor..
+[19:04] cpleppert has joined the channel
+[19:07] charlesjolley has joined the channel
+[19:11] Iveaux has joined the channel
+[19:13] callen has joined the channel
+[19:13] cedricv has joined the channel
+[19:14] charlesjolley has joined the channel
+[19:20] aho has joined the channel
+[19:20] sveimac has joined the channel
+[19:24] teemow has joined the channel
+[19:26] derbumi has joined the channel
+[19:28] pedrobelo has joined the channel
+[19:29] tilgovi has joined the channel
+[19:29] <around_> How do you guys deploy node applications?
+[19:30] <around_> I want answers.
+[19:30] bmizerany has joined the channel
+[19:30] <around_> And I won't back down
+[19:32] <around_> Upstart I suppose?
+[19:32] <mjr_> That's what I use for mine.
+[19:34] indiefan has joined the channel
+[19:38] hellp has joined the channel
+[19:41] tbassetto has joined the channel
+[19:44] _ry has joined the channel
+[19:45] <devinus> easiest way to get the json body of a request ?
+[19:46] indiefan has joined the channel
+[19:47] <brainproxy> any of you using joose and/or js.class in combo with node.js?
+[19:47] sveimac has joined the channel
+[19:51] Wes-mac has joined the channel
+[19:51] <Wes-mac> _ry: tcp.js is being renamed net.js, yes?  Anything else going in there?  udp?  libresolv?
+[19:51] javajunky has joined the channel
+[19:54] <devinus> alright...so, i've got a request incoming message. how do i get the json body they're sending me 
+[19:56] <mjr_> devinus: build up the body in a string from the data listener.
+[19:56] <kriszyp> devinus: you need to listen for the "data" event on the request, collect and concatenate all the data until the "end" event, and then you can do a JSON.parse on it
+[19:56] <mjr_> Then in the end listener, call JSON.parse on the string.
+[19:57] <mjr_> Hopefully those two identical answers don't cancel each other out.
+[19:57] <kriszyp> heh
+[20:00] <kriszyp> if you wanted to go an higher level API that builds on node, you could use jsgi-node and do something like: var requestBody = ""; request.input.forEach(function(data){ requestBody += data}).then(function(text){var data = JSON.parse(requestBody); /* do something with data*/});
+[20:01] <kriszyp> probably the frameworks have helpers to, I presume
+[20:02] bpot has joined the channel
+[20:03] fizx has joined the channel
+[20:04] <mjr_> Ahh, JavaScript one-liners.  
+[20:05] <kriszyp> cuz if it is more than one line, you have to gist/pastie it :)
+[20:05] maritz1 has joined the channel
+[20:05] <mjr_> It takes me back to the not-so-distant past of perl one-liners.
+[20:05] <devinus> has anybody gotten an "illegal access" error before ?
+[20:06] maritz has joined the channel
+[20:09] softdrink has joined the channel
+[20:11] konobi has joined the channel
+[20:11] <konobi> _ry: ping
+[20:12] fizx has joined the channel
+[20:15] <Wes-mac> kriszyp: you don't have a jsgi server for node yet, do you?
+[20:16] <konobi> Wes-mac: how are module identifiers setup for relative require() calls?
+[20:16] <konobi> ACTION has everything passing except for deterministic and relative
+[20:17] <Wes-mac> konobi: can you clarify your question?
+[20:17] <kriszyp> Wes-mac, yes
+[20:17] <kriszyp> http://github.com/kriszyp/jsgi-node
+[20:17] <Wes-mac> kriszyp: It relies on node's http, I'm guessing?
+[20:17] <kriszyp> just realized it needs to be updated for the latest version
+[20:17] <kriszyp> yes, exactly
+[20:17] larssmit has joined the channel
+[20:18] <Wes-mac> kriszyp: Nice.  I'm playing with node's tcp API  (ported to GPSEE), looking at possibly doing same thing with http. Given your JSGI, that seems like a fast way for me to get JSGI if I want it. :)
+[20:19] <kriszyp> yeah
+[20:20] <kriszyp> you could certainly follow node's http api and then use jsgi-node on top of it.
+[20:21] <konobi> Wes-mac: require("foo") and require("foo"), depending on where it is called from, might mean different things... so I need to memoize based on an "id"... how do we grab that?
+[20:21] <Wes-mac> konobi: No, they always mean the same thing: require the top-level module
+[20:21] <Wes-mac> sorry
+[20:21] <Wes-mac> konobi: No, they always mean the same thing: require the module first found on the module path which matches "foo"
+[20:21] <Wes-mac> konobi: Relative requires *always* start with ./ or ../
+[20:23] <larssmit> Linkedin Node.js group. Feel free to join!
+[20:23] <konobi> Wes-mac: prvmsg okay?
+[20:23] <Wes-mac> konobi: Sure, but #commonjs is probably most appropriate
+[20:25] jlilly has joined the channel
+[20:28] <devinus> how do you guys read POST data ?
+[20:28] rictic has joined the channel
+[20:29] <_ry> konobi: pong
+[20:29] <kriszyp> I usually read it as JSON
+[20:29] <_ry> Wes-mac: Yes, net.js is the new tcp.js
+[20:30] <Wes-mac> _ry: Thanks.  And thanks for the mental exercise, I learned quite a lot implementing tcp.js along with the associated event system and reactor. 
+[20:31] <_ry> Wes-mac: up and running?
+[20:31] <_ry> s/^/are you /
+[20:31] <Wes-mac> _ry: Yep, at least the echo test with multiple listeners.   Found a couple more entertaining bugs in my FFI and Binary modules. :)
+[20:32] <_ry> Wes-mac: nice
+[20:32] <devinus> kriszyp: it's a file upload
+[20:32] <deanlandolt> devinus: node has a multipart parser
+[20:32] <Wes-mac> _ry: Exciting stuff indeed!  I really love this style of development.
+[20:32] <kriszyp> from an html form? you should use the multipart module
+[20:32] <devinus> i'm trying to use the multipart parser
+[20:33] <devinus> oh right, yes
+[20:33] <devinus> i'm listening on complete
+[20:33] <devinus> but im not sure how to get the parts
+[20:33] <devinus> it's not passed into the listeners callback
+[20:34] <devinus> ah
+[20:34] <devinus> i guess i should use partEnd
+[20:38] kriskowal has joined the channel
+[20:39] paul_____ has joined the channel
+[20:47] fictorial has joined the channel
+[20:47] BRMatt has left the channel
+[20:49] <fictorial> inimino: thanks; I'm just reading the scrollback now. 
+[20:54] fizx has joined the channel
+[21:03] wereHamster has joined the channel
+[21:06] xla has joined the channel
+[21:09] PyroPeter has joined the channel
+[21:10] <PyroPeter> why can I access local vars of a function calling setTimeout in the callback?
+[21:12] CodeOfficer has joined the channel
+[21:13] admc has joined the channel
+[21:17] tlrobinson has joined the channel
+[21:19] <hober> lexical scoping
+[21:20] <hober> PyroPeter: http://en.wikipedia.org/wiki/Closure_(computer_science)
+[21:20] <devinus> hrm
+[21:20] <devinus> trying to figure out how to watch the current file and restart node on itself if it changes....
+[21:26] <fictorial> devinus: Didn't felixge work on that?
+[21:26] <devinus> fictorial: not sure... :-/
+[21:27] <fictorial> felixge: did you work on that? :)
+[21:29] <PyroPeter> hober: ah, thanks a lot
+[21:29] broofa has joined the channel
+[21:38] <around_> ACTION thinks PyroPeter: got owned
+[21:44] jed has joined the channel
+[21:48] cpleppert has joined the channel
+[21:52] <felixge> fictorial: hot code reloading is an on going discussion, but I did a few patches (that never got merged) for it
+[21:52] micheil_mbp has joined the channel
+[21:52] <fictorial> felixge: thanks
+[21:53] <felixge> devinus: you still need multipart sample code?
+[21:53] <devinus> felixge: i dont, i figured it out ! :P but somebody said that you had hot code reloading
+[21:53] <devinus> felixge: oh i see
+[21:54] <devinus> felixge: there are file watchers though, right ?
+[21:54] <felixge> devinus: yeah, file watcher work, ryan did those
+[21:54] <devinus> cant you just watch for a change of __filename and just run node on __filename again :P
+[21:54] <felixge> devinus: isaac is currently working on a new module system, I'm only involved with the discussion / reviewing of that ATM
+[21:54] <devinus> i see
+[21:54] <felixge> but it looks like it may get a hot code reloading feature
+[21:55] <felixge> which allows you to re-load an existing module
+[21:55] <felixge> so you need to have a thin entry-point module (which probably does nothing but start up a http server), and then you can reload your request handler module (and all of it's children) from within that
+[21:56] <felixge> devinus: the other option will be a pre-fork kind of server with IPC
+[21:56] <felixge> devinus: which in many cases is going to be a more powerful, but also more complex option
+[21:56] <felixge> (I doubt node will ship with a batteries included solution)
+[21:57] <devinus> felixge: im not even talking about that, it could be as simple as watching the file and forking the program with the same options and then killing the original
+[21:57] <felixge> devinus: ah, that you can already do right now
+[21:57] <devinus> felixge: that's what im trying to wrap my mind around :P
+[21:57] <devinus> felixge: well, find examples of/code for i mean
+[21:57] <felixge> My problem is that I deal with file uploads that can last for hours, killing the server (and it's connections) is no option :)
+[21:57] <devinus> felixge: right, yeah. this is just for development "mode"
+[21:58] <devinus> felixge: file changes, reload the file
+[21:58] <devinus> or the process i mean
+[21:58] <felixge> devinus: I have no examples for you, but you'll need a supervisor process
+[21:58] <felixge> devinus: which monitors for file changes and then restarts
+[21:58] <javajunky> hey felixge: I started on my node.js intergalactic whiteboard.. wanna see prototype v2 ? 
+[21:58] <felixge> javajunky: sure :)
+[22:00] <javajunky> felixge: I've sent you a url
+[22:04] towski_ has joined the channel
+[22:04] <_ry> http://twitter.com/davidd/status/11329684975 <-- sub-second is so lackluster
+[22:05] <mjr_> Yeah, but coming from many different multi-tier web platforms, sub-second is actually an improvement.
+[22:05] <_ry> so sad...
+[22:06] <_ry> if that was sub-ms i'd be happy
+[22:06] <mjr_> I'm getting about 8ms response time from our office in SF to EC2 in San Jose with 1000 connections.  8ms is also the RTT, so the node response time gets lost in the noise.
+[22:06] <javajunky> _ry: interested in taking a quick look at my node.js powered collab whiteboard effort ? (the code's lame, but the concept works well ) 
+[22:06] <_ry> yeah
+[22:07] <Wes-> Hey, _ry, what's supposed to happen if you server.listen(x); server.listen(y) -- multiple socket listening on multiple ports?
+[22:08] <mjr_> On localhost I've never seen it go below 1ms, but I wonder how accurate it is to measure that precisely.
+[22:09] Tim_Smart has joined the channel
+[22:11] <mikeal> awesome, gist comments
+[22:12] <felixge> I've done some benchmarks on response times with thousands of concurrent connections
+[22:12] hassox has joined the channel
+[22:12] <_ry> Wes-: haven't thought about it
+[22:12] <_ry> Wes-: can you bind something ot multiple ports?
+[22:12] <felixge> I think ~5k long-polling clients the average response time approaches 1 sec to message all of them
+[22:13] <felixge> (that's of limited value since most web apps don't try to publish a page to 5000 clients at the same time)
+[22:14] <Wes-> _ry: Heh - no, you can't bind to multiple ports, bind is per-socket.  My thought was (actually implementing now to see what it's like) to just have an array of sockets on the Server object, keeping the same events for all sockets
+[22:18] <_ry> we got to get people from using the dev branch
+[22:18] <_ry> it's wasting too much time
+[22:18] <_ry> i think ry/master should be stable
+[22:18] <_ry> use ry/edge for development 
+[22:19] <_ry> i'll change after the next release
+[22:19] <felixge> _ry: I'm not sure that this will change user behavior
+[22:19] <felixge> nor if it will be good for node
+[22:20] <felixge> I mean if somebody experiences a problem with an old version, the first thing people will tell them is to use edge/whatever is the latest
+[22:21] <felixge> _ry: I guess once we declare the api stable (as in only new stuff, not breaking old stuff), people will start using stable version automatically
+[22:22] <Wes-> felixge: APE does that, then they have trouble with n00bs who can't build it from scratch.  (Does node come as a binary distro?  At least I assume your build system is better)
+[22:24] <felixge> Wes-: I think there are debian packages, but most users install from source or homebrew right now
+[22:25] <felixge> Wes-: I think people who can't build node from scratch shouldn't be the target audience at this point, I mean they are really coming too early to the party I think
+[22:25] sveimac has joined the channel
+[22:25] <Wes-> felixge: that's definitely a valid point - although, you know, people REALLY WANT stuff like Node
+[22:26] <Wes-> Does the echo server example not use a function argument on the connect callback on purpose? Is it counting on getting the socket luckily through an upvar?
+[22:31] <Wes-> Well, that was easy.  _ry -- multiple listen() per server seems to work just fine from my perspective
+[22:32] <_ry> Wes-: ?
+[22:33] <Wes-> _ry - Server.listen - I tweaked my implementation here to allow multiple calls to it, nothing at all tricky about it or API changes required.   (My suggestion - allow it in node, there is no real downside from what I can see)
+[22:34] derbumi has joined the channel
+[22:35] <_ry> Wes-: you have multiple fds per server?
+[22:35] <konobi> finally... all spec tests passing for commonjs require()
+[22:35] <konobi> damn tricky
+[22:35] <Wes-> _ry: I do now.
+[22:35] <Wes-> One per listen()
+[22:35] <_ry> Wes-: i don't like the idea
+[22:36] <_ry> i want server.fd to be a number
+[22:36] <_ry> people can easily start multiple servers if they want
+[22:36] <konobi> so seperate server for http vs https?
+[22:37] <_ry> it would be anyways - it needs a different i/o watcher
+[22:37] <Wes-> _ry: Hm, yes, that would give you problems.  Multiple servers works, too -- my thought was that keeping identically-behaving servers under the same server object might be beneficial.  
+[22:38] <Wes-> Of course, the behaviour is really all triggered from the "connection" event which is easy enough to replicate
+[22:38] <_ry> although it seems like posix should allow you to bind a fd to multiple ports
+[22:39] <_ry> server1.listen(a); server2.listen(b). server1.addListener('connection', handler); server2.addListener('connection', handler);
+[22:39] <Wes-> _ry: ...I don't think so, bind wants a partially filled out socket (5-tuple)
+[22:39] <_ry> that's simple enough :)
+[22:39] <Wes-> _ry: Yep that works too!
+[22:40] <Wes-> So 2nd listen call, replace or throw?    Hmm, I should download node and try some of this stuff out.   (Am normally on sparc so that's not always an option, but on mac today)
+[22:40] rtl has joined the channel
+[22:41] <_ry> Wes-: throw
+[22:41] <Wes-> That would be my choice too
+[22:43] JimBastard has joined the channel
+[22:44] <JimBastard> good morning party people
+[22:54] pdelgallego has joined the channel
+[22:57] gf3 has joined the channel
+[22:58] malkomalko has joined the channel
+[22:58] kriszyp has joined the channel
+[23:05] JimBastard has joined the channel
+[23:09] xla has joined the channel
+[23:09] CrockBot has joined the channel
+[23:10] <JimBastard> there he is! hi CrockBot 
+[23:10] <CrockBot> In order to not get sued by Douglas Crockford, The Stones changed the name of their song to &quot;Black Sugar.&quot;   jeremyosborne
+[23:11] <JimBastard> i dont get that one
+[23:11] <mikeal> me neither
+[23:13] <mikeal> you know
+[23:13] <mikeal> one cool feature
+[23:13] <mikeal> would be to have it output any *new* crockford facts added when they get added
+[23:13] <CrockBot> Douglas Crockford can make cross domain XMLHttpRequests.    ryanstout
+[23:13] <mjr_> uh oh, fact quality is deteriorating rapidly.
+[23:13] <mikeal> maybe we can get a continuous feed
+[23:14] <mikeal> i just saw a new one that said "Douglas Crockford IS a closure"
+[23:14] <CrockBot> The government once tried to clone Crockford. They were only partially successful. The result, Chuck Norris.    ara_p
+[23:14] <JimBastard> im gonna start digging deeper into the code as hook.io gets to  v0.2 and requires more of the IRC messaging
+[23:14] <JimBastard> perhaps, there are a few issues with the bot itself that need to be addressed
+[23:14] <mjr_> I like the continuous feed idea.
+[23:15] <mikeal> double crockbot explosion is a pretty bad bug
+[23:16] sudoer has joined the channel
+[23:42] <inimino> hehe, someone didn't notice when all the browsers implemented cross-domain XHR
+[23:43] silentrob has joined the channel
+[23:44] <rektide> whats the compile Mustache.js for node project again ?
+[23:44] <rektide> *compiled
+[23:45] <xla> Mu
+[23:45] <xla> http://github.com/raycmorgan/Mu
+[23:57] binary42 has joined the channel
+[23:59] PowerToExt has joined the channel

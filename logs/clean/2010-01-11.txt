@@ -1,0 +1,939 @@
+[00:11] martint-t has joined the channel
+[00:31] <_Ray_> What does "(evcom) send() Connection reset by peer" in stdout mean, if I'm accessing 127.0.0.1?
+[00:32] jamiew has joined the channel
+[00:33] mattly has joined the channel
+[00:41] eviltwin has joined the channel
+[00:44] pjb3_ has joined the channel
+[00:46] mattly_ has joined the channel
+[00:52] aurynn has joined the channel
+[00:54] r11t_ has joined the channel
+[01:04] <_Ray_> Hrm. Seems posix.stat sometimes won't ever fire, not "success", not "error" and not "cancel"... why could this be?
+[01:05] jamiew has joined the channel
+[01:06] <inimino> _Ray_: could be a bug
+[01:06] <inimino> _Ray_: are you on HEAD?
+[01:06] <_Ray_> Not really, on the 2009-12-31 one
+[01:07] <inimino> well, I guess current stable would have the fix I was thinking of also
+[01:07] <inimino> ah, probably the libeio bug then
+[01:07] <inimino> upgrade
+[01:08] <_Ray_> Does it come bundled with Node.js?
+[01:08] <inimino> yeah, node has all it's dependencies
+[01:09] <inimino> but actually it was a bug in node, related to libeio
+[01:12] jamiew has joined the channel
+[01:13] jamiew has left the channel
+[01:22] RayMorgan has joined the channel
+[01:30] sudoer has joined the channel
+[01:34] mattly has joined the channel
+[01:45] <_Ray_> inimino, checked out the git repo and I'm seeing something even more weird O.o "TypeError: Cannot read property 'path' of undefined", where the line is "  <title>Index of "+path+"</title>"+, and path is a parameter passed to the function O.o
+[01:46] <inimino> that is weird indeed
+[01:47] <_Ray_> oh, nvm, it's my mistake -_-
+[01:47] <_Ray_> request.uri.path doesn't exist anymore?
+[01:48] <inimino> no, it's gone now
+[01:48] <inimino> request.url contains a string
+[01:48] <inimino> or...
+[01:48] <_Ray_> ah ok
+[01:48] <inimino> request.uri
+[01:48] <inimino> or something
+[01:48] <inimino> and there's a url module which you can require() if you want to parse it
+[01:48] <inimino> there's a message about it on the list
+[01:49] <_Ray_> ah, I was basing everything on the API doc
+[01:49] <inimino> not sure if it's in the docs yet
+[01:57] <inimino> _Ray_: it's mostly correct but that's a very recent change, maybe even more recent than the current stable release, I'm not entirely sure
+[02:09] hassox has joined the channel
+[02:09] ryanmcgrath has joined the channel
+[02:10] <hassox> ola
+[02:15] binary42 has joined the channel
+[02:32] <_Ray_> Hrmph. Seems Node.js doesn't recognize (as built from git repo) unicode stuff. "á".length returns 2.
+[02:33] <inimino> _Ray_: that's two characters
+[02:33] <_Ray_> Not according to Firefox or Rhino
+[02:33] <_Ray_> Yes according to my v8 and Node.js 
+[02:34] <inimino> js> "á".length
+[02:34] <inimino> 2
+[02:34] <_Ray_> Ask Firefox :)
+[02:34] <_Ray_> (I'm assuming js> is v8)
+[02:35] <inimino> no, it's spidermonkey
+[02:35] <inimino> but what's between the quotes came from my terminal, so it's UTF-8
+[02:35] <inimino> I don't know if that's what you have or not
+[02:36] <_Ray_> Ask Firebug about it, does it say 2?
+[02:36] cloudhead has joined the channel
+[02:36] <inimino> I don't use Firebug, but yes, it would
+[02:36] <_Ray_> Doesn't in mine O.o
+[02:37] <inimino> node> "\u00E0".length
+[02:37] <inimino> 1
+[02:37] <inimino> cut and paste it from the terminal, and I bet it will
+[02:38] <_Ray_> Nope
+[02:38] <inimino> node> "à".length
+[02:38] <inimino> 1
+[02:38] <_Ray_> From terminal (using v8) it says length 2, if I copy the expression and paste into Firebug, it says 1
+[02:39] <inimino> hm, that's a different character
+[02:39] <inimino> what are you actually testing and how are you getting that character?
+[02:39] <_Ray_> By typing ´ and then a on my keyboard
+[02:39] <_Ray_> ACTION rechecks the encoding in his terminal
+[02:40] <_Ray_> Yep, utf-8
+[02:40] <inimino> it's possible that Firefox changes the encoding in the UI before the JavaScript engine sees it, I suppose...
+[02:40] <inimino> so it's "á" U+00E1
+[02:40] <inimino> "\u00E1".length
+[02:40] <inimino> try that in any interpreter and you should get 1
+[02:40] <inimino> if you don't it's a bug
+[02:40] <_Ray_> Woah
+[02:40] <_Ray_> very interesting
+[02:40] <_Ray_> I changed my encoding to ISO latin 1 and now v8 says the length is 1
+[02:40] <_Ray_> So that must mean my keyboard is in latin 1?
+[02:41] <inimino> if you do, whatever you're trying is coming from something else
+[02:41] <inimino> not your keyboard
+[02:41] <inimino> your terminal
+[02:42] <inimino> your terminal actually has two bytes there, which is what V8 is getting in the string literal
+[02:42] <_Ray_> right
+[02:43] <_Ray_> Hrm. However Node.js is still miscalculating the length of a file it's reading with posix.readdir
+[02:43] <inimino> anyway, it's unlikely that all this is related to whatever actual problem you're having
+[02:43] <inimino> unless you're using V8 to write a terminal app ;)
+[02:43] <inimino> test case? :-)
+[02:43] <_Ray_> ACTION makes one
+[02:47] <_Ray_> Hrm. It does make sense if Node and v8 are reading stuff in ISO Latin 1 encoding.
+[02:47] <_Ray_> Everything would fit.
+[02:50] <_Ray_> Yeah. When I rename my file with my terminal set as iso latin 1, node calculates the length alright, but sending encoded as utf-8 produces weird results.
+[02:54] <inimino> unfortunately filename encoding is kind of a messy issue
+[03:02] ryanmcgrath has joined the channel
+[03:10] cloudhead has joined the channel
+[03:10] rtomayko has joined the channel
+[03:10] aho has joined the channel
+[03:10] bry has joined the channel
+[03:10] tlrobinson has joined the channel
+[03:10] [k2] has joined the channel
+[03:10] orlandov has joined the channel
+[03:10] tlockney has joined the channel
+[03:10] onar has joined the channel
+[03:11] gwoo has joined the channel
+[03:11] Yuffster has joined the channel
+[03:11] jasondavies has joined the channel
+[03:11] keeto has joined the channel
+[03:11] micheil has joined the channel
+[03:11] sveisvei has joined the channel
+[03:11] evilhackerdude has joined the channel
+[03:11] ryah_away has joined the channel
+[03:11] brianm has joined the channel
+[03:11] bengl has joined the channel
+[03:11] halorgium has joined the channel
+[03:17] jed has joined the channel
+[03:27] mattly has joined the channel
+[03:32] <ryah> hi
+[03:33] isaacs has joined the channel
+[03:33] <hassox> hey ryah 
+[03:33] <hassox> what's news mate?
+[03:34] <ryah> searching for a house in SF sucks :)
+[03:35] <hassox> heh
+[03:36] <hassox> ACTION is trying to find somewhere while my house it built
+[03:36] <hassox> prefereably somewhere without rent ;)
+[03:36] <hassox> that's not easy
+[03:36] <inimino> hassox: I read your new documentation, it's much better
+[03:36] <hassox> inimino: makes sense now?
+[03:36] <hassox> my dox writing skills sit just above ameoba
+[03:37] <inimino> yes, more than it did
+[03:37] <inimino> more concrete examples would still be good
+[03:38] <inimino> hassox: like in the first paragraph or two, say what a chain or link *actually is* in JavaScript terms
+[03:38] <hassox> in which doc?
+[03:38] <inimino> i.e. it's an object, or it's a function, or whatever
+[03:38] <hassox> that's in the spec doc I believe
+[03:39] <inimino> I don't remember
+[03:39] <inimino> the one I read that you recently wrote
+[03:41] <hassox> inimino: I'm going to write a bit of a post to the ml about why I think it's important that we collectively settle on a low level foundation for building webapps, and then build on top of it
+[03:41] <inimino> hassox: ah, API.txt
+[03:41] <jed> ryah: will you be commuting to sausalito?
+[03:41] <hassox> yeah API.textile doesn't have waht a link is... SPEC shows that
+[03:41] <ryah> jed: only for a bit - they're moving downtown
+[03:42] <inimino> ok
+[03:42] <inimino> hassox: the other thing I'd recommend is putting everything in README, in a logical order
+[03:43] <hassox> inimino: it gets too big
+[03:43] <hassox> but what I think I will do is transfer everything to the wiki and link it together
+[03:43] <inimino> hassox: instead of having to read everything in some unspecified order, while most of what you are reading doesn't make any sense yet
+[03:43] <hassox> inimino: the problem is it _seems_ complicated because of the justifications for edge cases (streamini etc)
+[03:43] <jed> ryah: phew. hope you land something soon. g'luck.
+[03:44] <hassox> but when you look at the api it shows it's simple
+[03:45] <inimino> bbiab
+[03:46] <isaacs> hassox: yo
+[03:46] <hassox> hey isaacs 
+[03:46] <isaacs> http://gist.github.com/273982
+[03:46] <isaacs> that doesn't work.
+[03:46] <isaacs> but i hope to have some poc code supporting that syntax soonish
+[03:47] <hassox> isaacs: have you seen sherpa?
+[03:47] <isaacs> what's sherpa?
+[03:48] <isaacs> (ie, "no")
+[03:48] <hassox> http://github.com/joshbuddy/sherpa
+[03:48] <isaacs> looks like ruby
+[03:48] <hassox> my friend josh (who help define chain) also wrote the ruby router "usher" http://github.com/joshbuddy/usher
+[03:49] <isaacs> ha, right, usher
+[03:49] <isaacs> i've seen that
+[03:51] <isaacs> but, basically, i think that links can be a lot simpler, and more robust, if they're not terribly concerned with what the next link is.
+[03:51] <isaacs> basically, i'm proposing three types of things:
+[03:51] <isaacs> 1) links.  2) routes. and 3) chains
+[03:51] <isaacs> chains and routes can plug in anywhere that links can.
+[03:52] <hassox> isaacs: gimmie a few minutes
+[03:52] <isaacs> so a chain is a list of links, with some concept of what comes after what
+[03:52] <isaacs> hassox: surely
+[03:53] <hassox> that means there has to be an omnipotent master of flow
+[03:53] eddanger has joined the channel
+[03:53] <hassox> which conflicts with the way routers work (ie, logic for where to go next is inside the "link" -router)
+[03:53] <isaacs> well, when you end the chain and then call .listen(8000), it gets hooked onto the Fence
+[03:53] <hassox> only the entry point to the app should listen on the port right?
+[03:53] <isaacs> a router takes a pattern and a chain, and returns itself.
+[03:54] <isaacs> hassox: yes, that's generally right.
+[03:54] <hassox> isaacs: routers are useful when you can dynamically add to them
+[03:54] <hassox> when you can route to arbitrary things
+[03:54] <hassox> for example
+[03:54] <isaacs> but you could, with this syntax, create a chain that gets routed to, and also gets plugged in at some point.
+[03:54] <hassox> a chain router, could route to a jsgi app
+[03:54] <isaacs> so your app can listen at 8080, but also be available via /blog/foo
+[03:54] <hassox> isaacs: you can do that with a router buy heading your chains with a router
+[03:54] <hassox> then router plugs into router
+[03:54] <isaacs> sure
+[03:55] <hassox> what does this mena
+[03:55] <hassox> isaacs: but you could, with this syntax, create a chain that gets routed to, and also gets plugged in at some point.
+[03:55] <hassox> and
+[03:55] <hassox> isaacs: so your app can listen at 8080, but also be available via /blog/foo
+[03:55] <isaacs> right... 
+[03:55] <isaacs> ACTION gisting
+[03:56] Yuffster has joined the channel
+[03:57] <isaacs> hassox: https://gist.github.com/1a40f4522967e6e6b79d
+[03:57] <isaacs> because i told that chain to listen
+[03:58] <isaacs> but it's also hooked into a route
+[03:58] <hassox> oh, so you have it built into the router that it can start a whole nother server inside, and also route it inside the chain
+[03:58] <hassox> that's pretty neat
+[03:59] <isaacs> basically, a router is just a selector and a chain
+[03:59] <isaacs> if the selector matches, it goes down that chain.  if not, it moves on.
+[03:59] <isaacs> and you can chain a bunch of routers a bit like a chain, and the whole router list itself can take the place of a link.
+[04:00] <isaacs> or you can plug a chain in as a link, so that it works like a bunch of kit that is all tied together and broken up inside, but plugs right into a bigger app easily enough
+[04:00] <isaacs> only plain-old-dummy links can actually do stuff, like assign listeners, sendBody(), etc.
+[04:00] <hassox> k I need to focus on work atm but I definitely want to talk about this
+[04:00] <isaacs> k, great
+[04:01] <isaacs> oh, right, it's monday, yes?
+[04:01] <isaacs> stupid round globe with it's many time zones to confuse us all.
+[04:01] <hassox> yeah
+[04:01] <hassox> 3pm
+[04:17] <jed> isaacs: that really does look like lisp.
+[04:17] <isaacs> jed: you got me started down this road :P
+[04:17] JimBastard has joined the channel
+[04:17] <jed> heh. i wonder if all of our code will merge like that.
+[04:18] <JimBastard> are there are good javascript libraries for searching inside of json objects?
+[04:18] <isaacs> JimBastard: maybe something like this? http://goessner.net/articles/JsonPath/
+[04:18] <JimBastard> like if i had some semi-structured json and wanted to find all objects that had a common property value
+[04:18] <jed> http://github.com/JasonSmith/jsonquery
+[04:19] <JimBastard> yeah ive seen those before
+[04:19] <kriszyp> http://github.com/kriszyp/perstore/blob/master/lib/resource-query.js
+[04:19] <jed> isaacs: i'm trying to avoid nested parens, but they're pretty helpful in a lot of situations.
+[04:19] <isaacs> JimBastard: my favorite json-searching library is called "."
+[04:19] <isaacs> to use it, you put it between the object ref and the field you want.
+[04:19] <jed> nyuk.
+[04:19] <isaacs> >_<
+[04:20] <isaacs> jed: actually, because i do use nested parens (ie, chain and router are both functions that return themselves, and can be nested), it means that you don't *have* to create htem inline.
+[04:21] <isaacs> that opens the door for cyclical structures, not sure if that's a good idea or not.
+[04:21] <ryah> isaacs: do you think the import() patch is going to be a lot slower?
+[04:21] <isaacs> ryah: every time i've tried using with(){}, i end up paying for it.  it's between 2 and 10 times slower than a function call, or at least, was the last time i checked.
+[04:22] <ryah> on v8?
+[04:22] <isaacs> course, i guess it's not as if you call require() over and over again anyhow.
+[04:22] <ryah> in his think the with() would be on each module load
+[04:22] <isaacs> right
+[04:22] <ryah> it depends on if v8 has to do a lot of extra look ups because of the with
+[04:22] <isaacs> it absolutely does.
+[04:23] <isaacs> i'm not sure why with(){} is so much slower than (function () {}), but it seems to be.
+[04:23] <ryah> even if the with-closure doesn't have many references outside it? in this case only one? 
+[04:23] <ryah> import() would be rad
+[04:23] <ryah> i hope it's not slow.
+[04:24] <ryah> i asked visionmedia to do a bench
+[04:24] <RayMorgan> Did glob support ever make it into Node? I believe I remember you working on something isaacs..
+[04:24] <isaacs> RayMorgan: yeah, that's still on the todo list.
+[04:24] <isaacs> i have a broken version implemented in js, and i started to look at linking in the glob.h lib
+[04:25] <RayMorgan> ah
+[04:25] <isaacs> but it's all kinds of synchronous, and my c skilz are not anywhere near my javascript skilz.
+[04:25] martint-t has joined the channel
+[04:25] <ryah> if someone pokes me enough with a stick, i'll do the blobs
+[04:25] <ryah> er
+[04:25] <ryah> globs
+[04:26] <hassox> ACTION pokes ryah 
+[04:26] <ryah> would be a good feagture
+[04:26] <ryah> feature
+[04:26] <hassox> with a stick
+[04:26] <isaacs> ryah: it'd be a good example, too
+[04:26] <ryah> ACTION has to go now, though. ciao!
+[04:27] <RayMorgan> yeah, it would be awesome. I will take a stab at it, I need to work on my c and learn some libeio
+[04:33] eddanger has joined the channel
+[04:54] dnolen has joined the channel
+[05:07] mikeal has joined the channel
+[05:25] cloudhead has joined the channel
+[05:36] mikeal has joined the channel
+[05:38] <isaacs> ryah_away: here's a bench for with vs function: http://github.com/isaacs/node-playground/tree/master/with-bench
+[05:40] <isaacs> oh, wait, that's not valid...
+[05:48] <isaacs> ok, now it works.
+[05:53] <inimino> isaacs: where's the pretty graphs?
+[05:53] <isaacs> http://gist.github.com/274018
+[05:53] <isaacs> numbers are pretty.
+[05:54] <inimino> heh, good
+[05:54] <inimino> that's about what I expected
+[05:55] <isaacs> turns out this bit is SUPER importnat: http://github.com/isaacs/node-playground/blob/master/with-bench/bench.js#L54-55
+[05:55] <isaacs> i was getting random results for a while.  "ok, i know ONE of these are WAY faster than the other...."
+[05:56] <inimino> heh
+[05:57] <hassox> isaacs: where's the results?
+[05:57] <hassox> can you gist them
+[05:57] <isaacs> http://gist.github.com/274018
+[05:57] <isaacs> when you comment out the body of the function, they're about the same
+[05:58] <isaacs> er, function() is still faster, but only by a percent or two
+[06:00] <hassox> isaacs: damn I just closed that gist of the router you did
+[06:00] <hassox> can you link me up again so I don't loose it please?
+[06:01] <isaacs> hassox: https://gist.github.com/1a40f4522967e6e6b79d and http://gist.github.com/273982
+[06:01] <hassox> thx
+[06:02] <isaacs> hassox: you can always hit http://gist.github.com/isaacs if you want to pull up anything i've gisted :)
+[06:03] <hassox> coo thx
+[06:03] <hassox> isaacs: how long will you be about?
+[06:03] <hassox> few hours?
+[06:03] <isaacs> sure, i could do that
+[06:03] <hassox> kk
+[06:03] <hassox> I'll make sure I get on as soon as I can when I get home
+[06:08] <isaacs> great!
+[06:16] bentomas has joined the channel
+[06:16] <bentomas> Does anyone have recommendations on the best way to write custom Error objects in Node?
+[06:17] <bentomas> ashb:  I assume this is you: http://groups.google.com/group/mozilla.dev.tech.js-engine/browse_thread/thread/af195c5aafbfcb32/fe9b7410e1b3d9d8?lnk=gst&q=proper+way+to+subclass+error#fe9b7410e1b3d9d8
+[06:17] <bentomas> that was two years ago…  any improvements since then?
+[06:17] <ryah_away> bentomas: function MyError () {}  process.derive(MyError, Error) ?
+[06:18] <bentomas> ryah: thanks! that looks perfect!
+[06:20] <ryah> er
+[06:20] <ryah> process.inherit(MyError, Error)
+[06:23] <bentomas> that gives me the following error: 
+[06:23] <bentomas> TypeError: Object #<an EventEmitter> has no method 'inherit'
+[06:23] <bentomas> perhaps process.mixin ?
+[06:26] <bentomas> nope that doesn't do it
+[06:26] <ryah> inherits ?
+[06:27] <isaacs> sys.inherits
+[06:27] <isaacs> require("sys").inherits
+[06:27] <bentomas> yup, just found it too
+[06:27] <bentomas> thanks
+[06:29] <bentomas> Unfortunately if I do that, there is no stack trace
+[06:29] <isaacs> bentomas: ime, you don't do custom Error objects.
+[06:29] <isaacs> you use Error()
+[06:29] <isaacs> or TypeError() or whatever JS gives you
+[06:30] <isaacs> i suppose you could do Error.apply(this, arguments) in the constructor to pick up the stack trace, though
+[06:31] <bentomas> but what if you want to do different things depending on what the error was?  do this:  throw new Error('My error'); ?
+[06:31] <bentomas> and then look at err.message?
+[06:33] <isaacs> bentomas: that's the traditional mechanism, yes.
+[06:33] <isaacs> javascript doesn't have the catch (FooError e) {} catch (BarError e) {} stuff
+[06:34] <isaacs> imo, this was a good design choice.  throwing should be so rare and exceptional that you almost never see it except in really rare exceptional cases.
+[06:34] <bentomas> right.  I was thinking I'd be able to do this though:
+[06:34] <bentomas> catch(err) { if( err instanceof MyCustomError) { … } }
+[06:34] <isaacs> if you've got 7 different kinds of errors youre catching, then something's wonky anyhow;
+[06:35] <bentomas> Well, with the forthcoming Promise implementation, I'd like to be able to tell the difference between errors that occur naturally and errors that are unexpected
+[06:36] <ryah> bentomas: do this: http://pastie.org/773265
+[06:37] <bentomas> ryah: that works!  thanks!
+[06:38] <bentomas> isaacs: I'll take what you said into consideration.  I certainly don't want to do things in an "unjavascripty" way.  
+[06:39] <isaacs> bentomas: please be careful taking me seriously.
+[06:40] <bentomas> heh.  duly noted!
+[06:40] <bentomas> ryah: is there a reason sys.inherits isn't in the documentation?
+[06:41] <hassox> ryah: wanna be my mascot for chain?
+[06:41] <bentomas> (ie are we waiting for someone to write some docs for it?)
+[06:41] <CIA-78> node: 03Ben Williamson 07master * rbba23c0 10/ src/node_http.cc : 
+[06:41] <CIA-78> node: Fix issue #44, eof on connect to http.
+[06:41] <CIA-78> node: eof_symbol wasn't initialized until the first packet arrived.
+[06:41] <CIA-78> node: In this case no packets arrive before the client closes the socket - eof. - http://bit.ly/5qxl5y
+[06:41] <CIA-78> node: 03Ryan Dahl 07master * r1b2c579 10/ src/node_http.cc : Lazy initialize symbols for HTTP. - http://bit.ly/6bg0Pl
+[06:42] <hassox> http://www.dabbleboard.com/public?created=Guest251771&myid=3
+[06:42] <ryah> bentomas: probably because i want to move it at some point
+[06:42] <ryah> hassox: mascot?
+[06:43] <hassox> mascot is prolly the wrong word ;
+[06:43] <hassox> urm
+[06:43] <hassox> champion
+[06:43] <hassox> ACTION is being facetious
+[06:43] <ryah> hassox: i've been meaning to look at chain - i haven't had a chance to look at it detailedly
+[06:44] <bentomas> ryah: it seems like a nice companion to process.mixin, so maybe being in process might be more appropriate?
+[06:44] <ryah> the idea is good - something i want in node
+[06:45] <ryah> bentomas: yeah, maybe
+[06:45] <ryah> ACTION hates organizing random methods :)
+[06:55] mikeal has joined the channel
+[07:05] mikeal1 has joined the channel
+[07:10] <RayMorgan> ACTION wishes the v8 docs where better...
+[07:13] martint-t has joined the channel
+[07:13] <ryah> ACTION benched the import()
+[07:14] <ryah> about 7% slower
+[07:14] <ryah> such a nice feature though - maybe it's worth it...
+[07:14] <RayMorgan> import()?
+[07:15] <isaacs> ryah: nooooo!!!
+[07:15] <isaacs> that 7% is a bunch!
+[07:15] <RayMorgan> oh, was that the "with(){}" thing you were talking about earlier?
+[07:15] hassox has joined the channel
+[07:16] rictic has joined the channel
+[07:16] <hassox> Damn this train is crowded
+[07:16] <bentomas> hassox:  chain looks really cool!  I think I am going to try and make the web framework I am writing be a link for it
+[07:16] <hassox> Sweet :)
+[07:16] <ryah> RayMorgan: yeah
+[07:16] <hassox> Lemme know how I can help
+[07:18] <bentomas> hassox: just to make sure I am understanding correctly, is it your thought that you'd either use env.body or env.response.sendBody(), but not both?
+[07:18] <hassox> Correct
+[07:18] <bentomas> okie dokie
+[07:18] <hassox> Unless you're streaming / responding directly
+[07:19] <hassox> You shoud use the env.body , env.status, env.headers
+[07:19] <bentomas> right
+[07:19] <hassox> Chain will flush them
+[07:20] <ryah> isaacs: yeah, 7% is too much
+[07:22] <ryah> i wonder if we could like... prescan the file for import and only call with(){} if it has it?
+[07:22] <ryah> that's pretty hacky
+[07:22] <isaacs> ryah: yeah.
+[07:22] <isaacs> i might do var import = "foo";
+[07:23] <isaacs> node has a very small amount of magic right now, and it's segregated into very specific and predictable places.  i like it that way.
+[07:27] <ryah> wait() is pretty magical :)
+[07:27] <ryah> it probably should be removed
+[07:28] <RayMorgan> I think it should be. I have seen it in places it definitely shouldn't be..
+[07:29] <RayMorgan> or name it: wait_ThisMethodIsForTestingThingsOnly()
+[07:29] tlrobinson_ has joined the channel
+[07:31] <bentomas> I think it is useful for things at the beginning of a node program. like loading in files and such.  but losing it certainly wouldn't be a deal breaker.
+[07:32] <bentomas> it is also nice for when you want to write a simple script where you have no need for "Evented I/O".  things where you want stuff to happen one right after another and they are only going to happen once.
+[07:32] <bentomas> which I realize isn't necessarily the point of Node, but it is nice to be able to program in one javascript environment so you know exactly what you are getting
+[07:32] <ryah> currently it is used heavily in require()
+[07:32] <ryah> but felix is trying to rewrite it with blocking i/o
+[07:33] <ryah> i think once that's done, i'll remove it
+[07:35] <bentomas> well, I think that will certainly help for keeping node libraries async.  which is the most important thing.
+[07:42] sveimac has joined the channel
+[07:51] PPilate has joined the channel
+[08:01] <_Ray_> Question. To do the typical "progress bar while uploading", I still need two node processes, correct? One to concatenate the uploaded chunks into a file, and another that has a watch() on the file and send back comet-style to the client to update the progress bar?
+[08:02] <hassox> No, that can be the same process if you use an evented setup
+[08:02] <hassox> Asynchronous
+[08:03] <_Ray_> Hrm, right.
+[08:24] sveimac has joined the channel
+[08:27] DamZ has joined the channel
+[08:36] felixge has joined the channel
+[08:40] <_Ray_> Hrm. Question still about the "upload progress bar". Two connections are needed for this, even if it's a single process? Because if the browser is uploading, how can it listen to updates?
+[08:41] Pilate has joined the channel
+[08:43] <_Ray_> ACTION still isn't too comfortable with async IO
+[08:53] scudco has joined the channel
+[08:54] <felixge> _Ray_: hey
+[08:54] <felixge> in order to do upload progress you only need a single node process
+[08:54] <felixge> you use the same http server for uploading the file as well as serving AJAX progress requests
+[08:55] <felixge> on the client side you just do 1 AJAX request after the other asking for the progress
+[08:55] <felixge> your node script keeps the progress for the current request in memory
+[08:57] PPilate has joined the channel
+[09:00] johan-s has joined the channel
+[09:02] <_Ray_> felixge, right, single node process, but two connections?
+[09:02] spoob has joined the channel
+[09:02] <felixge> _Ray_: well you have 1 long-running HTTP request (the upload), and multiple short http requests asking for the progress of it
+[09:02] <felixge> yes
+[09:03] <_Ray_> Couldn't the short ones be done with a single long-running one?
+[09:04] Pilate has joined the channel
+[09:05] <felixge> _Ray_: if the browsers you are targeting have support for it, sure
+[09:05] <felixge> but getting "real" COMET working cross browser seems like a world of pain
+[09:06] <felixge> _Ray_: why would you care?
+[09:06] johan-s has joined the channel
+[09:06] <_Ray_> Ah yeah, only playing around so far, not targetting IE or anything like that
+[09:06] <_Ray_> I'd just like to see how fast the feedback of the upload can be for a user
+[09:25] teemow has joined the channel
+[09:27] aho has joined the channel
+[09:28] ako has joined the channel
+[09:46] _Pilate has joined the channel
+[09:50] mikeal has joined the channel
+[09:59] sveimac has joined the channel
+[10:02] <felixge> elliottcable: you high?
+[10:03] <elliottcable> felixge: as a kite
+[10:03] <elliottcable> felixge: … in my basement
+[10:03] <elliottcable> omg I’m funny
+[10:03] <elliottcable> felixge: ’sup
+[10:03] <felixge> explains your twitter updates ;)
+[10:03] <elliottcable> felixge: hey, did you write the Promise grouping/chaining extensions?
+[10:03] <elliottcable> felixge: … have you *met* me? I don’t have to be high to act like that.
+[10:03] <felixge> elliottcable: no, but I can do one right now
+[10:03] <elliottcable> felixge: do you know who that was?
+[10:03] <elliottcable> felixge: I’d rather take their code, modify it, and attribute them
+[10:03] <elliottcable> felixge: than write my own
+[10:04] <felixge> elliottcable: no, I haven't met you, but I'll trust your natural crazyness level if you say so ;)
+[10:04] <felixge> I think multiple people wrote promise grouping stuff
+[10:04] <felixge> giving them all kinds of different names ;)
+[10:04] <elliottcable> lol
+[10:04] <elliottcable> pff
+[10:04] <elliottcable> damn
+[10:05] <elliottcable> well I was planning to work it into `from`, to provide an easier way to async-acquire code
+[10:05] <felixge> you know what would be cool
+[10:05] <felixge> if I added !bookmark support for the IRC bot
+[10:05] <elliottcable> requiring only *one* callback, when *all* your dependencies have loaded
+[10:05] <felixge> so people could highlight interesting discussions
+[10:06] <felixge> anyway, not gonna happen before tuesday - still slaving over my node talk
+[10:06] <felixge> elliottcable: https://gist.github.com/b9de8ea080891140ed66 think that's a good pseudo-code explanation of how the event loop works?
+[10:08] <felixge> It leaves out a few details in favor of fitting on a single slide
+[10:08] <felixge> ;)
+[10:08] <elliottcable> um
+[10:08] <elliottcable> talk? what?
+[10:08] <felixge> a bunch of people meeting up in berlin for the first JS user group meetup here
+[10:08] <felixge> on tuesday
+[10:09] <felixge> I'm supposed to talk about node
+[10:09] <elliottcable> lucky
+[10:09] <elliottcable> I want to meet somebody interested in Node
+[10:09] <felixge> there are a bunch of people in berlin which is nice : )
+[10:10] <felixge> elliottcable: anyway, does the pseudo code make any sense?
+[10:10] <ako> jsconf.eu was there
+[10:10] <ako> missed it, unfortunately :/
+[10:10] <felixge> ako: yeah, it was quite nice
+[10:10] <elliottcable> felixge: I skimmed it a bit
+[10:10] <elliottcable> felixge: of *course* it made sense to me
+[10:10] <elliottcable> felixge: ask somebody who doesn’t know how it works already?
+[10:10] <elliottcable> felixge: ’swhat Twitter is for
+[10:10] <felixge> ok, how in here doesn't know how the event loop works?
+[10:10] <felixge> :)
+[10:10] <felixge> * who
+[10:11] <felixge> * hates typos that spell out new words
+[10:11] <elliottcable> AND HOPEFULLY … cephalopods.
+[10:11] <elliottcable> the other day, I typed, uh, what was it
+[10:11] <elliottcable> oh, ‘phenotype’ instead of ‘phenomenally.’
+[10:12] <felixge> elliottcable: anyway, I was mostly interested if there was a logic error in the pseudo code
+[10:12] <ako> too bad that not all of the jsconf talks are online :/
+[10:12] <felixge> ako: lots of them are by now
+[10:12] <felixge> they keep releasing new ones
+[10:13] <ako> i really want to see the one from nicole sullivan and the one from kevin dangoor
+[10:13] <ako> remy sharp's talk was awesome btw
+[10:16] <felixge> ako: didn't see that, need to
+[10:16] <ako> http://jsconfeu.blip.tv/
+[10:16] <spoob> felixge; you're in berlin? I guess you're working on making your entire talk into one German word :)
+[10:16] <felixge> spoob: Nodeisierungsverfahrensprüftechnik
+[10:16] <felixge> yeah
+[10:16] <felixge> that's the talk
+[10:17] <felixge> that made surprisingly little sense, even to me :)
+[10:18] <spoob> oh well, there's always invading Poland if you run out of ideas :)
+[10:18] <spoob> I'm Australian, so we're always on about the New Zealanders. The English apparently have a thing about Belgium
+[10:19] <aho> oh and avoid the talk by thomas fuchs (i can't believe he wrote a book about that topic) :>
+[10:19] <felixge> aho: yeah that was an odd talk
+[10:19] <felixge> I think the main problem was that it had no context
+[10:20] <felixge> there are legit reasons to investigate this kind of performance implications, but that's 0.0001% of all apps
+[10:20] <felixge> :|
+[10:20] <felixge> not sure any of his optimization ideas made sense either so
+[10:22] <aho> all of his examples were donts. the only thing which makes sense is to create a copy variable to be used inside a loop... like foo=some.thing.you.need... and then use foo instead of that other thing
+[10:22] <spoob> I've never written web applications so a lot of that advice is entirely lacking context for me
+[10:23] <aho> this makes the code nicer to read. even more so if you use foo several times in that loop... and this also happens to yield some performance improvements with most engines
+[10:23] <spoob> I'm from Cocoa, hence Cappuccino, then Nodejs, then WebGL.
+[10:24] <spoob> As a book though, I think he's going to sell quite a few as that's the kind of thing people worry about.
+[10:26] <spoob> i last talked to Remy Sharp when he was doing Ruby? 
+[10:26] <spoob> no mention of ruby on his website, not sure I have the right person
+[10:26] <aho> robert nyman's talk is a great introduction to js btw (my only gripe is that it doesn't fully adhere to some of crockford's suggestions)
+[10:27] <aho> like the var stuff should be at the very beginning of functions... and you shall wrap direct invocations with some extra parens
+[10:27] <aho> (function(){}()); //like that
+[10:28] <aho> but other than that i thought it was pretty great :)
+[10:28] <felixge> spoob: I'm learning objective-c for iphone development right now :)
+[10:28] <felixge> spoob: don't you find JS soo much nicer? :)
+[10:29] <felixge> I mean API consistency is great in the world of cocoa, but creating a simple hash object is as painful as it gets
+[10:29] <spoob> felix; hmmm, very much a balanced consideration. Both languages have their ugly parts that really make them work well, because the real world is not homogenisable to one true language either
+[10:29] <aho> well, js is... pretty interesting, i'd say
+[10:30] <spoob> the real advantage that I find for Objective-C is that it's so supremely documentable. hence me using Objective-J for JS as well
+[10:31] <spoob> the Smalltalk infix method naming is really something for being able to put it into documentation, and use the actual method names as documentation
+[10:31] <felixge> spoob: yeah, documentation is pretty sweet
+[10:32] <felixge> but I'm not sure I like that so much ... makes work sort of boring : )
+[10:32] <spoob> having said that, even from Cocoa, I would still try and find a way of programming the iPhone from JS :)
+[10:32] <felixge> I just type out one controller after another and the joy of my day is frustrating over delegating certain tasks to threads and running into isssues with it because my lack of understanding them 
+[10:33] <felixge> but I feel most of the code I write is really repetitive
+[10:33] <spoob> you should understand them then, as cocoa is very brutually primitive in a C like way. It's that way because there's a real reason for it to be that way
+[10:33] <felixge> All those freaking table views are kind of the same, but not enough so to find a pattern
+[10:34] <felixge> spoob: yeah, I'm getting better. It's mostly the release/retain stuff biting me
+[10:34] <spoob> move to ObjC 2.0 with GC?
+[10:35] <spoob> JS and ObjC 2.0 are almost converging on the same language, much like the C based OpenGL stuff
+[10:35] <felixge> spoob: on the iPhone?
+[10:36] <spoob> true, iPhone doesn't have GC yet. 
+[10:37] <felixge> it's a pretty cool platform, but in the long run I think JavaScript-based devices will rock the game
+[10:38] <spoob> the iPhone is also JS based.. if I were to program it now, I would write an ObjC wrapper for WebKit and program the rest in JS and WebGL
+[10:38] <felixge> spoob: would you? You'll spend all your time re-creating their UI components ...
+[10:38] <spoob> the ObjC wrapper would include all the things I don't want to rewrite :)
+[10:38] <felixge> http://jqtouch.com/ is pretty nice
+[10:38] <felixge> but still not a native experience
+[10:39] <felixge> spoob: certainly interesting - but probably only a resource-efficient solution if you already mastered Obj-C really really well
+[10:39] <felixge> :)
+[10:39] <spoob> yes, 
+[10:39] <felixge> I have to deliver this damn app so I gotta focus on that ;)
+[10:41] <felixge> spoob: I certainly want to play with that idea so
+[10:41] <_Ray_> Hrm. I have a form with a file inputy and a text input. How can I use multipart.Stream with the request while still getting the value of the text input?
+[10:41] <spoob> yeah, it's a good idea even though it's not mine. I'm hanging around Cappuccino for Obj-J, webgl for graphics, and nodejs for server side
+[10:42] <felixge> _Ray_: have you tried this tutorial? http://debuggable.com/posts/streaming-file-uploads-with-node-js:4ac094b2-b6c8-4a7f-bd07-28accbdd56cb
+[10:43] <_Ray_> Indeed, but that only has one file upload
+[10:43] <felixge> _Ray_: the text input will emit its own 'part'
+[10:43] <_Ray_> Oh, by itself?
+[10:43] <felixge> _Ray_: well the stream will
+[10:43] <felixge> yes
+[10:43] <_Ray_> (As in, not mixed with the file one)
+[10:43] <felixge> nope
+[10:43] sveimac_ has joined the channel
+[10:43] <_Ray_> Awesome, thanks :)
+[10:43] <felixge> if you place the text input before your file input in the form, you'll even be able to read the full text input field before the file gets uploaded itself
+[10:44] <felixge> which is kind of cool as you can validate a file upload form before the file has uploaded :)
+[10:44] <_Ray_> :)
+[10:44] <felixge> spoob: what are you working on?
+[10:45] <spoob> felix; ultimately, virtual reality like google streetview and microsoft earth
+[10:45] <felixge> spoob: sounds like you have a lot of time on your hands, you should talk to elliottcable :)
+[10:45] <felixge> spoob: or is this part of your job?
+[10:45] <spoob> it's going to be the next text editor or chat program... everyone's going to write their own virtual reality :)
+[10:46] <spoob> it's time on my hands, and I've seen elliotcable in action :)
+[10:47] <felixge> spoob: sounds like fun :)
+[10:47] <spoob> it's not actually that hard, when the right skillsets are in place... it's not been practical before, but WebGL makes it physically feasible
+[10:48] sveimac_ has joined the channel
+[10:49] <spoob> (from a "write something that people can use" viewpoint, rather than "I have a program on my computer that you can't run")
+[10:50] <aho> my gles 2.0 book arrived in the meantime btw
+[10:50] <aho> didn't had time to check it out yet though
+[10:50] hassox has joined the channel
+[10:51] <spoob> WebGL and OpenGL ES 2.0 are about the same as each other, and insanely difficult to get started
+[10:51] <hassox> allo everyone
+[10:51] <spoob> need about 2 bloody pages of code just to get a black screen with a triangle
+[10:51] <aho> got a spinning cube with textures on it
+[10:51] <aho> the code looks like fresh dog barf though
+[10:52] <aho> :f
+[10:52] <spoob> yep
+[10:52] <spoob> only thing to do with that code is to tuck it into some function out of sight and try not to dig into it that often
+[10:53] <aho> well, the shaders are already asnychronously loaded from separate files for example
+[10:53] <aho> but it's... not cool
+[10:53] <aho> :>
+[10:54] <spoob> on the other hand, it's really really fast. So I guess holding your nose and getting the results is an optimum path to take :)
+[10:55] <aho> fast... well... the compositing overhead is pretty awful
+[10:55] <spoob> you mean the setup?
+[10:56] <spoob> yes, it's fast once it's up and running.
+[10:56] <aho> you render something... that is copied pixel by pixel... then it's put into some other surface... then the browser's rendering engine gets it... and then it renders it ontop of whats there... and then it eventually renders other stuff on top
+[10:56] <aho> y'know... that's "empty canvas if f-ing slow" thing
+[10:56] <aho> -'s
+[10:57] <spoob> oh I get what you mean. I moaned about that on the WebGL mailing list. the response was that all the browsers are moving to hardware composition so the overhead will disappear
+[10:57] <aho> i hope
+[10:57] <spoob> I'm the 30x30 sphere guy if you read the mailing list :)
+[10:57] <aho> you wrote that on the forum, didn't you? :>
+[10:57] <spoob> for you!
+[10:58] <aho> .)
+[10:59] <spoob> i talked to cmarrin about that, and it turns out my speed problem is probably software fallback
+[10:59] <spoob> the shaders freak out a bit too easily and fall back to a software rendering path at the drop of a hat
+[11:03] <felixge> spoob: what browsers support WebGL?
+[11:04] <spoob> felix; firefox, mozilla, chrome, safari, opera?
+[11:04] <spoob> all of them except IE. but no released versions yet, only nightlies.
+[11:05] <spoob> WebGL will be something in all browsers by the end of the year, with Chrome Frame forcing IE into the game
+[11:05] <felixge> spoob: they all support it as of right now?
+[11:06] <spoob> http://learningwebgl.com/blog/?page_id=1217   yes, nightly development builds support it now
+[11:06] <felixge> spoob: do I need to download it?
+[11:06] <spoob> see lesson 0
+[11:06] <spoob> no, only the nightly development version of a browser
+[11:06] <spoob> it's not a plugin
+[11:07] <spoob> if it was a plugin, it'd be some failure of a VRML
+[11:07] <felixge> spoob: well, none of the browsers I'm running can load the examples right now. Wondering how many % of the web will have it installed in a year
+[11:08] <spoob> it will be in Firefox 3.7 to start with, then in Safari
+[11:08] <spoob> businesses running IE6 are the biggest handicap, but Chrome Frame does exist
+[11:09] <spoob> for me, I just won't program for IE6 so I don't mind saying "all you bastards, upgrade or piss off". :)
+[11:10] <felixge> spoob: well lets see how it performs
+[11:10] <spoob> fantastically, actually
+[11:10] <felixge> if it eats my CPU like flash ... 
+[11:10] <aho> felixge, >40%
+[11:10] <spoob> really bloody fast
+[11:10] <felixge> does it cause browser freezes?
+[11:11] <spoob> no it's pure GPU. it is only a javascript bridge to OpenGL ES 2.0, and therefore has nothing to do with CPU
+[11:11] <spoob> (unless the shader falls back to software rendering)
+[11:11] <felixge> spoob: that can still freeze the browser
+[11:11] <aho> well, depending on how heavy the calculatios are... :>
+[11:11] <felixge> if there are locks to sync with the CPU threads
+[11:12] <felixge> well I'm looking forward to see it in action
+[11:12] <aho> it can at most freeze/kill a tab in chrome (firefox will also switch to that model in the future)
+[11:12] <spoob> you can try installing the latest firefox development version (or safari if you're on Mac) and give it a go. The best example so far is http://www.glge.org/category/demos/
+[11:12] <felixge> but the last thing the web needs is more ways to make ads that follow your mouse cursor while freezing your system
+[11:13] <spoob> http://www.glge.org/latest-glge-demo/
+[11:14] <felixge> spoob: wow, that video looks impressive
+[11:14] <aho> i recommend a recent chromium snapshot
+[11:14] <aho> (and opengl 2.1+ drivers)
+[11:15] <felixge> mine is fairly recent (1-2 weeks ago?)
+[11:15] <felixge> where do I get opengl 2.1+ drivers?
+[11:15] <felixge> 4.0.287.0 (35420)
+[11:15] <aho> sorta recent graphics card + drivers
+[11:15] <aho> fits the bill... usually
+[11:15] <aho> you're out of luck with an intel thingy of course
+[11:16] <felixge> I'm on OSX
+[11:16] <aho> i mean gma and the like
+[11:16] <felixge> NVIDIA GeForce 9600M GT
+[11:16] <felixge> ok
+[11:16] <aho> well, with osx you usually have pretty good opengl support
+[11:17] <aho> (it's used by the operating system after all)
+[11:17] <spoob> felix; start your chrome with chrome.exe --enable-webgl --no-sandbox
+[11:18] <spoob> then try the examples
+[11:19] <aho> looks like your card supports opengl up to 3.2
+[11:19] <aho> should work fine
+[11:19] <aho> http://www.iquilezles.org/apps/shadertoy/
+[11:19] <aho> (:
+[11:21] <spoob> I expect that WebGL will just completely replace Flash altogether
+[11:22] <spoob> Google do have O3D with a more impressive Beach demo, however that is a plugin and plugins is a kiss of death
+[11:22] <spoob> so the main point of WebGL is that it isn't a plugin
+[11:22] eviltwin has joined the channel
+[11:22] <aho> o3d is a completely different approach
+[11:22] <aho> it's a scene graph thingy
+[11:23] <aho> whereas webgl is very low level
+[11:23] <spoob> aho' on the webg mailing list, I suggested adding vertex shaders. The google/mozilla guys didnt like it, apple did
+[11:23] <spoob> conclusion was "webgl is a bridge to opengl es 2.0, when ES has it then WebGL will have it"
+[11:24] <aho> pow!
+[11:25] <spoob> sorry, it does have vertex and fragment shaders. I meant to say that I suggested geometry shaders
+[11:25] <aho> ah... got confused me there for a bit :>
+[11:25] <aho> since i already used vs/fs stuff
+[11:25] <aho> <:
+[11:26] <spoob> anyway, i reckon WebGL = "big badda boom" and it will blow everything else out of the water. it's quiet at the moment, not many seem to know about it, but it is inevitable
+[11:27] <aho> ye, first webgl games running on the first stable builds of firefox with webgl support will surely have a big impact
+[11:28] <aho> even more so if they use a few fancy shaders
+[11:28] <aho> flash cant do that :)
+[11:28] <spoob> yeah, that glge demo is done in Blender, saved and run.
+[11:28] <aho> :o
+[11:29] <aho> well, gotta go to work now. sorry guys for the channel hijacking :>
+[11:29] <aho> later spoob
+[11:29] <spoob> cya :)
+[11:32] <_Ray_> Why could I be getting "Content-Type header not set" with the line "stream = new multipart.Stream(request);", where request is the first param of the callback of createServer? The request is a form submission, and I do see the "Content-Type" header being sent...
+[11:47] <_Ray_> nvm, I'm dumb :p
+[12:12] hassox_ has joined the channel
+[12:13] hornbeck has joined the channel
+[12:21] <felixge> _Ray_: let me know if you still need help : )
+[12:21] <felixge> multipart is my baby so I want to improve any problems there might be with it
+[12:22] <_Ray_> Well, I'm having some trouble getting chunked requests to work, but it's likely just me being dumb
+[12:33] <_Ray_> felixge, does this output look familiar? http://pastebin.com/d31973913
+[12:34] <_Ray_> (Where I never write "la" or "f")
+[12:34] <felixge> _Ray_: looks weird
+[12:34] <felixge> so does 'multipart/x-mixed-replace'
+[12:34] <felixge> where do you invoke the upload from?
+[12:34] <_Ray_> A form on another page
+[12:35] <felixge> what browser?
+[12:35] <_Ray_> FF 3.5.7
+[12:36] <felixge> this should really be 'multipart\/form-data'
+[12:36] <felixge> any idea why its x-mixed-replace?
+[12:36] <felixge> do you use the right enctype ?
+[12:37] <_Ray_> That's the response I'm sending though
+[12:37] <felixge> (the f and the 1a are nothing to worry about I just realized, this is just Transfer-Encoding: chunked at work)
+[12:37] <_Ray_> (Comet, using chunked requests with x-mixed-replace)
+[12:37] <felixge> _Ray_: oh
+[12:37] <felixge> so this has nothing to do with the multipart module
+[12:38] <felixge> its a response you're sending?
+[12:38] <_Ray_> indeed
+[12:38] <felixge> ah
+[12:38] <felixge> well in that case your client does not parse the chunked data
+[12:38] <felixge> you might want to try specifying the 'Content-Length' header
+[12:38] alex-desktop has joined the channel
+[12:38] <felixge> oh wait, you can't with comet
+[12:38] <felixge> not sure what to tell you
+[12:38] <felixge> x-browser comet is hard
+[12:38] <felixge> ;)
+[12:39] <_Ray_> :p :p
+[12:41] <_Ray_> http://pastie.org/773464 <-- that's what I'm using as a response. I send the header once, and then those 4 lines every time I want to re-send progress
+[12:44] felixge_ has joined the channel
+[12:49] <_Ray_> Seems it just sends random characters..."3b", "33"...
+[13:00] _Ray_ has joined the channel
+[13:18] bryanl has joined the channel
+[13:21] bryanl has joined the channel
+[13:55] kriszyp has joined the channel
+[13:58] voodootikigod has joined the channel
+[14:11] charlenopires has joined the channel
+[14:27] Booster has joined the channel
+[14:29] pmuellr has joined the channel
+[14:29] Booster has joined the channel
+[14:30] johan-s has joined the channel
+[14:32] eviltwin has joined the channel
+[14:39] inkubus08 has joined the channel
+[14:52] cloudhead has joined the channel
+[15:16] r11t has joined the channel
+[15:33] brandon_beacher has joined the channel
+[15:45] aurynn has joined the channel
+[15:47] Booster has joined the channel
+[15:47] Booster has joined the channel
+[15:49] binary42 has joined the channel
+[15:51] dnolen has joined the channel
+[15:52] soveran has joined the channel
+[15:55] wil has joined the channel
+[16:06] bryanl has joined the channel
+[16:10] Yuffster has joined the channel
+[16:13] charlenopires has joined the channel
+[16:15] jed_ has joined the channel
+[16:24] brianm has joined the channel
+[16:32] martint-t has joined the channel
+[16:35] martint-t has left the channel
+[16:46] brianm has joined the channel
+[16:53] bentomas has joined the channel
+[17:01] inkubus08_ has joined the channel
+[17:03] jed has joined the channel
+[17:12] hober has joined the channel
+[17:14] scudco has joined the channel
+[17:23] RayMorgan has joined the channel
+[17:26] mies has joined the channel
+[17:26] rektide has joined the channel
+[17:33] aguynamedben has joined the channel
+[17:35] markwubben has joined the channel
+[17:49] eddanger has joined the channel
+[17:56] scudco has joined the channel
+[17:59] RayMorgan_ has joined the channel
+[18:00] stephenlb has joined the channel
+[18:11] RayMorgan__ has joined the channel
+[18:14] jed has joined the channel
+[18:22] fictorial has joined the channel
+[18:25] isaacs has joined the channel
+[18:28] ericflo has joined the channel
+[18:35] rictic has joined the channel
+[18:38] rictic has joined the channel
+[18:50] around has joined the channel
+[18:51] <around> hello
+[18:52] <around> WebSockets
+[18:54] kriszyp_ has joined the channel
+[19:00] bentomas has left the channel
+[19:00] bentomas has joined the channel
+[19:10] dnolen has joined the channel
+[19:16] mikeal has joined the channel
+[19:19] DamZ has joined the channel
+[19:20] sudoer has joined the channel
+[19:26] _Ray_ has joined the channel
+[19:28] eviltwin has joined the channel
+[19:31] sudoer has joined the channel
+[19:33] <_Ray_> Is there some way to stop node.js from sending a "Content-Encoding: chunked" response?
+[19:34] <deanlandolt> _Ray_: provide a content-length, most likely
+[19:34] <_Ray_> Well, I'm using multipart/x-mixed-replace, I don't think I can have a content length there
+[19:36] <deanlandolt> that's interesting...i wonder if node already provides some kind of escape hatch -- if it doesn't it may need to for that use case
+[19:37] <around> very cool
+[19:38] <deanlandolt> _Ray_: what about the chunked header breaks you? is it because you're in http 1.0 land?
+[19:39] <_Ray_> it's sending its own separators (the length of the chunk precedes the chunk) instead of my own (the delimiter I choose)
+[19:40] taf2 has joined the channel
+[19:40] <taf2> anyone using monit to monitor node?
+[19:42] <ashb> _Ray_: got a reference to multipart/x-mixed-replace, i've not head of that content type before
+[19:43] <deanlandolt> ashb: it's streaming video, /old school/ ...how old web cam streams worked iirc
+[19:43] <ashb> ah
+[19:43] <_Ray_> it's used to implement comet applications - a long request that sends pieces back, with readystatechange firing every time a new piece arrives. it's known as "push", "comet", etc. http://en.wikipedia.org/wiki/Comet_(programming)
+[19:43] <deanlandolt> for each part, replace the last part -- so you can push constantly changing jpegs down the pipe
+[19:44] <ashb> ah
+[19:44] <deanlandolt> _Ray_: that's what's used for push comet?
+[19:45] <isaacs> _Ray_: i was thinking about your progress bar thing.  can't the comet pusher just send a json object containing a bit of data and the amount that's finished or something?
+[19:45] <isaacs> or is it supposed to be downloading a file?
+[19:45] <_Ray_> deanladolt, indeed
+[19:46] <_Ray_> isaacs, it is (even more basic - just the number)
+[19:46] <isaacs> oh, ok
+[19:46] <isaacs> then just do the status bar client-sid
+[19:46] <isaacs> e
+[19:46] <_Ray_> yeah
+[19:47] <_Ray_> problem is that the comet request during the upload isn't working, and I'm thinking it's because of the chunked transfer 
+[19:47] jamiew has joined the channel
+[19:47] <isaacs> aha, i see
+[19:48] aho has joined the channel
+[19:49] <_Ray_> hm, seems providing my own transfer-encoding might do it :)
+[19:54] jed has joined the channel
+[20:01] technoweenie has joined the channel
+[20:05] RayMorgan has joined the channel
+[20:24] <_Ray_> Are requires synchronous?
+[20:24] <deanlandolt> _Ray_: yes
+[20:25] <deanlandolt> does anyone know if node has require.async yet?
+[20:27] <sztanpet> doesnt the docs say?
+[20:29] <technoweenie> i found spots where the docs were outdated from the source
+[20:30] mikeal has joined the channel
+[20:30] <bentomas> require is actually just require.async('..').wait();
+[20:30] <bentomas> so, it already has it, yes
+[20:31] <technoweenie> oh cool
+[20:31] <bentomas> and don't get too attached to the synchronous version, Ryan is think about removing that wait() function completely from Node
+[20:31] <aho> isn't an async require... sorta... weird?
+[20:32] <aho> oh... the libs aren't loaded yet. let's calculate pi! :>
+[20:33] <bentomas> you don't always load your external libraries at the beginning of a script. 
+[20:34] sudoer has joined the channel
+[20:34] <bentomas> And as far as I know, ryan's goal is to force async as much as possible so you can always depend on the scripts your using being asynchronous.  
+[20:34] eviltwin has joined the channel
+[20:38] <_Ray_> Hrm. Seems fast calls to the same require cause me to get a {} for the second one, instead of an actual object.
+[20:40] pmuellr_ has joined the channel
+[20:40] inkubus has joined the channel
+[20:40] <RayMorgan> require will still be sync
+[20:40] inkubus08__ has joined the channel
+[20:42] <RayMorgan> there will be sync file system i/o, but it is discouraged and you will have to choose it.. posix.readSync vs posix.read.
+[20:44] <RayMorgan> There are times when used properly that sync file i/o is much faster than async, such as a very commonly accessed file that will be cached by the OS. The overhead of sending the i/o to the thread pool and back overweighs the actual i/o itself
+[20:45] <RayMorgan> at least stating a commonly accessed file
+[20:56] <_Ray_> Well, if a require() on a file is happening, and another require() comes for the same file, the require will return {} and not the object.
+[21:03] hassox has joined the channel
+[21:04] <hassox> Good morning
+[21:04] <technoweenie> hey hassox
+[21:04] charlenopires has joined the channel
+[21:04] <hassox> Hey man
+[21:04] <technoweenie> are you still at EY?
+[21:04] <hassox> Hiw are you?
+[21:04] <hassox> No
+[21:05] <hassox> Haven't been for quite a while
+[21:05] <technoweenie> ah ok :)
+[21:05] <technoweenie> well we havent talked for even longer heh
+[21:05] <hassox> I'm working for a company in Melbourne
+[21:05] <hassox> Yeah it's been a while 
+[21:05] <hassox> Everything going well?
+[21:05] <technoweenie> yep
+[21:05] <hassox> :)
+[21:05] <technoweenie> you?
+[21:06] <technoweenie> just started playing with node.js on friday, it's fun, like the wild west or something
+[21:06] <hassox> Yeah pretty good
+[21:06] <hassox> Yeah I saw ur tweet ;)
+[21:07] <hassox> Hopefully some conventions will emerge soon
+[21:07] <technoweenie> i'm gonna get in there with an auth lib 
+[21:08] <bentomas> technoweenie: what kind of auth lib?  oath?  
+[21:08] <hassox> :)
+[21:08] <technoweenie> no i'm kidding.  when i started playing w/ ruby i came out with a massively popular but shitty auth lib that hassox ended up rewriting in a different ruby framework
+[21:08] <bentomas> what was it called?
+[21:08] <hassox> ACTION is trying to get something to build on
+[21:09] <hassox> technoweenie: I learnt so much from that too :)
+[21:09] <hassox> You rock man!
+[21:09] <technoweenie> bentomas: login_generator => acts_as_authenticated => restful-authentication
+[21:09] <bentomas> ahh!
+[21:09] <bentomas> never used it, sorry!
+[21:09] <technoweenie> it went through several phases, i took over maintenance on login_generator, it wasnt mine to begin with
+[21:10] <hassox> technoweenie: Did you write all of them?
+[21:10] <technoweenie> bentomas: yea ha, it's not great but it was all there was for awhile
+[21:10] <bentomas> hassox: did you rewrite it for Merb?
+[21:10] <hassox> I used all of those at one point or another
+[21:10] <hassox> Yeah
+[21:10] <technoweenie> still #4 on github: http://github.com/popular/watched
+[21:10] <technoweenie> ha authlogic finally passed it up
+[21:11] <hassox> What's ur thoughts on logos asynchronous framework technoweenie ?
+[21:11] <hassox> Lifo's
+[21:11] <technoweenie> havent seen it
+[21:12] <technoweenie> oh crack or whatver
+[21:12] <technoweenie> crump 
+[21:12] <technoweenie> cramp!
+[21:12] <hassox> Yeah that's it
+[21:12] <technoweenie> yea looks cool. just a shim over event machine i guess
+[21:12] <hassox> ACTION is on the phone so I can't leave irc
+[21:12] <technoweenie> i dont know if i'll stick w/ node.js.  i feel so awkward in it
+[21:12] <hassox> Same
+[21:13] <technoweenie> its the whole 'there are no libraries for it!' thing
+[21:13] <technoweenie> spent years building up my ruby toolkit
+[21:13] <hassox> Yeah
+[21:13] <technoweenie> now we're the old guys
+[21:13] <technoweenie> or something
+[21:13] <hassox> There is work going on on a packaging system
+[21:13] <hassox> Haha
+[21:13] <technoweenie> cool
+[21:14] <technoweenie> kiwi?
+[21:14] <technoweenie> are you working with tj?  
+[21:14] <technoweenie> visionmedia or something
+[21:14] <hassox> As part of commonja
+[21:14] <hassox> Commonja
+[21:14] <hassox> Js
+[21:14] <technoweenie> ah ok
+[21:14] <hassox> Stupiid auto correct
+[21:14] <technoweenie> yea i started thinking of rewriting gems in js
+[21:14] <technoweenie> but i'm not a huge fan of gems
+[21:14] <hassox> Package.js is it I think
+[21:15] <technoweenie> boring name!
+[21:15] <hassox> Not sure if there's a node impl yet
+[21:15] <hassox> Yeah
+[21:15] <hassox> ;)
+[21:15] <technoweenie> but the existing node.js libs have no structure.  i've been trying to enforce something in my libs
+[21:15] <mikeal> has anyone written a nice little helper library around processing command line arguments?
+[21:15] <hassox> What's that?
+[21:15] <mikeal> using process.ARGV by hand makes me feel like i'm in 1999
+[21:15] <bentomas> I ported Ruby's Trollop to node: http://github.com/bentomas/trollopjs
+[21:15] <technoweenie> hassox: lib/index.js which i symlink to ~/.node_libraries/foo
+[21:16] <technoweenie> http://github.com/technoweenie/wheres-waldo see the readme
+[21:16] <bentomas> (there are some bugs with the help message but other than that it works fine)
+[21:16] <hassox> K I'll have a look once I get my machine on
+[21:17] hassox has joined the channel
+[21:18] <hassox> ACTION looks now. Brb
+[21:19] <hassox> Hehe
+[21:23] <hassox> technoweenie: Does that work when the lib requires relative files?
+[21:25] <technoweenie> yea you can do ./whatever
+[21:26] <hassox> Cool :)
+[21:26] <technoweenie> though i should probably have dirs like lib/wheres-waldo/index.js  i havent decided yet
+[21:26] <technoweenie> i like the concept of index files though
+[21:27] <hassox> Sounds reasonable
+[21:28] jamiew has joined the channel
+[21:59] hassox has joined the channel
+[22:05] charlenopires has joined the channel
+[22:07] jed has joined the channel
+[22:11] DamZ has joined the channel
+[22:21] hassox has joined the channel
+[22:27] grantmichaels has joined the channel
+[22:28] hassox_ has joined the channel
+[22:29] bryanl has joined the channel
+[22:32] hassox_ has left the channel
+[22:50] gwoo has joined the channel
+[23:02] mikeal has joined the channel
+[23:13] <_Ray_> Hrmph. I can sendBody() as many times as I want in a request, until such a time when I call .finish(), correct?
+[23:16] <jed> _Ray_: in a response, true.
+[23:24] <inimino> I started a little module for File I/O and streaming
+[23:24] <inimino> please try it: http://inimino.org/~inimino/blog/fileio_first_release
+[23:24] <inimino> I want feedback on the API in particular, if anyone else thinks this is a direction worth pursuing
+[23:35] rtomayko has joined the channel
+[23:38] <_Ray_> Hrmph. It seems that after the second sendBody(), it's sending a RST... odd...
+[23:38] felixge has joined the channel
+[23:53] gwoo_ has joined the channel
+[23:59] kriszyp has joined the channel

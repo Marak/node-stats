@@ -1,0 +1,511 @@
+[00:07] grantmichaels has joined the channel
+[00:54] tlrobinson1 has joined the channel
+[00:57] rictic has joined the channel
+[01:11] inkubus08 has joined the channel
+[01:15] elliottcable: Is there any way to reach the path module? Ugh!
+[01:15] inimino: elliottcable: require("path")
+[01:16] elliottcable: really? o_O
+[01:16] elliottcable: is there a file somewhere?
+[01:16] elliottcable: or does it do some magic in the case of that specific string?
+[01:19] inimino: it's a built-in module
+[01:19] Pilate: have you not read the documentation at all?
+[01:19] inimino: like, uh, "http" and some others
+[01:21] elliottcable: Pilate: o_O wat?
+[01:21] elliottcable: Pilate: not recently, I’ve been around since before there *was* documentation <,<
+[01:21] elliottcable: inimino: yeah, but there’s http.js
+[01:22] elliottcable: inimino: and so on and so forth; there’s no path.js, wtf is getting it in there?
+[01:22] elliottcable: ACTION shrugs
+[01:22] elliottcable: irrelevant I suppose
+[01:22] inimino: it's in node.js
+[01:22] elliottcable: Yeah, I knew that; that’s why I was asking how to get to it
+[01:23] sudoer has joined the channel
+[01:23] elliottcable: since there’s no file to require(), I didn’t realize `require("path")` would work
+[01:24] inimino: 668 var pathModule = createInternalModule("path", function (exports) {$
+[01:30] DamZ has joined the channel
+[01:31] isaacs has joined the channel
+[01:34] elliottcable: inimino: yeah
+[01:34] elliottcable: ryah: o7
+[01:35] ryah: elliottcable: hey
+[01:35] eddanger has joined the channel
+[01:36] elliottcable: ryah: busy as fuck, as per usual?
+[01:37] bryanl has joined the channel
+[01:37] ryah: elliottcable: vacation
+[01:37] elliottcable: ryah: really? thought you were done d-:
+[01:41] elliottcable: ACTION just found L803
+[01:41] elliottcable: was *not* aware we were caching modules, for some reason.
+[01:41] elliottcable: I thought require() just farmed out to process.compile every time
+[01:45] stephenlb: ACTION found it noticable that require() -> cache.
+[01:45] inimino: I've not written any code where it would matter
+[01:46] stephenlb: good way to go in the always situation.
+[01:47] orlandov: cache in what way?
+[01:47] orlandov: ACTION didn't know about caching
+[01:47] orlandov: ACTION probably doesn't know about a lot of things...
+[01:48] stephenlb: same here.
+[01:48] ryah: is caching good or bad?
+[01:48] isaacs: elliottcable: it's more accurately memoization, not caching
+[01:48] isaacs: it doesn't expire
+[01:48] isaacs: ryah: caching is good, imo
+[01:49] orlandov: i'm not sure i understand, what is is being memoized?
+[01:49] isaacs: it lets us solve a lot of circular require() issues a lot more easily
+[01:49] isaacs: orlandov: the exports object.
+[01:49] orlandov: ahhh
+[01:49] orlandov: OK
+[01:49] isaacs: and, along with it, the scopes it closes over, etc.
+[01:50] orlandov: gotcha
+[01:50] elliottcable: yeah, stephenlb, I haven’t run across it
+[01:50] isaacs: but, when you do require("foo"), it checks to see if there's a "foo" already, and hands you that.  and, since that exports obj might not be "done" yet, this means that we can handle cycles
+[01:50] elliottcable: stephenlb: I don’t write any code using require(); I wrote my own replacement early one, and exclusively use that
+[01:50] elliottcable: stephenlb: and it decidedly doesn’t cache/memoize
+[01:50] stephenlb: ryah: good.
+[01:51] stephenlb: elliottcable: nice.
+[01:52] elliottcable: stephenlb: github.com/elliottcable/poopy.js/blob/new-acquire/lib/from.js
+[01:52] inimino: apart from the circular dependency case, I don't think caching matters
+[01:53] elliottcable: it’s only a problem in the rare case where somebody modifies the file from the runtime
+[01:53] elliottcable: which would be … wtf
+[01:53] orlandov: yar
+[01:53] orlandov: maybe would matter if you were dynamically reloading or something funky
+[01:53] inimino: sure
+[01:53] inimino: you have to make sure it doesn't happen in that case
+[01:54] orlandov: yeah... and that's quite the edge case
+[01:54] inimino: isaacs is doing that IIRC
+[01:55] isaacs: wait, what am i doin now?
+[01:55] isaacs: felix (the_undefined) is doing require.hot() which bypasses the cache, i believe
+[01:56] isaacs: inimino: caching also matters for speed
+[01:56] orlandov: wouldn't it just be startup time? or does it affect lookups and such?
+[01:57] isaacs: orlandov: depends on how you structure your code, i suppose
+[01:57] isaacs: but, if you're doing something where you're using require() at request-time, you'd better hope it's memoized.
+[01:57] inimino: isaacs: well, that was what I meant specifically, I don't think the performance impact would be relevant in non-pathological cases
+[01:57] orlandov: heh
+[01:57] orlandov: for sure
+[01:57] inimino: isaacs: you're right, sorry, it was felix
+[01:58] isaacs: of course, i've found it's better to do all your require()ing at the top of each module just for sanity anyhow.
+[01:58] isaacs: but it's a style issue
+[01:58] inimino: I guess people using the require("foo").bar() style a lot would care :-)
+[01:58] inimino: yes, quite
+[01:59] orlandov: conceivably if you were loading some huge thing it might make sense to lazy load it, but again thats another edge case
+[01:59] isaacs: i must admit, i do sometimes sprinkle a bit of require("sys").debug("blah") in my code sometimes
+[02:00] isaacs: but anyway, the memo store is not typically very big, and ensures that require("foo") always refers to the same thing.
+[02:00] inimino: well, certainly there's nothing wrong with making your debugging statements slow (unless you have a timing issue...)
+[02:01] isaacs: i'm so very disappointed with myself.  when i wrote that ejs parser, i forgot about comments.
+[02:01] orlandov: oops
+[02:01] isaacs:  /* %> */ will screw it up
+[02:02] isaacs: but, to be fair, /* </script> */ is traditionally problematic.
+[02:02] isaacs: so it's a bug that honors our hallowed traditions, i suppose.
+[02:03] inimino: speaking of hallowed traditions, people can use it to work around bugs in your code in the future
+[02:03] inimino: just like IE :-)
+[02:03] isaacs: haha
+[02:07] ryah: anyone else getting  fails on test-tcp-many-clients.js
+[02:07] ryah: with HEAd?
+[02:07] inimino: hm...
+[02:08] inimino: I get a lot of address already in use errors in the HTTP tests
+[02:09] binary42 has joined the channel
+[02:09] inimino: can we standardize on a single port for those so I don't have to shutdown half the services on my machine to run the tests?
+[02:09] CIA-56: node: 03Ryan Dahl 07master * rfd73a3a 10/ (109 files in 11 dirs): Upgrade V8 to 2.0.5.4 - http://bit.ly/8MH5Pl
+[02:09] CIA-56: node: 03Ryan Dahl 07master * r2c016ba 10/ Makefile : 
+[02:09] CIA-56: node: 'make distclean' should not call 'waf clean'
+[02:09] CIA-56: node: Because if configure hasn't been run, then an error is reported. - http://bit.ly/59FJh6
+[02:09] isaacs: ryah: fails for me
+[02:17] mikekelly has joined the channel
+[02:18] emehrkay has joined the channel
+[02:46] botanicus_ has joined the channel
+[02:46] tlrobinson1 has joined the channel
+[02:50] isaacs: holy moly people sure do have opinions about urls.
+[02:53] inimino: hehe
+[02:53] mikeal has joined the channel
+[02:54] inimino: ACTION fires up email client
+[02:54] inimino: am I still the last one to reply to that thread?
+[02:59] isaacs: inimino: yeah, you've got the tail of it so far
+[03:00] inimino: ok
+[03:03] soveran has joined the channel
+[03:03] tlrobinson1 has joined the channel
+[03:08] voodootikigod has joined the channel
+[03:16] isaacs: ryah: yt?
+[03:18] mahemoff has joined the channel
+[03:22] joshthecoder has joined the channel
+[03:27] isaacs: lolz:     // See https://www.google.com/reader/view/?tab=my#overview-page
+[03:31] micheil has joined the channel
+[03:33] bryanl has joined the channel
+[03:35] sudoer has joined the channel
+[03:35] inimino: isaacs: heh, yeah, that's been there a while too
+[03:36] isaacs: so, i'm looking through this code in http.js, and it looks like node_http.cc is spitting out events for each of the parts of the request uri
+[03:36] isaacs: then another one for the full url
+[03:36] isaacs: (which isn't really the url, since it doesn't have the hostname on it)
+[03:37] isaacs: but then, we're talking about parsing it in js instead, so why emit anything from the C except the full url?
+[03:37] jtoy has joined the channel
+[03:38] inimino: maybe the extra events are a parser implementation detail
+[03:38] isaacs: hm, maybe
+[03:39] isaacs: i'm tempted to say that http.js shouldn't provide any kind of parsing at all, and just let the user parse it with require("ursomething").parse()
+[03:40] isaacs: then what we currently have on req.uri.full would be req.uri
+[03:40] inimino: sounds good to me
+[03:41] voodootikigod has joined the channel
+[03:41] isaacs: k, i'm gonna start doing that, and add some tests for it, and respond to the list when i've got actual working code.
+[03:41] isaacs: i'm gonna be in monterey with the gf at a b&b for the next few days, though, so after tonight, not much is getting done.
+[03:41] isaacs: such a hard life
+[03:42] inimino: hehe
+[03:44] isaacs: whoa, curl actually sends the fragment
+[03:44] isaacs: how very odd of it.
+[03:47] inimino: curl is pretty low-level
+[03:49] rictic has joined the channel
+[03:51] ryah: isaacs: hey
+[03:51] isaacs: hey, so, i wanted to run this by you...
+[03:52] ryah: okay
+[03:52] isaacs: what if we yank out all the UR[IL] parsing stuff from http.js, just provide what is now incoming.uri.full, and let the user parse it if they want?
+[03:52] jacobolus has joined the channel
+[03:53] isaacs: it might even be nice to attach the "host" header and protocol to the thing, so that you'd have what the user actually requested.
+[03:54] isaacs: otoh, if you just care about the path, then today you don't have to do anything to get that, whereas you'd have to do require("url").parse(req.url).path to get at it
+[03:55] ryah: isaacs: yeah that's sounds good to me
+[03:55] ryah: i'd like to be able to avoid using the regular expression
+[03:55] ryah: perhaps i have some cool switch() path parser
+[03:55] isaacs: cool.  also, the url module that i yanked from narwhal is (imo) way too big.
+[03:55] isaacs: too featureful
+[03:56] ryah: good
+[03:56] ryah: yes, i hate features
+[03:56] isaacs: no one cares about authorityRoot and all that crazines
+[03:56] isaacs: s
+[03:56] ryah: so, can we have req.url <-- string
+[03:56] isaacs: ye3ah
+[03:56] isaacs: and you can do with it whatever you want.
+[03:56] inimino: excellent
+[03:57] ryah: require("url").parse(req.url).params
+[03:57] ryah: or whatever
+[03:57] isaacs: right
+[03:57] ryah: will help the "hello world" http bench to not run that extra regexp
+[03:57] isaacs: i also have a very well-tested querystring module, so we can pull out the params collection from http.js
+[03:58] ryah: okay. so i want to use "url" everywhere, not "uri". is that okay?
+[03:58] isaacs: i have no opinion about that.
+[03:58] ryah: as long as we're making api changes, might as well slip that in
+[03:58] isaacs: if we're going to be concerned with uniform resource locators, then that's fine.
+[03:58] inimino: given that it came from an HTTP request, it's guaranteed to be a URL
+[03:58] isaacs: of course, if you know the location of something, then that's also an identifier.l
+[03:59] isaacs: but anyway, yeah, i'd like to simplify the module down so that it really isnt' trying to do everything under the rfc.
+[03:59] ryah: it would be nice to eventually merge "path" and "url"
+[03:59] ryah: but i don't think we need to force that now
+[04:00] isaacs: kk
+[04:00] inimino: s/guaranteed to be/clearly being used as/
+[04:05] isaacs: ryah: how would you feel about adding the hostname to the req.url?
+[04:05] isaacs: so it'd be http://example.com/foo/bar?baz instead of just /foo/bar?baz
+[04:06] ryah: isaacs: if it exists in the req, then yes, otherwise no
+[04:06] isaacs: no, it'd be sugar
+[04:06] ryah: in general you don't know what domain name they are accessing
+[04:06] isaacs: right
+[04:06] isaacs: unless they send a host header
+[04:07] ryah: ah - um....
+[04:07] isaacs: or do you mean, unless it's in the req, as in "unless it's sent as a header"
+[04:07] ryah: is that good somehow?
+[04:07] ryah: to have the host in there?
+[04:08] isaacs: well, it's handy if you want to construct urls that redirect back to the current page.
+[04:08] isaacs: http://login.site.com/do/login?.done=http://example.com/some/page
+[04:08] isaacs: ACTION works at yahoo, and has constructed urls like this in php like a bajillion times
+[04:08] ryah: could we just have require("url").parseRequest(req) take into account the host header?
+[04:09] isaacs: hm.  that could work.
+[04:09] isaacs: so parse() takes a string, and does what it can, but parseRequest() takes a request object and then scans headers and whatnot too
+[04:10] ryah: my thought is that i'd like the req object to be as close to the actual protocol-level request as possible
+[04:10] isaacs: both return an object that can be format()ed back to a string, etc.
+[04:10] isaacs: ok, that works.
+[04:10] ryah: if we add the host header to the req, then users won't know if the host wasn't included in the request-line
+[04:11] isaacs: right
+[04:11] ryah: (not that anyone actually woud want to know that)
+[04:12] isaacs: well, ya never know
+[04:12] ryah: shrug
+[04:12] ryah: either way.. my gut reaction is to let the url module do it
+[04:12] isaacs: if you keep node itslef close to the metal, then that means that frameworks and libs can make that choice in different ways, and figure out what works best.
+[04:12] ryah: yeah
+[04:15] scudco has joined the channel
+[04:15] isaacs: k, i should have a patch for you saturdayish
+[04:16] ryah: rad
+[04:22] RayMorgan has joined the channel
+[04:25] eddanger has joined the channel
+[04:33] jasonwang has joined the channel
+[04:34] isaacs: ryah: what's the standard for deprecating stuff?  just send a warning to process.stdio.writeError, or throw an actual Error?
+[04:44] fictorial has joined the channel
+[05:23] tlrobinson1:  isaacs require("node").deprecated(foo) ;)
+[05:24] micheil has joined the channel
+[05:24] isaacs: tlrobinson: there is no such module, silly.
+[05:26] tlrobinson1: isaacs: was that question inspired by my last commit?
+[05:26] isaacs: tlrobinson1: no, i'm actually working on a module that will deprecate another
+[05:26] isaacs: so i need to put messages in the uri module saying that it's dying.
+[05:27] isaacs: and around the parseQueryString thing in http.js
+[05:27] tlrobinson1: oh, well i just did this a couple hours ago http://github.com/280north/narwhal/commit/fceee651701e5c96a9baa4fbc46fb07f33eef2c7
+[05:27] isaacs: nice
+[05:28] tlrobinson1: perhaps we should standardize it
+[05:28] isaacs: yeah, i've got a branch kicking around with some fancier debuggery for node.
+[05:28] tlrobinson1: (with a different module name of course, maybe "debug")
+[05:28] isaacs: it'd be cool to be able to enable/disable certain types of errors, or make them throw, etc.
+[05:28] tlrobinson1: yeah
+[05:28] isaacs: then you could throw it into strict mode for development, and then put it into "ignore all warnings and go as fast as possible" for production
+[05:29] tlrobinson1: yeah
+[05:30] jacobolu_ has joined the channel
+[05:31] tlrobinson1: what about something like Function.prototype.deprecate = function() { var fn = this; return function() { /*print deprecation warning or throw*/ return fn.apply(this, arguments); }; }
+[05:31] tlrobinson1: exports.foo = (function() { …}).deprecate()
+[05:31] tlrobinson1: in "fast" mode it could return "this" instead of the wrapper
+[05:32] gwoo_ has joined the channel
+[05:43] inimino: nice idea
+[05:43] gwoo has joined the channel
+[05:45] inimino: but probably a little overkill
+[05:47] scudco has joined the channel
+[05:47] binary42 has joined the channel
+[05:49] isaacs: tlrobinson: i agree with inimino 
+[05:50] isaacs: it's clever, but meh.
+[05:56] ryah: isaacs: look at the beginning of src/node.js
+[05:56] ryah: isaacs: something like that
+[05:56] isaacs: ryah: ok, so throw errors.
+[05:57] isaacs: kewl.
+[05:57] isaacs: tlrobinson: it'd be nice to be able to have conditional stuff for errors, warnings, info, debug, like that thing php has that i can't remember the name for
+[05:57] isaacs: but without the function call overhead when you turn it off.
+[05:58] isaacs: php does it with magic comments, which is of course the ugliest way possible, which is why php does it that way.
+[05:59] isaacs: ryah: you know, we could do that with __defineGetter__ so that it throws if you even look at it.
+[05:59] isaacs: although, then JSON.stringify() throws an error...
+[06:00] isaacs: tlrobinson: dopt, it's called.
+[06:01] isaacs: oops, i'm told that dopt is just a yahoo thing.
+[06:09] ryah: isaacs: shrug - if it's necessary to inform the use about the new API
+[06:11] jasonwang: so req.uri is gone?
+[06:15] ryah: will be going
+[06:17] joshthecoder has joined the channel
+[06:17] jasonwang: ok, loll, hopefully a new doc will be up before the thing is gone so i can learn the new way to do things
+[06:28] tlrobinson1 has joined the channel
+[06:31] jacobolus has joined the channel
+[06:32] eddanger has left the channel
+[06:37] gwoo_ has joined the channel
+[06:39] mikeal has joined the channel
+[06:50] soveran has joined the channel
+[06:59] sudoer has joined the channel
+[07:28] isaacs: jasonwang: yeah, i'll update the docs
+[07:28] isaacs: and the example code and whatnot
+[07:50] sveisvei_a has joined the channel
+[07:56] jed has joined the channel
+[08:01] mikeal has joined the channel
+[08:17] Pilate has joined the channel
+[08:41] JoePeck has joined the channel
+[09:24] qFox has joined the channel
+[09:58] eviltwin has joined the channel
+[10:08] felixge has joined the channel
+[10:09] DamZ has joined the channel
+[10:09] spoob has joined the channel
+[10:27] stephenlb: /qyuit/
+[10:41] micheil has joined the channel
+[10:56] cloudhead has joined the channel
+[10:58] micheil has joined the channel
+[10:59] DamZ has joined the channel
+[11:24] mahemoff has joined the channel
+[11:29] micheil has joined the channel
+[11:33] botanicus_ has joined the channel
+[11:34] felixge_ has joined the channel
+[12:08] pjb3 has joined the channel
+[12:13] spoob has joined the channel
+[12:28] bryanl has joined the channel
+[12:31] teemow has joined the channel
+[12:32] felixge_: anybody having problems building HEAD on Linux?
+[12:35] cloudhead: is there a simple way I can do a process.mixin without modifying the target?
+[12:37] sztanpet: but process.mixin is there for that very purpose, so no, you probably want to simply assign the module to a variable
+[12:38] cloudhead: sztanpet: I'm not using it for modules
+[12:38] cloudhead: I just want to merge two objects together, without modifying them
+[12:39] micheil has joined the channel
+[12:39] sztanpet: process.mixin can do a deep copy
+[12:39] inimino: felixge_: yes
+[12:39] felixge_: inimino: k. Seems to be the v8 update
+[12:39] felixge_: it builds on OSX, but not Linux
+[12:40] felixge_: if I remove the v8 update commit I can compile head
+[12:40] spoob: ah, inimino the Haskell programmer. :)
+[12:40] inimino: felixge_: yeah I think it may have lost the patch it had before to the build system
+[12:40] sztanpet: cloudhead http://nodejs.org/api.html#_the_tt_process_tt_object
+[12:40] felixge_: inimino: what patch?
+[12:41] mediacoder: felixge_ inimino HEAD works for me tho
+[12:41] felixge_: mediacoder: after 'make distclean' ?
+[12:41] inimino: felixge_: the one that lets v8 build with recent GCC
+[12:41] mediacoder: felixge_: yea
+[12:42] inimino: mediacoder, felixge_: gcc --version
+[12:42] felixge_: gcc (Ubuntu 4.4.1-4ubuntu8) 4.4.1
+[12:42] inimino: yep
+[12:42] cloudhead: sztanpet: yea I know, but that changes the objects
+[12:42] mediacoder: inimino:  gcc (GCC) 3.4.6 20060404 (Red Hat 3.4.6-11)  
+[12:42] inimino: 4.3.x was the last one that worked
+[12:42] sztanpet: not if you specify the target and deep options
+[12:42] inimino: mediacoder: wow, get with the times ;)
+[12:42] sztanpet: or at least it shouldnt
+[12:43] mediacoder: inimino: :-X
+[12:43] cloudhead: sztanpet: it sais it changes the target
+[12:43] felixge_: inimino: do you know where the patch is you are talking about? So we can send it to ryan?
+[12:43] sztanpet: so give it an empty object?
+[12:43] inimino: felixge_: search for -ferror in the V8 build tools, and get rid of it
+[12:43] cloudhead: so like process.mixin({}, a, b) ?
+[12:43] inimino: felixge_: ryan knows the patch I'm sure, he probably just forgot to apply it
+[12:44] cloudhead: will b merge on top of a?
+[12:44] felixge_: inimino: ok
+[12:45] felixge_: inimino: can't find any reference to '-ferror' in git log -p, anyway. Will just post to the mailing list, seems like it should be easy for ryan
+[12:45] inimino: erm
+[12:46] cloudhead: sztanpet: cool, that seems to be working
+[12:47] inimino: felixge_: it would be -Werror, but anyway, yeah
+[12:49] felixge_: fuck, chromium is buggy on OSX. Swallowed my form
+[12:49] felixge_: only trouble with this google stuff today
+[12:49] felixge_: :)
+[12:50] inimino: heh
+[12:54] felixge_: ok, reported the issue
+[13:08] botanicus_ has joined the channel
+[13:09] alex-desktop has joined the channel
+[13:14] kriszyp has joined the channel
+[13:28] Biscuits has joined the channel
+[14:12] micheil has joined the channel
+[14:26] JoePeck: ashb: decided against PEG in markdown-js ?
+[14:26] ashb: JoePeck: yeah. wasn't quite extensible enough
+[14:27] grantmichaels has joined the channel
+[14:27] ashb: (point 3 in the docs)
+[14:27] JoePeck: I hadn't heard of JsonML, I'm reading up on it now
+[14:27] ashb: its quite simple really
+[14:27] JoePeck: yah
+[14:27] ashb: tho it occurs to me that we escape at the wrong stage
+[14:28] ashb: ["div", "<foo>"] should be the html+JsonML
+[14:28] ashb: &lt; is a fact of the sgml/xml markup
+[14:28] JoePeck: hmm
+[14:29] ashb: yeah i'm not quite sure either
+[14:43] Booster has joined the channel
+[14:52] davidsklar has joined the channel
+[15:27] bengl: anyone know anyone who works at travelpod?
+[15:27] alexiskander has joined the channel
+[15:37] aguynamedben has joined the channel
+[15:58] binary42 has joined the channel
+[16:01] Booster has joined the channel
+[16:17] micheil has left the channel
+[16:19] bry has joined the channel
+[16:20] micheil has joined the channel
+[16:33] bryanl has joined the channel
+[16:38] logicuce has joined the channel
+[16:42] pjb3 has joined the channel
+[16:45] jcrosby has joined the channel
+[16:57] scudco has joined the channel
+[17:02] n8o has joined the channel
+[17:08] eddanger has joined the channel
+[17:28] elliottcable: o7 all
+[17:29] aguynamedben has joined the channel
+[17:42] rictic has joined the channel
+[17:42] sudoer has joined the channel
+[17:43] scudco1 has joined the channel
+[17:45] jamiew has joined the channel
+[17:56] ryah: davidsklar: thanks for the patch
+[17:56] davidsklar: ryah: n/p -- turns out OS X also supports some apple-only SO_NREAD option to getsockopt() to do the same thing but that seemed a little more hackish. 
+[17:57] davidsklar: (I am mostly a Linux person so this was an educational excursion into BSD-land)
+[17:57] ryah: davidsklar: is there a difference between SO_NREAD and FIONREAD?
+[17:57] davidsklar: from some limited testing I did, they reported the same results
+[17:58] davidsklar: one advantage of FIONREAD is that it should work on other platforms as well -- SO_NREAD is definitely os-x specific.
+[17:58] ryah: davidsklar: can you put your patch into a pastie or something - it's hard to extract it when pasted into email
+[17:58] davidsklar: sure, one sec.
+[17:59] ryah: cool - well hopefully with cross platform support i'll be able to do some nice optimizations on buffering
+[17:59] davidsklar: http://pastie.org/761501
+[17:59] ryah: what i'm doing now is pretty simple
+[17:59] ryah: thanks
+[18:00] davidsklar: i was thinking about trying to add sendmsg() support to enable passing fds between processes 
+[18:00] davidsklar: (use case is with a parent request dispatcher and child processes -- passing the socket down to the child would let it send an http response directly rather than flowing through the parent)
+[18:00] ryah: rad. i was going to put that off until net.js was merged
+[18:01] ryah: yeah, it's something i really want
+[18:01] ryah: html5 webworkers allow passing a "port" around
+[18:01] davidsklar: ah, interesting.
+[18:01] ryah: which if webworkers are processes, would be implemented with passing fds
+[18:02] ryah: so that's one major hold up for webworkers
+[18:02] davidsklar: http://lists.canonical.org/pipermail/kragen-hacks/2002-January/000292.html is a nice little example of doing it in C
+[18:09] CIA-56: node: 03Ryan Dahl 07net2 * r8330316 10/ src/node_net2.cc : Fix errors in getaddrinfo - http://bit.ly/6mfM8B
+[18:09] CIA-56: node: 03Ryan Dahl 07net2 * r1beb840 10/ wscript : Back to 64kb stack size - enlarging it was a typo - http://bit.ly/6dU0ni
+[18:09] CIA-56: node: 03Ryan Dahl 07net2 * r2582560 10/ (lib/net.js src/node_net2.cc test-net-server.js): [net2] Do hostname lookups in connect and listen - http://bit.ly/6NDmyV
+[18:09] CIA-56: node: 03Ryan Dahl 07net2 * r402755b 10/ (lib/net.js test-net-server.js): Add socket.address() - http://bit.ly/7uVlii
+[18:09] CIA-56: node: 03David Sklar 07net2 * rde9bfde 10/ (lib/net.js src/node_net2.cc): [net2] toRead() for non-linux (SIOCINQ -> FIONREAD) - http://bit.ly/75IOVU
+[18:20] tlrobinson1 has joined the channel
+[18:35] cloudhead: eyes.js — a value inspector for node: http://github.com/cloudhead/eyes.js
+[18:37] inimino: nice
+[18:37] ashb: cloudhead: an example of the output would be nice
+[18:37] ryanmcgrath has joined the channel
+[18:37] inimino: xterm screenshot
+[18:38] brado has joined the channel
+[18:38] ashb: http://github.com/einars/js-beautify might be of use to you too
+[18:39] cloudhead: yayaya working on it
+[18:39] cloudhead: hehe
+[18:40] inimino: http://boshi.inimino.org/3box/3box/util.js pp() still has one or two extra features over that stringify
+[18:43] CIA-56: node: 03Ryan Dahl 07net2 * r0d31e98 10/ (lib/net.js src/node_net2.cc): [net2] socket.setNoDelay - http://bit.ly/5LtsSy
+[18:44] cloudhead: inimino: nice, gonna steal a couple ideas ^__^
+[18:51] eddanger has joined the channel
+[18:57] cloudhead: argh. process.mixin mixes in the prototypes too
+[18:57] cloudhead: : /
+[18:57] elliottcable: cloudhead: o7
+[18:58] cloudhead: o7 elliottcable
+[18:58] elliottcable: woah, WTF does this even *mean*: http://cld.ly/20xfw
+[18:58] CIA-56: node: 03Ryan Dahl 07net2 * ra8ede8d 10/ (lib/net.js test/mjsunit/test-net-pingpong.js): [net2] port ping pong test - http://bit.ly/62sU3l
+[18:59] ryah: elliottcable: poopy.js:26 is using apply incorrectly
+[19:00] elliottcable: yeah
+[19:01] elliottcable: just recognized that
+[19:01] elliottcable: ryah: thanks for fixing my code for me, though d-:
+[19:03] mediacoder: opensource ftw
+[19:03] elliottcable: mediacoder: no kidding.
+[19:03] mediacoder: :-)
+[19:03] ashb: All tests successful
+[19:03] ashb: i love seeing that
+[19:03] brado has left the channel
+[19:14] shfx has joined the channel
+[19:15] tlrobinson has joined the channel
+[19:17] botanicus_ has joined the channel
+[19:27] felixge has joined the channel
+[19:31] CIA-56: node: 03Ryan Dahl 07net2 * r8d0f756 10/ (lib/net.js src/node_net2.cc test-net-server.js): [net2] delete unix sockfile on server start and shutdown - http://bit.ly/7Ls2hN
+[19:41] maritz has joined the channel
+[19:45] maritz: hey. anyone here who knows a thing about express? cause i'm trying some very simple things and the example app as well as my small testapp have a prolem where opera (ff not, haven't tested any other browsers yet) loads the page instantly but is stuck still showing the loading bar (and sandclock on the cursor) for over a minute.
+[19:51] CIA-56: node: 03Ryan Dahl 07net2 * r20eec64 10/ (3 files in 3 dirs): [net2] add unix server to ping-pong test - http://bit.ly/5TARRz
+[19:53] jdzp has joined the channel
+[20:00] logicuce has left the channel
+[20:25] isaacs has joined the channel
+[20:39] binary42 has joined the channel
+[20:41] JoePeck has joined the channel
+[20:50] jasonwang has joined the channel
+[20:55] jasonwang: maritz: i donno anything about express, but from my limited experience with node.js, that could happen if you did not output anything to the browser (did not use res.sendHeader()... res.finish())
+[20:55] jasonwang has left the channel
+[20:55] maritz: the browser does get a 200 code and the correct content (all of it)
+[20:55] jasonwang has joined the channel
+[20:55] maritz: checked that. seems all fine.
+[20:55] maritz: the browser does get a 200 code and the correct content (all of it)
+[20:55] inimino: maybe you have an encoding problem
+[20:56] jasonwang: mmm, then maybe try another browser? and yes, also need to send a charset option in your header after content type
+[20:56] maritz: no special characters sent as far as i can see. also: it's only in opera. ff and arora (only webkit browser i have right now :P) are fine.
+[20:57] jasonwang: loll, then it's probably a problem in opera
+[20:57] maritz: seems awkward though. never had anything like this with opera before
+[20:58] jasonwang: perhaps there is something else opera is expecting, take a look at any random page and see what kind of stuff is sent by them
+[20:58] CIA-56: node: 03Ryan Dahl 07master * r8fd46a3 10/ deps/v8/SConstruct : 
+[20:58] CIA-56: node: Kill -Werror in V8 for GCC 4.4.1 users.
+[20:58] CIA-56: node: http://code.google.com/p/v8/issues/detail?id=413 - http://bit.ly/6eqI9z
+[20:59] inimino: w00t
+[20:59] inimino: felixge: ↑
+[20:59] felixge: inimino: nice
+[21:00] inimino: maritz: got a URL?
+[21:02] maritz: mom, need to fix something i just broke. (well first find what i broke... -.- )
+[21:03] maritz: "Error: Success"  oh, how very helpful :D
+[21:03] inimino: hm, I've seen that before somewhere
+[21:03] felixge: ryah: wow, how far is net2 from merging?
+[21:07] ryah: felixge: still a week or two away
+[21:07] ryah: it's becoming usable though
+[21:08] felixge: nice
+[21:14] taf2: is something like embeddedjs.com/ something that one would use in nodejs ?
+[21:14] taf2: to generate files?
+[21:17] teemow has joined the channel
+[21:18] pjb3: Is there a node.js client for mongodb?
+[21:21] inkubus08 has joined the channel
+[21:22] taf2: ACTION must go,  but found his answer
+[21:24] cloudhea has joined the channel
+[21:29] joshthecoder: anyone know of any graphics binding for v8/node out there? sdl/ogre/etc ?
+[21:29] un0mi has joined the channel
+[21:29] maritz: ah, you've got to love it when you spend hours and hours on getting a new project and then realize that it's entirely pointless, since there is something that does exactly what you want to do. (thank god I only spend ~5 hours this time :D )
+[21:30] jasonwang: ?
+[21:30] jasonwang: joshthecoder: i think all of the public projects are on the github wiki
+[21:30] joshthecoder: jasonwang, ahh forgot to check there thanks
+[21:31] joshthecoder: I'd like to do a simple game experiment with v8, just don't want to roll my own bindings if the work is done already
+[21:38] brandon_beacher_ has joined the channel
+[21:41] jdzp has joined the channel
+[21:51] shfx has left the channel
+[22:02] jamiew has left the channel
+[22:22] taf2 has joined the channel
+[22:22] taf2: anyone have an example that makes an https request?
+[22:23] taf2: i see this discussion only: http://groups.google.com/group/nodejs/browse_thread/thread/1badb8413d367f2c/72185905f2360acf?show_docid=72185905f2360acf
+[22:23] felixge has joined the channel
+[22:40] botanicus_ has joined the channel
+[22:43] mikeal has joined the channel
+[22:53] DamZ has joined the channel
+[23:04] charlenopires has joined the channel
+[23:12] jasonwang has left the channel
+[23:12] jasonwang has joined the channel
+[23:16] rictic has joined the channel
+[23:22] maritz: just for those who are interested in the "solution" to my problem with opera: express had a bug with content length, which is fixed now thanks to the authors quick responses :)
+[23:24] charlenopires_ has joined the channel
+[23:45] binary42 has joined the channel
+[23:56] kriskowal has joined the channel

@@ -1,0 +1,1477 @@
+[00:02] <polyrhythmic> I mean that, it sounded like the wanted the function in the global scope already, unless I misunderstood the goal
+[00:02] towski has joined the channel
+[00:02] <polyrhythmic> *he
+[00:03] <broofa> Ha!  I've got a named function constructor! :)
+[00:03] <broofa> http://gist.github.com/359602
+[00:03] <broofa> Outputs …
+[00:03] <broofa> reader> node createNamedFunction.js 
+[00:03] <broofa> 7 Apr 17:01:08 - function fred(x,y) {return x*y}
+[00:03] <broofa> 7 Apr 17:01:08 - 110
+[00:04] <polyrhythmic> nice
+[00:04] <polyrhythmic> but in what scope does it create the fn?
+[00:04] <broofa> "umm… urrr… well…"  ;)
+[00:04] <polyrhythmic> ;)
+[00:04] <broofa> one sec
+[00:05] <broofa> pretty sure it's privately scoped to the createNamedFunction method.
+[00:05] <broofa> actually, technically, it's probably scoped to the 'builder' function inside that function.
+[00:05] <isaacs> broofa: it's not.  it's scoped to the global
+[00:05] <isaacs> Function ≠ eval
+[00:06] <broofa> builder() is invoked in scope of createNamedFunction
+[00:06] <broofa> easy enought to test. one sec.
+[00:06] <isaacs> try createNamedFunction("foo", "sys.puts(code)")
+[00:06] <isaacs> then call it
+[00:06] <isaacs> it'll blow up
+[00:07] <broofa> right, because 'code' is source code, not a string.
+[00:07] <broofa> that's to be expected.
+[00:07] <isaacs> it's not about where the function is invoked, it's about where it's compiled.
+[00:07] <isaacs> and the Function constructor compiles code *outside* the current activation stack
+[00:07] <isaacs> ie, it does not create a closure.
+[00:07] <isaacs> eval() does.
+[00:08] <isaacs> also,you know, you'd have better debuggability if you used process.compile instead, as then stack traces could show the name.
+[00:08] <broofa> sorry, isaac, it's defined in the scope of createNamedFunction.
+[00:08] <broofa> One sec, lemme update the gist
+[00:09] <broofa> gist updated.
+[00:09] <broofa> outputs: Fred defined globally? false
+[00:10] <broofa> (see first sys.log line)
+[00:10] <isaacs> oh, ok
+[00:11] <broofa> not surprising - new Function() really should inherit the current scope
+[00:11] <isaacs> i'm not talking about the scope of where the function object is created, though I'd argue that creating a global is a bad idea.
+[00:11] <isaacs> more this: http://gist.github.com/359608
+[00:11] <broofa> wait, what?  The only global this defines is the createNamedFunction function itself.
+[00:12] <broofa> one of us is confused… not sure who. :)
+[00:12] <broofa> oh, I think I see.
+[00:13] <broofa> 'code' isn't global - but it is inherited by the builder function, by virtue of both being created in the context of createNamedFunction.
+[00:15] <isaacs> what i'm saying is, the function you create doesn't have access to the scope in which you create it.
+[00:15] <isaacs> it's created in teh global scope.
+[00:15] <isaacs> furthermore, you leak your named function *into* the global scope.
+[00:15] <broofa> no, it's not.
+[00:15] <broofa> nothing is created in the global scope.  seriously.
+[00:15] <broofa> No.no.no.
+[00:16] <broofa> The only reason this ...
+[00:16] <broofa> createNamedFunction("test", "sys.puts('code')")();
+[00:16] <broofa> … outputs the code is because your executing the function that is created in the scope of createNamedFunction, where 'code' is defined.
+[00:16] <isaacs> oh, i see, because your builder isn't named, the function is.
+[00:16] <isaacs> and that's local to the builder.
+[00:16] <broofa> partially right.
+[00:17] <broofa> the name.vs.anonymous has nothing to do with it.
+[00:17] <isaacs> still: http://gist.github.com/359608 is more debuggable, and fewer loc
+[00:17] <broofa> it's because the 'builder' var is scoped to createNamedFunction
+[00:18] <broofa> uhm, sure.  except my code will run on both client and server. :D
+[00:18] <broofa> … it can be cleaned up to reduce local vars. not a big deal.
+[00:18] <broofa> one sec
+[00:19] pedro has joined the channel
+[00:21] pedro has joined the channel
+[00:21] <isaacs> why do you need a named function constructor, anyhow?  just curious.
+[00:22] <broofa> I don't. cloudhead did.
+[00:23] <isaacs> oh, ok
+[00:23] RayMorgan_ has joined the channel
+[00:23] <broofa> http://gist.github.com/359602 updated.  Now only creates one local var, '_cnf'
+[00:23] <isaacs> broofa: that's not really what i was getting at with the "fewer loc" bit
+[00:23] <isaacs> also, passing in something like "a,b" as an arg will bork it
+[00:24] <broofa> as it should
+[00:24] <isaacs> or, at least, do weird things
+[00:24] joshbuddy has joined the channel
+[00:24] <broofa> you can't name an argument 'a,b'.
+[00:24] <isaacs> true
+[00:26] <broofa> The only thing I'm a little unsure of with this is what happens if the function code has '\'-escaped characters in it.
+[00:27] <broofa> 'probably need a ".replace(/\\/g, '\\\\')" in there somewhere. Or something like that.  But that's cloudhead's problem.
+[00:34] <JimBastard> hey inimino 
+[00:34] joshbuddy has joined the channel
+[00:34] <JimBastard> http://maraksquires.com/route.js/
+[00:34] <JimBastard> thats the javascript ajax history thing
+[00:34] <JimBastard> but i would suggest using sammy or bbq
+[00:35] <JimBastard> route.js is more for developers / reference / learning
+[00:35] <JimBastard> at least for now
+[00:35] <JimBastard> i might be revamping it for this new job
+[00:36] <stephenlb> :-/   '^#'  ...
+[00:39] maushu has joined the channel
+[00:40] Aria has joined the channel
+[00:40] <inimino> JimBastard: ah, ok
+[00:41] <JimBastard> sup stephenlb 
+[00:41] <JimBastard> why do you ask inimino 
+[00:42] <JimBastard> ajax history and ajax navigation is pretty fun stuff
+[00:42] sudoer has joined the channel
+[00:42] <inimino> JimBastard: I just need something simple that works with MooTools
+[00:42] JimBastard_ has joined the channel
+[00:42] <JimBastard> so like cross browser history is kinda hard
+[00:42] <JimBastard> bbq does it via jquery
+[00:43] <JimBastard> there is two parts, the dispatching of routes, and the handling of routes
+[00:43] <JimBastard> bbq is a dispather
+[00:43] <inimino> yeah, I looked at some of the ones out there and they are all kind of hairy
+[00:43] <inimino> at least from the descriptions
+[00:43] <inimino> some ugly iframe hack for IE<8
+[00:44] <JimBastard_> ye[p
+[00:44] <JimBastard_> thats it
+[00:44] <JimBastard_> iframe hack
+[00:45] <inimino> if route.js does all that and doesn't have a lot of dependencies, it looks like it might be just the thing
+[00:45] <JimBastard_> well
+[00:45] <JimBastard_> route.js doesnt dispatch
+[00:45] <JimBastard_> :-(
+[00:45] <JimBastard_> i use like a 4 line dispatcher that doesnt work in IE
+[00:45] <inimino> oh
+[00:45] <JimBastard_> my current plan is to rely on bbq
+[00:45] <JimBastard_> recreating bbq without jquery requires a bunch of lameness
+[00:45] <stephenlb> sup JimBastard_ 
+[00:45] <JimBastard_> i.e. rebuilding some of jquery
+[00:46] <JimBastard_> i would port bbq if i were you
+[00:46] <JimBastard_> mootools doesnt have any onhashchange event support?
+[00:46] <inimino> hm, maybe I'll do that
+[00:46] <inimino> there's some history manager plugin for it
+[00:46] <JimBastard_> if you port bbq you can easily create your own event handler
+[00:46] <inimino> I'm not a big MooTools fan
+[00:46] <JimBastard_> or use route.js 
+[00:47] <inimino> actually I kind of hate MooTools
+[00:47] <inimino> but it's an existing project ;)
+[00:47] <JimBastard_> i'd be willing to help make route.js work right for you if you wanted to do the dispatcher part >.<
+[00:47] <inimino> basically a bbq port would be the missing part?
+[00:47] <JimBastard_> yeah
+[00:48] <JimBastard_> for the most part
+[00:48] <JimBastard_> bbq does nested params and sub-states too
+[00:48] <JimBastard_> you might port bbq and find you only need a few more lines to get what you need
+[00:48] <inimino> alright, I'll look into it
+[00:48] <JimBastard_> mikeal: was talking about porting sammy.js too
+[00:48] <JimBastard_> to pure JS
+[00:49] <inimino> removing a jQuery dependency from anything always gives me a warm glow inside
+[00:49] <JimBastard_> lol you should talk to ben_alman
+[00:49] sh1mmer has joined the channel
+[00:49] <inimino> what's he working on?
+[00:49] <inimino> oh, BBQ
+[00:50] bpot has joined the channel
+[00:54] joshbuddy_ has joined the channel
+[00:58] kriskowal has joined the channel
+[00:58] <dandean> _ry: thanks for that pointer earlier. It helped me work up this little module: http://github.com/dandean/tasks.js
+[01:00] <mikeal> huh?
+[01:00] <dandean> hey mikeal
+[01:00] <mikeal> hiya
+[01:01] ryan[WIN] has joined the channel
+[01:01] <mikeal> JimBastard:  im so confused
+[01:02] <JimBastard_> wrong micheil ?
+[01:02] sh1mmer has joined the channel
+[01:02] <JimBastard_> someone on the sammy.js mailing list was trying to port sammy
+[01:02] <JimBastard_> sorry
+[01:02] <dandean> gf3: just made my first node app: http://github.com/dandean/tasks.js
+[01:02] confounds has joined the channel
+[01:02] <dandean> damn -- wrong window 
+[01:06] <mikeal> super confused, because i'm having a bbq on friday
+[01:06] jashkenas has joined the channel
+[01:06] <mikeal> which you all are invited to if you're in the bay area :)
+[01:08] xla has joined the channel
+[01:09] ditesh|cassini has joined the channel
+[01:10] cloudhead has joined the channel
+[01:13] <jashkenas> inimino: still around? (looking through the backlog) this is what I use: http://gist.github.com/359653
+[01:15] <jashkenas> Handles the difference between hash serialization in IE and FireFox, uses the iframe thing for pre-8 verions of IE, etc. 75 LOC. I dunno how that stacks up against your options. Uses jQuery for DOM insertion, but doesn't really need it.
+[01:17] JimBastard__ has joined the channel
+[01:17] <JimBastard__> yeah! i got a trending repo on github without cheating http://github.com/
+[01:18] <JimBastard__> :p
+[01:18] <inimino> jashkenas: hm, thanks, this looks nice
+[01:18] <jashkenas> inimino: I'd be glad to help remove dependencies if you like. It's just the tools we're using. But the fundamentals should be clear enough.
+[01:19] derbumi has joined the channel
+[01:20] <JimBastard__> jashkenas: you talking about opening up your location.hash nav stuff?
+[01:20] <jashkenas> JimBastard: I've pasted it around a couple times before when the topic has come up.
+[01:20] <inimino> jashkenas: yeah, it looks easy enough to remove the jQuery stuff
+[01:20] <jashkenas> It's just what you get when you strip down bbq + competitors to get at the cross-browser stuff you really need to make it work.
+[01:21] <jashkenas> inimino, use it like: history.register(/^#search/, this.searchByHash);
+[01:21] <binary42> jashkenas: You should check the work in sammy.js for that.
+[01:21] <binary42> It manages to remove the timer when the browser supports the hash change event.
+[01:21] <JimBastard__> really
+[01:21] <binary42> But still works otherwise.
+[01:21] <JimBastard__> someone should make
+[01:22] <jashkenas> binary42: same thing here.
+[01:22] <JimBastard__> onhashchange.js
+[01:22] <jashkenas> onhashchange, means no polling.
+[01:22] <binary42> jashkenas: But your code will break as is.
+[01:22] <binary42> IE has some modes where the function is on window.
+[01:22] <binary42> But won't work.
+[01:22] <JimBastard__> there should just be a onhashchange.js file that will gracefully do onhashchange events based on browser
+[01:23] softdrink has joined the channel
+[01:23] <jashkenas> binary42: oh? happen to know what they are?
+[01:23] <JimBastard__> then you can just listen to that event normally
+[01:23] <binary42> http://github.com/quirkey/sammy/commit/83c731e77de54602d4727ab782ea14c6adfc63e9
+[01:23] <binary42> When quirkey and I worked through it that's what we did.
+[01:23] <binary42> You could port that off of jquery pretty easily.
+[01:24] <jashkenas> So then IE8 in compatibility mode?
+[01:24] <JimBastard__> yeah exactly
+[01:24] <inimino> that sounds foolproof
+[01:24] <binary42> We wanted to avoid browser agent sniffing.
+[01:25] <binary42> So we did a timer + native and then pull out when native fires.
+[01:25] <inimino> yeah
+[01:25] <inimino> though it does mean that you have a setTimeout running the whole time if the feature isn't used
+[01:25] <inimino> I guess it depends on the page how likely that is
+[01:26] <binary42> It's usually used right at the start.
+[01:26] <binary42> But still better than nothing.
+[01:26] <inimino> yeah
+[01:26] <binary42> And it avoids time-costing tests on load which was the big killer.
+[01:27] <_ry>  45 files changed, 126 insertions(+), 9802 deletions(-)
+[01:27] <_ry> :D
+[01:27] <inimino> _ry: that's what we like to see :)
+[01:27] <binary42> _ry: I like deletions. Awesome.
+[01:27] <_ry> removing udns
+[01:28] <JimBastard__> see ya!
+[01:31] <CIA-77> node: 03Ryan Dahl 07master * rd923c94 10/ (45 files in 7 dirs): Remove udns - http://bit.ly/drEafa
+[01:34] batasrki has joined the channel
+[01:36] <_ry> now we just have to remove src/node_net.{cc,h} src/node_http.{cc,h} and deps/evcom
+[01:36] <_ry> all of it is basically legacy code at this point, not running anything
+[01:38] <_ry> it'd reduce node by another 5000 lines of C
+[01:38] <jashkenas> congrats.
+[01:38] quirkey has joined the channel
+[01:39] <_ry> yeah - it took a long time to do that...
+[01:39] <_ry> also - i just was running benchmark/http_simple.js with localhost:8000/bytes/30000
+[01:40] <_ry> and switching between the old and new http servers
+[01:40] <_ry> the new is totally kicking ass..
+[01:41] <_ry> 300000 rather
+[01:43] <_ry> 8 req/sec for the old vs 98 req/sec
+[01:45] <_ry> for 12 byte response, it's 7000 req/sec old vs 7600 req/sec new
+[01:47] <xla> _ry: how are u testing the concurrent requests?
+[01:47] <_ry> that was with 10 concurrent
+[01:47] <jashkenas> apache bench?
+[01:48] <_ry> yeah
+[01:48] <xla> _ry: can u provide the params u used?
+[01:49] <_ry> i'm just doing this: ab  -n 10000 -c 10 http://127.0.0.1:8000/bytes/12 | grep Requests
+[01:49] <_ry> stupid and simple but kind of gives an idea
+[01:49] <xla> _ry: cool thx, looks similar to mine :)
+[01:49] <jashkenas> What happens when you bump up the ab concurrency? That's where things usually start getting screwy ... not that it's a valid test.
+[01:50] <JimBastard__> i hear tsung is the shit
+[01:50] <_ry> i'm on a mac at the moment - so it's not so good
+[01:50] <_ry> node uses select() on macintosh
+[01:50] <JimBastard__> it makes ab look likes Fisher Price My First HTTP Tester
+[01:50] <_ry> i'll do some more detailed benchmarks for jsconf
+[01:51] <_ry> epoll scales really well
+[01:51] <jashkenas> swell.
+[01:51] <JimBastard__> http://tsung.erlang-projects.org/
+[01:51] <fictorial> sorry to interrupt but I have a quick question - was someone working on a remote require() implementation?  loading modules from remote servers (I suppose over HTTP)?
+[01:51] <_ry> fictorial: you have to use require.async
+[01:51] <_ry> then it works
+[01:52] <fictorial> You mean require.async already supports loading from a URL?
+[01:52] <_ry> yes
+[01:53] <binary42> JimBastard__: It slams things pretty well. I bet it's only a matter of time till it's ported to node.
+[01:53] <fictorial> ohh shiny - thanks
+[01:54] <fictorial> what's the latest on hot module reloading? is that supported in any way?
+[01:54] <_ry> no
+[01:54] <fictorial> ok
+[01:55] brianmario has joined the channel
+[01:55] <_ry> felix and or isaacs have a patch floating around
+[01:55] <fictorial> ok
+[01:55] <_ry> we're probably waiting for v8 support
+[01:55] <_ry> they're adding live patching
+[01:55] <fictorial> ok
+[01:55] <isaacs> ACTION is summoned
+[01:56] <fictorial> requiring the same thing > 1x caches the first call or is a nop?
+[01:56] <isaacs> fictorial: check out http://github.com/kriszyp/web-modules
+[01:56] <fictorial> isaacs: cheers
+[01:56] <_ry> ACTION goes to buy ice cream
+[01:56] <fictorial> can you please make that the topic of this channel?  funny.
+[01:56] pavelz has joined the channel
+[01:56] <isaacs> i have recently grown to be of the opinion that require.everything should go away.
+[01:56] <fictorial> I have a wacky idea that could have me loading modules from redis - half-brained at the moment.
+[01:57] <isaacs> fictorial: build it in user space.  no reason why you can't.
+[01:57] mikeal has joined the channel
+[01:57] <fictorial> yeah - the part about getting the code as a module is just fuzzy to me.  I haven't looked into it at all yet.
+[01:58] <isaacs> fictorial: so, in the state of the code that we're throwing about today, that'll be a lot easier.
+[01:58] <isaacs> fictorial: the goal is to move it out of node.js and into a state where it can actually be used.
+[01:58] <fictorial> ok, I'll "watch this space" then for now.
+[01:58] <fictorial> thanks!
+[01:58] <isaacs> so you'd do something like var m = new Module(id, parent);  m.data = "...";  m.compile();
+[01:59] <fictorial> lovely
+[01:59] nsm has joined the channel
+[01:59] <fictorial> what's id and parent in practice?
+[01:59] <isaacs> fictorial: parent is the module calling require(), and id is something like "./foo"
+[01:59] <fictorial> ok
+[01:59] <isaacs> er... "/full/path/to/foo"
+[02:00] <isaacs> when you do parent.spawn("./foo") you get a module that's resolved against the paren'ts filename
+[02:00] <fictorial> ok
+[02:00] <isaacs> then module.go() loads it and compiles it.
+[02:00] <fictorial> thanks for the info - I don't need this yet. It would be a "nice to have" later -- to avoid restarting a server when some code in a module changes.
+[02:01] <isaacs> so var f = module.spawn("./foo").go().exports is akin to var f = require("./foo")
+[02:01] <isaacs> fictorial: note: this isn't in node (yet)
+[02:01] <fictorial> are you describing web-modules or a different beast?
+[02:01] <fictorial> right, no, I know -
+[02:01] <isaacs> this is in a branch on my fork that we're discussing
+[02:01] <fictorial> great!
+[02:01] <isaacs> where i'm trying to convince felixge and _ry that removing require.[everything] would be awesome.
+[02:03] jashkenas has left the channel
+[02:05] <xla> are there any good resources about working with c/c++ bindings to create node addons?
+[02:06] <mikeal> isaacs: are you going to make it non-compliant with the commonjs spec?
+[02:06] <isaacs> mikeal: i'm going to make it compliant with the commonjs spec, within reason.
+[02:07] <mikeal> cause there is some require.[stuff] in the spec
+[02:07] <isaacs> mikeal: require.async doesn't really have broad acceptance yet anyhow, and may go to require.ensure.  kriszyp is already doing this on top of what node has today.
+[02:07] <isaacs> mikeal: so, require.main and require.paths are fine.
+[02:07] <isaacs> i'm more talking about the alternative require functions.
+[02:07] <mikeal> require.async is nowhere near completion
+[02:07] <isaacs> yeah, and require.ensure is probably the right way to do it, but it's a rat's nest that doesnt' belong in node core
+[02:08] <isaacs> and two-arg require() is totally doable in userspace, as well.
+[02:08] <mikeal> i hate two arg require
+[02:08] <isaacs> so stuff like pintura and whatnot could do that.  all node needs is what's necessary to bootstrap any of these things.
+[02:09] <isaacs> mikeal: me, too.  and some people love it.  i'd rather make peace with them by letting them do whatever they want in their own code, rather than try to convince them i'm right.
+[02:20] <isaacs> did something happen to process.uncaughtException?
+[02:20] <isaacs> it seems like it's not catching stuff...
+[02:21] sh1mmer has joined the channel
+[02:39] broofa has joined the channel
+[02:45] bengl has joined the channel
+[02:55] sudoer has joined the channel
+[03:07] hassox has joined the channel
+[03:07] bpot has joined the channel
+[03:18] malkomalko has joined the channel
+[03:56] PyroPete1 has joined the channel
+[03:59] dgathright has joined the channel
+[04:04] softdrink has joined the channel
+[04:06] JimBastard_ has joined the channel
+[04:06] <JimBastard_> hook.io is a featured repo on github, awesomesauce! http://github.com/explore
+[04:13] binary42 has joined the channel
+[04:14] kriskowal has joined the channel
+[04:17] bpot has joined the channel
+[04:27] sh1mmer has joined the channel
+[04:28] creationix has joined the channel
+[04:50] mrjjwright has joined the channel
+[04:51] dandean has joined the channel
+[04:55] fizx has joined the channel
+[05:01] fizx has joined the channel
+[05:11] emyller has joined the channel
+[05:21] <micheil> JimBastard: is trying to port sammy. present tense.
+[05:36] creationix has joined the channel
+[05:37] <creationix> final mockup of new howtonode design done http://static.creationix.com/mockup/
+[05:37] <creationix> now to code the engine behind it tomorrow
+[05:38] <creationix> I'm especially excited about the metadata in the "About this Article" sidebar
+[05:39] <JimBastard_> who is that guy in the picture?
+[05:39] <JimBastard_> ;-) allllriiiiighhht
+[05:40] <creationix> :)
+[05:40] <creationix> by the way, that article I'm using as sample text is NOT finished, don't link to it
+[05:44] <JimBastard_> im trying to figure a good way to do good documentation from github => website 
+[05:44] <JimBastard_> you just process the markdown right?
+[05:44] <JimBastard_> into html?
+[05:44] <creationix> mostly
+[05:44] <JimBastard_> browser side or server side?
+[05:45] <creationix> howtonode does it all server-side
+[05:45] <JimBastard_> using node?
+[05:45] <creationix> node_docs can do either
+[05:45] <creationix> yep
+[05:45] <JimBastard_> node_docs
+[05:45] <creationix> http://github.com/ry/node_docs
+[05:45] <JimBastard_> im peeping it
+[05:45] <JimBastard_> perhaps i should set this up for hook.io? would that make sense?
+[05:46] <JimBastard_> i need to have a bunch of nested docs
+[05:46] dgathright has joined the channel
+[05:47] <creationix> the node_docs engine is designed to work with arbitrary data sources
+[05:47] <creationix> it won't be done by jsconf though
+[05:47] <creationix> some time next month probably
+[05:47] <JimBastard_> heh , "Continuous Documentation"
+[05:48] <creationix> :)
+[05:48] <JimBastard_> all we have to do now is inspect the CommonJS modules after git commit
+[05:48] <creationix> actually, I'm trying to figure out how to run some sort of unit tests on the example codes
+[05:48] <creationix> it's hard because examples for servers don't end on their own
+[05:48] <JimBastard_> browser side or server side?
+[05:49] <creationix> server of course
+[05:49] brapse has joined the channel
+[05:49] <JimBastard_> yeah, no clue
+[05:49] <creationix> node code doesn't run in the browser
+[05:49] <JimBastard_> it does for me
+[05:49] dysinger has joined the channel
+[05:49] <creationix> that sounds dangerous
+[05:49] <JimBastard_> http://hook.io/js/models/hook.js
+[05:49] <JimBastard_> ?
+[05:50] <creationix> ahh, but that's not node code, that cross-platform code
+[05:50] <JimBastard_> word
+[05:50] <creationix> var http = require('http') is node code
+[05:50] <JimBastard_> for sure
+[05:50] <JimBastard_> on that subject, resig keeps saying .require coming
+[05:50] <JimBastard_> and it will have dependency management or something
+[05:52] <creationix> interesting
+[05:52] <cloudhead> the problem is require()s would have too much overhead in the browser
+[05:52] <creationix> lots of ajax requests
+[05:52] <cloudhead> ya
+[05:52] <cloudhead> it's sad
+[05:52] <cloudhead> cause it would be ideal
+[05:52] <cloudhead> to just swap out the require() code
+[05:53] <JimBastard_> require() is fine, as long as you dont try to do a billion requires
+[05:53] <kriskowal> http://github.com/codespeaks/modulr
+[05:53] <creationix> with server cooperation you could send everything required in one request
+[05:53] <cloudhead> creationix: you'd need a little different syntax then probably
+[05:53] <cloudhead> something like
+[05:53] <cloudhead> require("foo", "bar", "baz")
+[05:54] <kriskowal> http://wiki.commonjs.org/wiki/Modules/Transport/D
+[05:54] <cloudhead> awesome
+[05:54] <creationix> yep, I remember that one
+[05:55] <kriskowal> that started coming into focus about a week ago
+[05:55] Pilate has joined the channel
+[05:55] <kriskowal> with a bunch of work by tobie langel, james burke, and kriszyp
+[05:56] <cloudhead> ideally, it would bundle it all into one file
+[05:56] <kriskowal> yes
+[05:57] <creationix> well, I really need to get some sleep, I'm getting up early, take care noders.
+[05:57] <cloudhead> nn
+[05:57] creationix has left the channel
+[05:57] <kriskowal> almost.  depending on the browser, you might want to split it into 2 to 6 files downloaded in parallel
+[05:57] <dgathright> anyone know where I can find the non-minified JSLint source?
+[05:57] <kriskowal> to overcome tcp rwnd limitation
+[05:58] <dgathright> nevermind, http://www.jslint.com/fulljslint.js
+[05:59] <kriskowal> rwnd being the receiver window, number of bytes the client tcp connection permits to be in flight.  you can get better performance with multiple connections since it ramps up slowly.
+[06:00] <kriskowal> and different browsers permit a different number of parallel tcp connections
+[06:00] <kriskowal> 2 in the old and busted, 6 or 8 in the new hawtness.
+[06:01] <cloudhead> that's true, but there's also html/css
+[06:02] <cloudhead> so this module transport is going to recieve a request, create a .js file on the fly, and send it back?
+[06:06] towski has joined the channel
+[06:06] <kriskowal> cloudhead that is one of the options
+[06:07] <kriskowal> module transports could be also generated for service from a cdn
+[06:08] <kriskowal> or generated on demand and cached with a varnish proxy.  lots of options.
+[06:08] <cloudhead> yea
+[06:08] <cloudhead> that's what I'm thinking
+[06:09] <cloudhead> it would be a little more complicated than what we're used to, but definitely more elegant
+[06:09] <cloudhead> making js bundling a service, vs just a make task
+[06:09] <kriskowal> yeah. cappuccino just rolled out a jake task for bundling apps in a similar fashion
+[06:09] <kriskowal> with splitting and everything
+[06:09] <cloudhead> nice
+[06:10] <kriskowal> i don't presume it's commonjs ready, but it's a step in the right dir
+[06:15] stalled has joined the channel
+[06:18] <tlrobinson> kriskowal: which thing are you talking about? flatten?
+[06:19] <kriskowal> not sure which one of your new tools bundles modules
+[06:19] <kriskowal> or has the splitting feature
+[06:19] <tlrobinson> kriskowal: "flatten" has the splitting feature, but currently it's pretty specific to objective-j
+[06:19] mrjjwright has joined the channel
+[06:20] <tlrobinson> i'd really like to make it commonjs compatible though
+[06:41] nsm has joined the channel
+[06:45] okito has joined the channel
+[06:48] amerine has joined the channel
+[07:02] derbumi has joined the channel
+[07:14] javajunky has joined the channel
+[07:18] kriskowal has joined the channel
+[07:31] creationix has joined the channel
+[07:37] <mrjjwright> simple program that starts up goes into a for loop and prints out a counter from 0..200000 on a MBP.  Java 1.786 s.  Node/V8 using debug 1.208 s.  Node/V8 also wins in raw loop time excluding VM startup time as well as cpu usage around 60%.   Luajit print function is slow 3.10s but only took 10% cpu.
+[07:38] towski has joined the channel
+[07:38] teemow has joined the channel
+[07:42] derbumi has joined the channel
+[07:46] xla has joined the channel
+[07:49] <_ry> mrjjwright: when hammering a a process, you'd like it to consume a lot of cpu
+[07:49] <_ry> not doing so indicates waiting
+[07:50] kjeldahl has joined the channel
+[07:50] <mrjjwright> _ry: ahh...so java makes better use of the cpu?
+[07:51] tbassetto has joined the channel
+[07:53] <_ry> mrjjwright: likely
+[08:00] admc has joined the channel
+[08:03] <CIA-77> node: 03Ryan Dahl 07master * rcb84cde 10/ lib/net.js : Enable TCP timeout by default - http://bit.ly/axbmyF
+[08:03] <CIA-77> node: 03Ryan Dahl 07master * r62277ab 10/ benchmark/http_simple.js : Support both old and new HTTP closing APIs in benchmark program - http://bit.ly/cKmOhA
+[08:12] derbumi has joined the channel
+[08:17] jazgot has joined the channel
+[08:20] TomY has joined the channel
+[08:24] kjeldahl has joined the channel
+[08:27] derbumi has joined the channel
+[08:43] michaelk^ has joined the channel
+[08:45] creationix has joined the channel
+[08:52] xla has joined the channel
+[08:54] derbumi has joined the channel
+[08:57] javajunky has joined the channel
+[09:09] Gruni has joined the channel
+[09:09] caolanm has joined the channel
+[09:15] jed has joined the channel
+[09:20] derbumi has joined the channel
+[09:20] botanicus has joined the channel
+[09:24] pdelgallego has joined the channel
+[09:27] mikeal has joined the channel
+[09:27] mediacoder has joined the channel
+[09:30] maushu has joined the channel
+[09:31] avidal has joined the channel
+[09:35] dysinger has joined the channel
+[09:35] keeto has joined the channel
+[09:38] hellp has joined the channel
+[09:40] jed has joined the channel
+[09:44] darkf_ has joined the channel
+[09:49] tisba has joined the channel
+[09:55] piranha has joined the channel
+[10:04] creationix has joined the channel
+[10:05] derbumi has joined the channel
+[10:41] botanicus has joined the channel
+[10:43] andrewhampton has joined the channel
+[10:49] CodeOfficer has joined the channel
+[11:00] Atmoz has joined the channel
+[11:02] ssteinerX has joined the channel
+[11:03] spoob has joined the channel
+[11:09] jed has joined the channel
+[11:12] michaelk^_ has joined the channel
+[11:13] MattJ has joined the channel
+[11:28] <xla> hi @ll
+[11:29] <xla> anyone ran into that error when using a builded *.node file: dyld: lazy symbol binding failed: Symbol not found ?
+[11:30] teemow has joined the channel
+[11:33] weepy has joined the channel
+[11:35] <weepy> hi
+[11:39] <weepy> I wanted to share a global object across multiple files in node
+[11:39] <weepy> E.g. exports.channels = {}
+[11:39] <weepy> but it seems that require("./global_vars") will load a different copy of the file in a new context
+[11:40] <weepy> is there a reckomended way to architect something like this
+[11:40] <weepy> ?
+[11:43] <spoob> assign it to a global variable?
+[11:44] <spoob> not inside a module though. how about exports.global?
+[11:47] <weepy> yes but if u do require("globals") in file_a.js and require("globals") in file_b.js, then it loads two different copies
+[11:50] <keeto> global
+[11:52] <keeto> global.globalVar = 1
+[11:52] <keeto> webben: ^
+[11:52] <keeto> err, I mean weepy
+[11:52] <keeto> xry
+[11:54] <javajunky> I tend to have a file_c.js that requires both and sets up the scope appropriately.
+[11:54] <javajunky> (not sure if this is correct though)
+[12:00] alex-desktop has joined the channel
+[12:05] kriszyp has joined the channel
+[12:07] <mape> If I want to scrape websites using node.js is there any way of hooking jQuery on a fade dom that is populated by fething a site?
+[12:12] binary42 has joined the channel
+[12:13] tbassetto has joined the channel
+[12:17] <xla> anyone ran into that error when using a builded *.node file: dyld: lazy symbol binding failed: Symbol not found
+[12:17] <weepy> javajunky - that's the only way I can think of
+[12:19] jazgot has joined the channel
+[12:20] <javajunky> the global approach does work , but its considered bad form to pollute the global scope
+[12:27] tisba has joined the channel
+[12:31] derbumi has joined the channel
+[12:33] tisba_ has joined the channel
+[12:35] <broofa> Can someone point me to good examples/libs for sharing JS code between node server and browser client?
+[12:35] <broofa> Specifically, how to deal with (lack of) 'exports' and 'global' objects in module code
+[12:36] <broofa> I'd really like a template/framework that allows the use of require() on the client.
+[12:37] ditesh|cassini has joined the channel
+[12:46] <MattJ> Mmm, +1
+[12:51] <mcarter> broofa, you can trivially share code between the server and browser with js.io (http://js.io), but its probably pretty radically different than you're looking for
+[12:55] <broofa> mcarter: uhm… is there a description of what js.io is anywhere? how it works?
+[12:56] tekky has joined the channel
+[12:56] <broofa> no docs. google group looks like low-level stuff.  'would like a 1-2 paragraph overview that says what problem space it's designed for. :)
+[12:57] <mcarter> broofa, yup, its all missing. your best bet is to look at sample code on github. The project includes a module system for building modules that run on both the server and the client, and it includes a compiler for pre-compiling dependancies into a single .js for deployment. The project is heavily focused on comet communication 
+[12:58] <broofa> ah, k.  yeah, not interested in a pre-compiler.  I was hoping more for a thing JS layer in the client that allowed scripts to continue using the CommonJS apis that they have to use to run on the server.
+[12:59] <mcarter> broofa, well, it runs fine without a compiler
+[12:59] <mcarter> broofa, thats just for optimizing client-side deployments
+[12:59] <mcarter> broofa, but this is probably not what you want because we don't target commonjs modules... something similar, but not the same.
+[13:00] <broofa> ah, okay.
+[13:01] <broofa> I'm playing around with some ideas for how this might be solved.  It's certainly doable, but the solutions I'm coming up with all feel a little hacky.
+[13:03] jherdman has joined the channel
+[13:06] derbumi has joined the channel
+[13:11] davidsklar has joined the channel
+[13:12] andrewhampton_ has joined the channel
+[13:16] markwubben has joined the channel
+[13:27] dnolen has joined the channel
+[13:28] philippbosch has joined the channel
+[13:30] <botanicus> Hey guys, I'm looking for an asynchronous test framework for node. I found nodeunit, node-async-testing and vows.js, are there any others?
+[13:30] <botanicus> Preferably lightweigh & simple
+[13:33] <jherdman> botanicus, have you tried JSpec?
+[13:34] <jherdman> also, i think i heard felixge mention he just uses the CommonJS testing (http://wiki.commonjs.org/wiki/Unit_Testing)
+[13:36] sudoer has joined the channel
+[13:37] confounds has joined the channel
+[13:42] gf3 has joined the channel
+[13:42] <javajunky> jspec isn't great for async (true async, not the callback variety often mis referred to as async)
+[13:43] <botanicus> jherdman: it doesn't work for async code AFAIK
+[13:44] <javajunky> jjherdman: cool you've updated your 'understanding require doc' .. that went around twitter t'other day but was missing a few images, sweet ;)
+[13:44] <botanicus> jherdman: yeah I'm using assert module but it's not enough
+[13:45] <jherdman> thanks! yeah. i kinda botched the first edition... ah well :) it was a lesson in just how damn quick things go around Twitter
+[13:48] JAAulde has joined the channel
+[14:02] tekky has joined the channel
+[14:07] paul_____ has joined the channel
+[14:10] aryounce has joined the channel
+[14:13] <nefD> HAH!
+[14:14] <nefD> Theres an article posting in Ajaxian about the 'comma first' js coding style.. "I first saw real usage of �comma-first� JavaScript style via Ryan Dahl of Node.js fame."
+[14:15] <nefD> I'll admit that I didn't like it at first, but i've grown to prefer it, honestly.. helps to make more sense of a block of code when only looking at a single line at a time
+[14:15] <jherdman> nefD: i have to admit it still feels odd to me. it'll be interesting to see if it becomes predominant over time
+[14:17] <nefD> jherdman:  *nod* totally understandable.. I think for me, the trouble is that I mostly develop with PHP at my job, where chaining does not occur.. So to see a comma at the beginning of a line usually signals a red flag :)
+[14:17] piranha has joined the channel
+[14:18] binary42 has joined the channel
+[14:21] joshbuddy has joined the channel
+[14:21] <JAAulde> i like the quoted block in the article
+[14:21] <JAAulde> refuting any claims of ugliness, etc
+[14:21] <CIA-77> node: 03Ryan Dahl 07master * r7a6b563 10/ lib/net.js : 
+[14:21] <CIA-77> node: Revert "Enable TCP timeout by default"
+[14:21] <CIA-77> node: Causing programs to not exit gracefully.
+[14:21] <CIA-77> node: This reverts commit cb84cde4d42637fd79ceacea1f0123995c23eea5. - http://bit.ly/d4Db8g
+[14:22] tbassetto has joined the channel
+[14:22] <nefD> heh, yeah
+[14:24] quirkey has joined the channel
+[14:27] alex-desktop has joined the channel
+[14:28] <nefD> hrm.. im pretty sure I was able to access libpurple (pidgin's IM messaging api) via perl or php for a project at my last job.. I wonder if a wrapper could be written up for node..
+[14:32] mrjjwright has joined the channel
+[14:32] <mortens> i have to admit, the comma first style, looks very interesting (especially since im a noob at using javascript:p) - would probably keep my errors in declearing vars down atleast lol (tho for the rest of the stuff i write, it would rpobably still be high;))
+[14:32] <nefD> heh
+[14:33] <mortens> kinda ike that sentence, errors everywhere:D
+[14:33] <nefD> I think thats why i've grown to appreciate it, is mainly for how much it helps in quickly finding and correcting those annoying little typos and slipups involving multiple declarations or calls
+[14:33] <mortens> yeah, i mean, the errors popped out instantly
+[14:34] <mortens> now, if someone has more good tips like that - come with em lol
+[14:41] isaacs has joined the channel
+[14:42] <mape> Anyone here know of a good memcache module? http://github.com/vanillahsu/node-memcache seems to look for memcache-impl which I can't find in the git clone
+[14:42] jazgot has joined the channel
+[14:47] embwbam has joined the channel
+[14:48] <embwbam> how many concurrent requests can node handle? Everything crashes when I get up to 400 or 500 with apache benchmark, but I'm not sure if it's Apache Benchmark's fault or node's
+[14:48] <mape> Hmm did the node-waf and build finished still looking for memcache-impl 
+[14:49] <mape> Do I have to symlink/move the compiled node into a folder if I don't want to move it around?
+[14:49] <mortens> embwbam: not sure if this is relevant for you, but i read some info about it (granted, the thread is from last year so might've changed) but http://groups.google.com/group/nodejs/browse_thread/thread/d19df83c7fd1f3ca
+[14:50] <embwbam> mortens: yeah, that's the error I'm getting. I'll read through it, thanks
+[14:50] <nefD> mape: I know for dameon.node, when I did a node-waf build, I had to copy a file out of one of the resulting directories into my scripts dir (or somewhere I could otherwise 'require' it like any other file), but it wasn't a .js file, it looked like an executable
+[14:51] <mortens> embwbam: np, hope it helps - if not im sure someone has a better answer than what i could give ya ;)
+[14:51] Yuffster has joined the channel
+[14:51] <mape> nefD: Yeah a node, just figured there was a more handy way of doing it rather then moving file, want to keep everything in the same so I can easily git pull and compile without moving files
+[14:51] <mape> guess a symlink will do
+[14:52] <nefD> *nod* that'd be the easiest solution
+[14:52] r11t has joined the channel
+[14:53] <mape> Hmm doesn't seem to work..
+[14:54] <mape> nm my fault
+[14:57] r11t has joined the channel
+[15:03] <creationix> mape: did you see tmpvar's dom implementation
+[15:04] <mape> Nope?
+[15:04] <creationix> I don't know if it does html parsing, but he's hot enough dom to run sizzle and pure templates I think
+[15:04] <creationix> tmpvar on github
+[15:04] <mape> Nice I'll check it out
+[15:04] <creationix> *got enough
+[15:05] <embwbam> mortens: It doesn't look like IS an easy way to test throughput
+[15:07] <gsf> testing crockford
+[15:07] <CrockBot> Douglas Crockford created JSLint by typing var JSLint = function () {return JSLint();}(); on his computer.    javascriptrules
+[15:07] <embwbam> It looks like an artificial limit on the number of open connections. I'm not hitting the actual end of my performance
+[15:09] <isaacs> _ry: http://github.com/isaacs/node/commit/240a7dd9840ca067cf2497298fdfe4b576782532
+[15:09] <isaacs> oh, wait, you prefer email. sry.
+[15:11] <caolanm> like the CrockBot ;)
+[15:11] <CrockBot> Every time you declare a variable in the global scope, douglas crockford kills a kitten.    pixelarchitect
+[15:14] <_ry> isaacs: hey
+[15:14] <isaacs> _ry: yo
+[15:15] <_ry> isaacs: what does that fix?
+[15:15] <_ry> i don't get it
+[15:15] <isaacs> _ry: if you define a function in the repl, and you want to see how linebreaks effect it
+[15:15] <isaacs> type this into the repl: var f = function () { return <ENTER>2<ENTER>}<ENTER>
+[15:16] <isaacs> without the space, actually.  just return<ENTER>2<ENTER>}
+[15:16] <isaacs> when you then do f(), it'll say "error return2 is not defined"
+[15:16] <isaacs> and f.toString() shows function () {return2}
+[15:16] <_ry> hm okay
+[15:16] <isaacs> better for the repl to put your linebreaks into the code if you put them into the repl
+[15:17] <CIA-77> node: 03isaacs 07master * rde9778b 10/ lib/repl.js : Add line breaks to the code when the user types a line break - http://bit.ly/cSHJzZ
+[15:17] embwbam has left the channel
+[15:19] <_ry> we need a way to do unit tests on repl behavior
+[15:20] fholm_ has joined the channel
+[15:20] <isaacs> _ry: i'm not as convinced of that.  the repl is very stable and feature complete.  we could just not write tests, and have about the same amount of stability.
+[15:20] <CIA-77> node: 03Herbert Vojcik 07master * rc16508c 10/ (2 files in 2 dirs): Better require.async throw test - http://bit.ly/c1cfbd
+[15:22] <_ry> isaacs: i notice many bugs with it
+[15:22] <isaacs> orly?
+[15:22] <_ry> if i type: { hello: 3}
+[15:22] <isaacs> i just notice a lot of weirdness around scope and whatnot
+[15:22] <_ry> it outputs "3"
+[15:23] <isaacs> well, yeah, but that's a bug in js, not in the repl
+[15:23] <_ry> how so?
+[15:23] <isaacs> you're creating a block, then a line labeled "hello", and that line has a single expression, "3"
+[15:23] <isaacs> so it resolves to "3"
+[15:23] <_ry> hm
+[15:23] <isaacs> js is a weird beast.
+[15:23] <isaacs> put parens around it
+[15:23] <isaacs> or assign it to a variable
+[15:23] <_ry> maybe we should compile it do _ = { hello: 3 } ;
+[15:24] <isaacs> _ry: but then it'll break if you have something like if (foo) { "bar" }
+[15:24] <isaacs> because that's not a valid rhs
+[15:24] <_ry> why would i want to type (foo) { "bar" } ?
+[15:24] <isaacs> no, it's better to leave it as-is.  {hello:3} isn't a valid standalone js expression, so it does what it does in js.
+[15:25] <isaacs> _ry: i mean, the if
+[15:25] <_ry> oh
+[15:25] <_ry> heh
+[15:25] <isaacs> if (blah) { doSomething() }[
+[15:25] <_ry> well - i think the repl needs to understand a bit more javascript
+[15:25] <isaacs> _ = if (blah) { doSomething() } isn't valid in js.  maybe some crazy language like ruby lets you do that...
+[15:26] <isaacs> _ry: every JS repl works like that, though
+[15:26] <isaacs> and by that i mean, spidermonkey, rhino, and every console.log
+[15:26] <_ry> i also get stuck on "..." often
+[15:26] <isaacs> that means your stuff is throwing
+[15:26] <isaacs> .break gets you out of that
+[15:27] <_ry> i think it can be done better
+[15:27] <_ry> inimino has some nice js parsing stuff 
+[15:27] <isaacs> yeah, it's pretty tight
+[15:28] <_ry> going to go get some coffee and try to write docs
+[15:28] <_ry> :~(
+[15:29] <_ry> later
+[15:30] joshbuddy_ has joined the channel
+[15:30] joshbuddy_ has joined the channel
+[15:32] TheEnd2012 has joined the channel
+[15:32] kriszyp has joined the channel
+[15:33] Gruni has joined the channel
+[15:35] brapse has joined the channel
+[15:36] paul___ has joined the channel
+[15:39] embwbam has joined the channel
+[15:40] embwbam has left the channel
+[15:44] hellp has joined the channel
+[15:46] Gruni has joined the channel
+[15:58] sh1mmer has joined the channel
+[16:02] jed_ has joined the channel
+[16:04] kriskowal has joined the channel
+[16:10] philippbosch has joined the channel
+[16:12] dandean has joined the channel
+[16:13] sh1mmer has joined the channel
+[16:14] silentrob has joined the channel
+[16:15] fizx has joined the channel
+[16:16] fizx has joined the channel
+[16:16] philippbosch has joined the channel
+[16:18] RayMorgan has joined the channel
+[16:21] <fictorial> ACTION just got the "ronn" pun
+[16:22] <nefD> wow theres a lot of sqlite modules
+[16:24] <_ry> fizx: i don't get it
+[16:24] <_ry> fictorial: i don't get it
+[16:25] <fictorial> _ry: "the opposite of roff" off, on(n)
+[16:25] <_ry> oh..
+[16:25] <fictorial> yeah groan
+[16:28] <tbassetto> Hi. What's the best way to do WebSockets with node.js? node.websockets.js seems to be dead and I don't like the fact Socket.IO-node supports a variety of others transports :p
+[16:28] nsm has joined the channel
+[16:29] <inimino> isaacs: those Ajaxian comments are hilarious
+[16:32] <inimino> especially the completely unsupported FUD about "ASI will strike"... hehe
+[16:32] <isaacs> inimino: yeah.  i'm a bit surprised that crock seemed to think that it would cause errors with return.
+[16:32] <inimino> ACTION is glad he read to the end
+[16:32] <isaacs> inimino: i added the addendum to the gist after crock commented.
+[16:33] <inimino> in general I've been surprised at the shallow understanding of automatic semicolon insertion from the people who rail against it the loudest
+[16:33] <inimino> hopefully he'll post an example clarifying what he meant
+[16:36] <creationix> tbassetto: I've got a really simple implementation
+[16:36] indiefan has joined the channel
+[16:36] <creationix> I'll be updating mine in the next couple of weeks while I work on a real-time game for my txjs talk
+[16:37] <isaacs> also, you know, ajaxian should really credit the author when they lift a post and gist for their site.
+[16:37] <isaacs> i mean, it's kinda inviting ascii dicks otherwise.
+[16:38] <botanicus> I want to add a listener to a file *just* in case the file doesn't already have the listnener. How can I do it, I need to get a list of listeners for "change" event on file.
+[16:39] aryounce has joined the channel
+[16:40] romainhuet has joined the channel
+[16:40] <tbassetto> creationix: nice, will it be available on github?
+[16:40] <creationix> tbassetto: http://github.com/creationix/websocket
+[16:41] <creationix> let's see, last updated in january, yeah probably broken
+[16:41] <tbassetto> thx
+[16:41] <creationix> shouldn't be hard to update though
+[16:41] <tbassetto> ok
+[16:42] <creationix> tbassetto: which version of node are you using
+[16:43] <creationix> if I update it to HEAD it won't work on v0.1.33
+[16:43] <tbassetto> currently, I'm using the HEAD
+[16:43] <creationix> ok, then I'll update it real quick
+[16:44] <tbassetto> thx! the node API seems to change fast
+[16:47] bpot has joined the channel
+[16:48] <creationix> tbassetto: I can
+[16:48] <creationix> t
+[16:48] <creationix> can't remember how to run my demo app
+[16:48] <fictorial> Object.getOwnPropertyNames(process.env).sort().join(',') ... where's HOSTNAME?
+[16:49] <tbassetto> lol
+[16:49] <creationix> Does anybody remember the new events for net socket objects
+[16:50] <creationix> I don't think it's receive and eof
+[16:50] <creationix> wasn't it something like data and end?
+[16:51] <_ry> creationix: 'data', 'end'
+[16:51] <creationix> ok, so it's all stream api as documented in the wiki then?
+[16:51] <_ry> creationix: I'm going to update the docs very soon
+[16:51] <_ry> yes
+[16:51] <creationix> very cool
+[16:51] <_ry> although it's going to change today
+[16:51] <_ry> :)
+[16:52] <creationix> wouldn't be node without changes
+[16:52] <_ry> close()->end(), forceClose()->destroy()
+[16:54] <avidal> what wiki?
+[16:54] <_ry> but that'll be it. then 0.1.90
+[16:55] <avidal> oh, i guess the wiki on github?
+[16:56] <_ry> avidal: http://wiki.github.com/ry/node/streams
+[16:56] <avidal> yeah, checking it out
+[16:57] brainproxy has joined the channel
+[16:58] <avidal> ick, 2 space indentation
+[16:58] <creationix> hmm, my browser isn't getting ws.onmessage events when I write to the tcp socket from node
+[16:58] <creationix> chrome's WebSocket api hasn't changed recently has it?
+[16:59] <creationix> _ry, I love your short tweets
+[17:01] <_ry> http://buildbot.nodejs.org:8010/perf/dashboard/overview.html <-- looking cool
+[17:01] <_ry> doesn't say much but looks nice
+[17:03] cloudhead has joined the channel
+[17:04] broofa has joined the channel
+[17:05] markwubben has joined the channel
+[17:06] andy_l has joined the channel
+[17:07] sh1mmer has joined the channel
+[17:10] <fictorial> that's neat. so for each commit it runs a test and updates a graph with time taken? nice.
+[17:11] <creationix> anybody know how to test websockets.  The browser isn't giving me anything, node says it's sending the data on the socket
+[17:11] <fictorial> I had the same problem in Chrome and Chromium.  Worked on Webkit Nightly
+[17:12] <creationix> hmm
+[17:12] andreavonhollen has joined the channel
+[17:13] <creationix> it was working for me on chrome a few months ago
+[17:13] <fictorial> I did not investigate too deeply since ws are pretty volatile
+[17:13] <_ry> fictorial: hopefully to catch performance regressions
+[17:13] <fictorial> yeap
+[17:14] confounds has joined the channel
+[17:14] <creationix> fictorial: nope, still not working for me on webkit nightly
+[17:14] <andreavonhollen> Hi all, now that support for /usr/lib/node/libraries for system-wide modules is gone, is there any recommendation for how to install/configure  system wide modules?  I thought of just adding NODE_PATH to the system path via our rpm for Node.js but I'm not sure if relying on that is best.
+[17:14] <creationix> I must be doing something wrong in node
+[17:15] <fictorial> not sure then
+[17:15] <fictorial> I recall trying in both HEAD node and 0.1.33
+[17:15] <fictorial> one of them didn't work, yeah
+[17:15] <creationix> hmm, it was working for me on an older version, I'm on HEAD now
+[17:16] <creationix> well, time for ngrep
+[17:17] <creationix> I'm guessing the net2 merge somehow broke websockets
+[17:18] <fictorial> let us know what you discover sniffing around
+[17:18] <creationix> of course
+[17:18] <creationix> fictorial: you're the one that made the space game right?
+[17:18] <fictorial> nope, I told you about it - wpilot
+[17:18] <creationix> ahh, that's right
+[17:19] <fictorial> I suppose, another pun... xpilot for the web = wpilot
+[17:19] <fictorial> heh
+[17:19] <fictorial> I have a similar idea in mind for a test of my nodered project -- I call it pubsubmarine
+[17:29] WALoeIII has joined the channel
+[17:30] gf3 has joined the channel
+[17:30] <avidal> in regards to modules, i personally don't like installing them system wide
+[17:30] <avidal> i have project/src/app.js and project/vendor/<vendor dir>
+[17:30] <avidal> then i just require.paths.unshift the vendor directory
+[17:31] <avidal> so i require redis via require('redis-node-client/lib/redis-client')
+[17:31] <avidal> little more longwinded, sure, but whatever
+[17:31] <avidal> i suppose you can have issues if you get a module that requires another module that it isn't packaged with though
+[17:32] mravaux has joined the channel
+[17:33] devinus has joined the channel
+[17:34] <creationix> fictorial: wpilot doesn't work on latest node.  
+[17:34] <devinus> bwahaha, i think i have an async fsm finally using callbacks
+[17:34] <creationix> Does anyone have websockets working on HEAD?
+[17:34] <devinus> thinking of naming it 'Holla' and you pass it 'hollaback's :D
+[17:34] <fictorial> creationix: interesting... did you file an issue with jfd?
+[17:34] <creationix> just did
+[17:34] <avidal> hollaback youngin
+[17:35] <devinus> chyeah
+[17:37] <avidal> cool api browser creationix 
+[17:37] <avidal> you planning on keeping it updated? i just stumbled on it googling for something else
+[17:37] <creationix> yes, it's on my todo list, but towards the end
+[17:37] <creationix> maybe in a month or so
+[17:37] <avidal> o
+[17:38] <isaacs> andreavonhollen: you have to create a system-wide NODE_PATH env var
+[17:38] WALoeIII has joined the channel
+[17:39] <isaacs> andreavonhollen: or manually add to require.paths
+[17:39] <isaacs> andreavonhollen: you can also start your program likethis: NODE_PATH=/usr/lib/node node program.js
+[17:40] <broofa> cloudhead: regarding your issues with constructing named functions, I came up with the following: http://gist.github.com/359602
+[17:44] <creationix> tbassetto: ok, I updated my module, but it doesn't seem to be working for me.  I'll investigate to see if it's me or node that's broken
+[17:45] <tbassetto> ok thx
+[17:47] <cloudhead> broofa: thanks, that's pretty good actually
+[17:49] <creationix> broofa, you do loose your old scope though, so no closures
+[17:49] <broofa> so sue me. ;)
+[17:50] <broofa> cloudhead: note, too, that there is probably an issue with "\"-escaped chars in code.
+[17:50] <broofa> cloudhead:  there's probably another ".replace(…)" needed to handle that.  haven't taken the time to figure out what exactly it should be though.
+[17:51] <cloudhead> it should be alright, it's not user-facing
+[17:51] <cloudhead> it's used in one place only
+[17:51] jherdman has joined the channel
+[17:51] <broofa> if you really needed the closure scope, you could probably just inline that code wherever you want to create the function.
+[17:51] alex-desktop has joined the channel
+[17:52] <broofa> I believe the created function inherits gets current sctivation scope.
+[17:53] <broofa> (hrm… not 100% sure about that)
+[17:57] stephenlb has joined the channel
+[18:05] jazgot has joined the channel
+[18:06] jazgot has left the channel
+[18:09] silentrob has joined the channel
+[18:09] dgathright has joined the channel
+[18:10] <nefD> whoa.. nginx is pretty damn quick
+[18:11] <nefD> In mother russia, web server accesses YOU!
+[18:12] towski has joined the channel
+[18:13] <devinus> is c-ares integration complete?
+[18:14] kriskowal has joined the channel
+[18:15] kriskowal has joined the channel
+[18:24] <_ry> devinus: yes
+[18:24] <_ry> all dns goes through c-ares now
+[18:26] <devinus> _ry: ...so, there's nothing left to do for c-ares now?
+[18:26] <_ry> nope
+[18:26] <devinus> dang
+[18:27] <_ry> i'm sure some bugs will pop up
+[18:27] <_ry> seems to be working well though..
+[18:27] <devinus> _ry: that was quick, let's hope the openssl integration will be as smooth
+[18:28] <creationix> _ry, any idea what could have changed in net2 to break my websockets?
+[18:28] <creationix> (and I can't seem to remember how to get ngrep to trace the traffic)
+[18:31] <creationix> hmm, socket.write seems to work for the websocket handshake
+[18:31] <creationix> maybe my framing bytes are getting garbled in regular messages
+[18:33] chewbranca_ has joined the channel
+[18:33] rtomayko has joined the channel
+[18:34] <_ry> creationix: the same api /should/ work
+[18:34] <_ry> creationix: ngrep -d en1 port 80 
+[18:34] <_ry> or something
+[18:34] <creationix> what port do I need to bind to so I can tcpdump or ngrep it?
+[18:35] <creationix> my ip address? 0.0.0.0? 
+[18:35] <creationix> err, what up do I bind to
+[18:35] <creationix> *ip
+[18:35] <_ry> creationix: null will bind to 0.0.0.0
+[18:35] <creationix> and that listens to anything, right?
+[18:35] <_ry> yeah
+[18:35] <creationix> hmm
+[18:36] <_ry> maybe device lo0 ?
+[18:37] <creationix> not getting anything
+[18:38] <creationix> hitting 127.0.0.1 in the browser, it's reaching my node server, but I'm not seing any traces on lo0
+[18:38] <creationix> and it's clearly in the netmask interface: lo0 (127.0.0.0/255.0.0.0)
+[18:39] <creationix> tcpdump gives me something, but it doesn't look like my traffic at all
+[18:39] botanicus has joined the channel
+[18:39] <_ry> creationix: sudo?
+[18:39] <creationix> yep
+[18:39] <_ry> creationix: got the right port?
+[18:39] <creationix> I'm not filtering by port at all
+[18:40] <creationix> adding a filter doesn't help
+[18:40] <_ry> line buffer your tty? -l ?
+[18:40] <creationix> I would expect more noise on my machine's loopback interface
+[18:40] <_ry> output in hex/ascii -X (i think)
+[18:41] <_ry> -x
+[18:41] amerine has joined the channel
+[18:41] <_ry> sudo ngrep -lx -d lo0 
+[18:41] <_ry> works for me
+[18:43] technoweenie has joined the channel
+[18:43] <creationix> _ry, you're on snow-leopard right?
+[18:44] <_ry> yeah
+[18:45] <creationix> ACTION is installing wireshark now
+[18:46] <creationix> this is very strange that I can't see anything in my traces
+[18:46] <creationix> the initial connection is working and the http connections gets upgrades to websocket, I can even hear messages from the browser
+[18:50] admc has joined the channel
+[18:51] <creationix> I'm thinking my ngrep is busted
+[18:51] <creationix> how do I get tcpdump to show the actual contents?
+[18:51] <fictorial> _ry: what causes a stream to enter "writeOnly" mode?
+[18:55] <_ry> fictorial: recieving eof ('end' event)
+[18:56] <fictorial> weird, redis did that to my client randomly
+[18:56] <_ry> the proper action to take is to close your side
+[18:57] <creationix> tcpdump is giving me data, my ngrep must be busted "sudo tcpdump -i lo0 -x"
+[18:57] <fictorial> _ry: http://github.com/fictorial/redis-node-client/blob/master/lib/redis-client.js#L283
+[18:58] <_ry> fictorial: if you get 'end' you won't be in the 'open' state
+[18:58] <fictorial> do I even need an "end" listener then -- I assume the default just calls close() or is that incorrect?
+[18:58] <_ry> you'll either be 'closed' or 'writeOnly'
+[18:59] <_ry> no you need to close your side
+[18:59] <_ry> manually
+[18:59] <fictorial> Yeah, that's a bug from the old client version then.  that readyState check was in a top-level ".close()" method
+[18:59] <fictorial> ok
+[18:59] <fictorial> thanks
+[19:02] <creationix> _ry, I'm quite sure this the same as node issue 81
+[19:02] <creationix> how do I send a 0x00 + somedata + 0xff using binary encoding?
+[19:03] <fictorial> for head I suppose the ws.js should be updated to use buffers?
+[19:03] <fictorial> er, Buffer.
+[19:04] broofa has joined the channel
+[19:05] broofa has left the channel
+[19:05] <fictorial> ACTION goes for a run... too nice out after a long winter.
+[19:05] <_ry> creationix: okay
+[19:06] <creationix> It seems that "\uffff" is sending bf bf on the wire
+[19:06] <creationix> when using utf8 encoding
+[19:06] <creationix> which of course breaks the websocket framing
+[19:06] felixge has joined the channel
+[19:07] <creationix> but the '\u0000' at the beginning seems to send 00 as it did before
+[19:07] <cloudhead> anyone got a js argument parser? for function arguments
+[19:08] <_ry> cloudhead: http://wiki.github.com/ry/node/modules#parsers-commandline
+[19:08] <creationix> _ry, I'm fine with using binary encoding, just don't remember how to use it
+[19:08] <kriskowal> f.toString() parsers do not work cross-engine, and don't work at all in some
+[19:08] <kriskowal> cloudhead^
+[19:08] <inimino> cloudhead: you can't send an 0xFF byte in UTF-8
+[19:08] <_ry> creationix: 'binary' instead of 'utf8' 
+[19:08] <inimino> er
+[19:08] <inimino> creationix, not cloudhead
+[19:09] <creationix> :)
+[19:09] <inimino> and send \u00FF
+[19:09] <_ry> inimino: i think he wants to send 0xFF 0xFF
+[19:09] <cloudhead> _ry: function arguments, not cli
+[19:09] <creationix> no, I'm pretty sure it's just one byte
+[19:09] gwoo has joined the channel
+[19:10] <inimino> 'binary' only uses the low byte of each character, so '\u00FF' should be what you want
+[19:11] <creationix> hmm, when I switch to binary, most my text gets scrambled, something must be getting my stream out of sync
+[19:12] <creationix> I'm only sending ascii test messages
+[19:12] <creationix> ACTION goes back to re-read the websocket protocol
+[19:12] <_ry> creationix: send the utf8 parts as utf8 and the binary part as binary
+[19:12] <creationix> _ry, how do I do that, setEncoding several times?
+[19:13] <mape> Is there any handy way of profiling node.js code
+[19:13] <creationix> oh, encoding is an argument to write, right?
+[19:13] <_ry> creationix: no  you want to do socket.write('\u00ff', 'binary')
+[19:13] <creationix> yeah, thanks
+[19:13] okito has joined the channel
+[19:13] <_ry> socket.write('ascii stuff\n', 'ascii')
+[19:14] <_ry> mape: --prof
+[19:14] <_ry> mape: ./node --prof myscript.js
+[19:14] javajunky has joined the channel
+[19:14] <creationix> _ry, sweet it works!
+[19:15] <creationix> so I guess it's not a bug in node, but  behavior change between versions
+[19:15] <mape> _ry: Nice, and the output goes?
+[19:15] <creationix> before sending 'uffff'  worked somehow
+[19:15] mikeal has joined the channel
+[19:15] <felixge> _ry: do you still want the setEncoding stuff for the file streams?
+[19:15] <_ry> mape: http://code.google.com/p/v8/wiki/V8Profiler
+[19:15] <felixge> _ry: anything else to change there while I'm at it?
+[19:16] <_ry> felixge: wait i just changed file streams
+[19:16] <_ry> i'll put the code in a minute
+[19:16] <_ry> push
+[19:16] <felixge> _ry: ok
+[19:16] <felixge> _ry: I could also help on the docs
+[19:16] <mape> _ry: Ah thanks
+[19:16] <_ry> I'm just about to push the stream API changes
+[19:16] nsm has left the channel
+[19:17] <_ry> which is annoying, really. but i want it in for 0.1.90
+[19:17] <creationix> _ry, ok I was about to announce my websocket working, but your changes will break it, I'll wait
+[19:17] <_ry> creationix: it won't break, but it will give warnings
+[19:18] <_ry> fg
+[19:18] <felixge> _ry: I'm really psyched up about the API getting stable. For now we decided to launch transloadit on the old version and release api2 later on
+[19:18] <felixge> btw. if anybody wants to give some feedback on our pricing page, I'd love it! ( http://transloadit.com/plans )
+[19:18] <isaacs> _ry: 0.1.90?
+[19:18] <isaacs> _ry: did i miss a few versions there?
+[19:19] <_ry> isaacs: *shrug* i need a way to indicate that it's a big change
+[19:19] <_ry> but i don't want to jump past 0.2
+[19:19] <isaacs> _ry: how about 0.2.0?
+[19:19] <_ry> in the future we'll use 0.odd for dev and 0.even for stable
+[19:19] <isaacs> ok
+[19:19] <_ry> but this time it's got to fit into 0.1
+[19:20] <isaacs> i see
+[19:20] <_ry> release management is hard
+[19:20] <_ry> :)
+[19:20] steadicat has joined the channel
+[19:20] <KungFuHamster> "stable" is more a function of revision and not release, isn't it?
+[19:21] <isaacs> _ry: yeah, i think KungFuHamster is right.  why not just have some arbitrary thing and say "this is stable" and "this is release"?
+[19:21] <isaacs> and follow semver kinda?
+[19:21] <isaacs> big changes change the bigger numbers.
+[19:22] <_ry> revisions are not public, releases are
+[19:23] <_ry> no one but people hacking node should run ry/master
+[19:23] <isaacs> my point is, you could say "0.2.17 is stable, 0.3.2 isn't"
+[19:23] <isaacs> i think he meant "revision" as in "the last bit of the version"
+[19:24] <javajunky> creationix: I've poste a reply to your ws question
+[19:24] <_ry> i could - it's nice if version numbers indicate that
+[19:24] <_ry> so you don't have to do a look up
+[19:24] <isaacs> _ry: you could do what some projects do, and put a tag on the version
+[19:24] <_ry> nginx does that
+[19:25] <isaacs> so 0.2.3beta is beta and 0.2.3 is the stable one
+[19:25] <isaacs> yui does that
+[19:25] <creationix> javajunky: right, I just figured it out too, thanks though
+[19:25] <isaacs> they typically do a beta1, beta2, rc1, and rc2 for each release
+[19:26] <CIA-77> node: 03Ryan Dahl 07master * r3819920 10/ lib/fs.js : Rename binding reference in fs.js - http://bit.ly/9yVxmj
+[19:26] <CIA-77> node: 03Ryan Dahl 07master * r7faf7d5 10/ lib/fs.js : Put file stream methods into prototype, small style fixes - http://bit.ly/909Z42
+[19:26] <CIA-77> node: 03Ryan Dahl 07master * r50c70ac 10/ (32 files in 4 dirs): Update stream API: forceClose() -> destroy(), close() -> end() - http://bit.ly/9d2Ouq
+[19:27] <javajunky> I *think* its because the utf8 encoder's not happy with \u0000 and \uffff which without checking may well be illegal codepoints
+[19:27] <javajunky> I noticed it a couple of weeks ago, hadn't gotten around to investigating it
+[19:28] mjr_ has joined the channel
+[19:28] tlrobinson_ has joined the channel
+[19:28] <_ry> felixge: i'd really like the docs to have a TOC
+[19:28] <_ry> felixge: i could use some help with that
+[19:29] <felixge> _ry: let me have a look
+[19:29] <_ry> ronn doesn't give it one
+[19:29] <felixge> _ry: or is that something creationix is working on for the viewer?
+[19:29] <_ry> it is, but i think a quick hack is needed for this release
+[19:29] <mjr_> _ry: did you pull my last doc update that I sent about a week or so ago?
+[19:29] <creationix> _ry, didn't you have a dynamic TOC before as a client-side script
+[19:30] <_ry> creationix: yeah
+[19:30] <_ry> it should be possible to adapt toc.js for ronn
+[19:30] <creationix> I'd go that route if possible
+[19:30] <creationix> it will be a while till my viewer is done
+[19:30] <felixge> _ry: can I bundle jQuery? In that case I could hack something nice together rather easily
+[19:31] michaelk^ has joined the channel
+[19:31] <_ry> felixge: sure
+[19:31] <_ry> git checkout v0.1.33 -- doc/toc.js
+[19:32] <felixge> _ry: should it be a side nav?
+[19:33] <felixge> _ry: also, should I try to get syntax highlighting back?
+[19:33] derbumi has joined the channel
+[19:33] <creationix> google prettify works great
+[19:33] <_ry> felixge: if you can - that's less important
+[19:33] <creationix> it's easier than shjs
+[19:34] <felixge> creationix: link?
+[19:34] <creationix> http://code.google.com/p/google-code-prettify/
+[19:34] <_ry> someone should do a node script which does shjs client side
+[19:34] <_ry> er
+[19:34] <_ry> server-side
+[19:34] <creationix> if you're already bundling jquery you can just dynamically add the required class to all blocks
+[19:34] <_ry> takes so long to parse client-side
+[19:34] rolfb has joined the channel
+[19:34] <creationix> _ry, I already ported prettify to server-side
+[19:34] <felixge> hm syntax highlighting is tricky
+[19:35] <felixge> creationix: you did?
+[19:35] <felixge> creationix: link?
+[19:35] <creationix> http://github.com/ry/node_docs/blob/master/js/prettify.js
+[19:35] <creationix> and http://github.com/creationix/wheat/blob/master/lib/wheat/prettify.js
+[19:35] <creationix> I think they're the same
+[19:35] <felixge> creationix: still has DOM stuff 
+[19:36] <felixge> creationix: how does that work?
+[19:36] <creationix> var     Prettify = require('prettify'); var html = Prettify.prettyPrintOne(code);
+[19:37] <creationix> the prettyPrint function doesn't use dom
+[19:37] <mjr_> I've got some doc updates and a bunch of child process examples here, if this is useful: http://github.com/mranney/node/commit/1a287bfb95942c0825afd7d1c26062f700736d2b
+[19:37] <mjr_> I still haven't put together an automated way to run all of the examples.
+[19:37] <creationix> felixge: http://github.com/creationix/wheat/blob/master/lib/wheat.js#L309
+[19:37] <felixge> creationix: very interesting
+[19:38] JimBastard_ has joined the channel
+[19:39] <felixge> _ry: do you want the old style back for the manual?
+[19:39] <felixge> _ry: ronn allows to just generate the body HTML without header
+[19:39] <felixge> (currently the best way I see to hack the doc in)
+[19:40] <felixge> anything else would involve a regex on the result doc :)
+[19:40] <creationix> mjr_, I plan on adding automated tests for sample code to my wheat framework, I'm not sure how we'll link the articles to the current ronn generated html though
+[19:42] <mjr_> Yeah, I guess we could do something with links in markdown, but it seems like stretching the limits of markdown perhaps a bit far.
+[19:43] <_ry> felixge: if it's not extremely difficult
+[19:44] <_ry> i like the black background :)
+[19:44] gf3 has joined the channel
+[19:44] <nefD> ACTION seconds the black background
+[19:45] tlrobinson_ has joined the channel
+[19:52] <avidal> heh
+[19:52] <avidal> http://ajaxian.com/archives/is-there-something-to-the-crazy-comma-first-style
+[19:52] <avidal> kind of funny, i was thinking about that comma-first style today
+[19:55] bmizerany has joined the channel
+[19:57] davidrussell has joined the channel
+[19:58] romainhuet has joined the channel
+[20:00] sh1mmer has joined the channel
+[20:10] <felixge> _ry: http://github.com/felixge/node/commit/369a7b534cc37fac8a8b6128f7728c30486f4734 let me know what you think :)
+[20:10] <felixge> _ry: you pretty much can't tell we switched documentation tools :)
+[20:11] <felixge> (btw. who needs templating engines if you have 'cat' :)
+[20:11] pdelgallego has joined the channel
+[20:11] <_ry> felixge: wow amazing
+[20:11] <_ry> thanks!
+[20:12] <felixge> _ry: hang on before merging
+[20:12] <felixge> _ry: gonna do cross browser checks now
+[20:12] <_ry> ok
+[20:12] <_ry> felixge: some people are reporting that the toc is too long
+[20:12] <felixge> _ry: hm,suggestions?
+[20:12] <_ry> do you know some js kungfu to make that kind of scroll up and down depending on the direction of current scrolling
+[20:13] <_ry> um.. if you know what i mean..
+[20:13] <_ry> like as you scroll up the toc goes down
+[20:13] <_ry> if you go down it goes up
+[20:13] <_ry> but always stays in view
+[20:13] <felixge> _ry: you want the toc to stay fixed position?
+[20:13] <JimBastard_> i dunno a specific plugin for that , but it seems like not soo hard in jquery
+[20:14] <_ry> if your window is the right size then it just normal
+[20:15] <creationix> _ry: a zoom kinda like the osx dock?
+[20:15] <felixge> _ry: ok, patch works cross-browser
+[20:15] <felixge> _ry: if you link to an example of what you want, I'm sure I can hack together some jQuery
+[20:15] <felixge> it should be much easier to hack these kinds of things in now
+[20:15] sh1mmer has joined the channel
+[20:15] fizx has joined the channel
+[20:15] <inimino> CSS position:fixed, and ship it
+[20:16] <mjr_> Are there bits of api.markdown that still don't match the API?  I'd be interested in cleaning that up if a release is near.
+[20:16] <_ry> mjr_: no, i didn't get thsoe changes
+[20:16] <felixge> inimino: for the browser we care about, yeah :)
+[20:16] <_ry> mjr_: i'm updating the docs now
+[20:16] <creationix> won't fixed not work if the browser window is too short
+[20:17] <inimino> you'd need to set overflow:auto too
+[20:17] <creationix> ahh, that would work then
+[20:17] <mjr_> _ry: did you fix the doc to match your recent API changes?
+[20:17] <inimino> for phones, etc
+[20:17] <creationix> netbooks, iPad
+[20:18] <mjr_> BTW, in case you haven't played with one yet, the iPad is a pretty fun way to browse the web, and the JavaScript performance is quite good.
+[20:19] <_ry> mjr_: yes
+[20:19] mattly has joined the channel
+[20:21] <_ry> or instead of the sliding toc, we could hack in creationix's menu?
+[20:21] <_ry> but it should jump to anchors not separate pages
+[20:22] <creationix> that would a fair amount of rewrite
+[20:22] <_ry> hm bummer
+[20:22] <creationix> doesn't jquery have a simple treeview plugin
+[20:22] <creationix> that does collapsing trees
+[20:22] botanicus has joined the channel
+[20:23] <creationix> just feed it nested ul's?
+[20:23] <felixge> I don't really have a problem with the old UI for the docs
+[20:23] <_ry> felixge: you have a big screen :)
+[20:24] <felixge> _ry: people with small screens need to make up for it with smartness : ). Use ctrl_f
+[20:24] <felixge> ctrl=f
+[20:24] <_ry> oh
+[20:24] <felixge> ok I'm trying to write a plus sign here
+[20:24] <felixge> :)
+[20:24] <nefD> ctrl-f has been my goto, but the lack of finer grained links is a little bit of a pain
+[20:24] <_ry> maybe - can we detect if the screen is too small
+[20:24] <_ry> and if so just make it a normal position: absolute
+[20:24] <avidal> use css media queries
+[20:24] <_ry> it = the toc
+[20:24] <felixge> _ry: ohhhh
+[20:25] <felixge> _ry: I just realized what the problem is
+[20:25] <felixge> _ry: yeah I can fix this
+[20:25] dandean has joined the channel
+[20:26] <avidal> <style type='text/css' media='screen and (max-height: 550px)'> #toc { position:fixed; } </style>
+[20:27] <avidal> css3 thing, but i think it works on most major browsers
+[20:28] <felixge> avidal: can't get that to work
+[20:28] <avidal> can just do: @media all and (max-height: 550px) { #toc { position:fixed; } }
+[20:28] <felixge> avidal: sure the syntax is right?
+[20:28] <avidal> inside your regular css
+[20:28] <avidal> pretty sure...
+[20:28] <avidal> actually not sure if it works in style tags
+[20:29] <avidal> but i know it works in link/@import as well as a declaration in an existing stylesheet
+[20:29] <avidal> should use viewport and not height actually
+[20:30] <avidal> then it can go fixed if you resize your browser window
+[20:31] <_ry> (wow so nice to have a channel full of js people!)
+[20:31] <felixge> avidal: ok, got it to work
+[20:32] <felixge> _ry: http://github.com/felixge/node/commit/724dc6f8bf7cb4957b6b423d27597f80449b998e
+[20:32] <mjr_> hey, that's pretty cool
+[20:32] <mjr_> CSS to the rescue
+[20:33] <felixge> mjr_: yeah, CSS  is nice for projects that can ignore IE6 & friends ;)
+[20:33] rockstar has left the channel
+[20:34] <mjr_> I'm so glad I get to ignore IE6 in my job.
+[20:35] <avidal> missing a closing brace felixge 
+[20:35] <mjr_> I also remember like 10 years ago or whatever when I was trying to convince people to dump Netscape because IE was so much better.
+[20:35] <felixge> avidal: thx
+[20:35] <avidal> and your comment is backwards...you are making the toc fixed for small screens not big screens
+[20:35] <nefD> at the time, though, i believe ie probably *was* better
+[20:36] <nefD> i remember nutscrape being terrible.. or at least, towards the end
+[20:36] <_ry> felixge: cool - want to squash up everything?
+[20:37] <avidal> i'm not even sure what the goal was with the toc thing, i was just answering a question :P
+[20:37] <felixge> _ry: it's two commits: http://github.com/felixge/node/commits/
+[20:37] <felixge> _ry: let me know if you want them squashed
+[20:38] <avidal> i don't really see the benefit in ever having the toc be absolute position instead of fixed, even with a fairly big screen
+[20:38] <_ry> felixge: okay - going to finish my docs then i'll commit them- feel free to make changes
+[20:38] <felixge> avidal: we are doing the opposite
+[20:38] <konobi> ACTION needs to get a jQuery.crash onto an ad network
+[20:38] <nefD> heh
+[20:38] <felixge> avidal: big screens get fixed position toc, small ones get absolute
+[20:38] <avidal> oh i see, min-height
+[20:38] <avidal> got it
+[20:39] kriszyp_ has joined the channel
+[20:39] <felixge> avidal: yeah I changed the commit so the default will still be good for bad browsers
+[20:39] <avidal> still not sure why though, i didn't partake in the original discussion
+[20:41] <felixge> avidal: well, otherwise you will never be able to see the full toc on small screens
+[20:41] <felixge> avidal: it would simply bleed out of the screen, but the fixed position would not allow you to scroll
+[20:41] <avidal> ah, yeah, makes sense
+[20:42] <avidal> media queries are pretty awesome
+[20:42] <avidal> i first really saw them at sxsw (a trade show/conference) last year being demoed by some mozilla and opera guys
+[20:43] <creationix> making progress on my new engine http://beta.howtonode.org/what-is-this the data on the right isn't live yet, but the idea is there.
+[20:43] <_ry> creationix: yes!
+[20:44] <creationix> I thought you would like the versions metadata
+[20:44] <_ry> extremely useful
+[20:44] <creationix> also since the engine pulls from git, you can see the article at any version by prefixing the sha in the url (not implemented yet)
+[20:44] <avidal> interesting
+[20:45] psynaptic has joined the channel
+[20:45] <creationix> well, I've got to run to class, and laptops aren't allowed, so I'll be offline for the next couple of hours
+[20:46] <felixge> creationix: I need to contribute an article to howtonode at some point : )
+[20:46] <felixge> creationix: I really like what you are doing there
+[20:46] <creationix> yes
+[20:46] <felixge> (I was pretty skeptical at first )
+[20:46] <creationix> it will be easier to author them once this engine is done
+[20:46] <_ry> me too
+[20:46] <deanlandolt> creationix: nice touch on the animated favicon :)
+[20:46] <creationix> :)
+[20:46] <avidal> chrome doesn't load the favicon for me
+[20:46] <_ry> with explicit version references i feel it's not a wasted effort
+[20:47] <avidal> actually it isn't loading any favicons for me :P
+[20:47] <creationix> _ry, that's the idea
+[20:47] <creationix> well, I really do need to run, see you all later
+[20:47] <ashb> 'once this engine is done' - its software. it'll never be done
+[20:53] javajunky has joined the channel
+[20:53] Gruni has joined the channel
+[20:54] JimBastard_ has joined the channel
+[20:54] <JimBastard_> i wonder what CrockBot's current uptime is
+[20:54] <CrockBot> The dark modules of old rise to the call of Crockford.   sbesselsen
+[20:55] psynaptic has left the channel
+[20:56] aho has joined the channel
+[20:59] charlesjolley has joined the channel
+[21:00] tjholowaychuk has joined the channel
+[21:00] mattly_ has joined the channel
+[21:01] dantaliz1ng has joined the channel
+[21:11] isaacs has joined the channel
+[21:12] <JimBastard_> anyone here going to nyc.js tonight?
+[21:12] <JimBastard_> i know we've got some NY lurkers in here
+[21:13] jashkenas has joined the channel
+[21:15] kriskowal_ has joined the channel
+[21:15] jashkenas has left the channel
+[21:21] <_ry> felixge: okay i'm taking your changes now
+[21:24] tekky has joined the channel
+[21:25] <felixge> _ry: cool
+[21:28] <fictorial> ACTION loves running but loves ice cream more.
+[21:29] rictic has joined the channel
+[21:30] javajunky has joined the channel
+[21:32] <rudebwoy> _ry: seems like stdin gets never closed on child processes automatically when they exit.  is that for a reason?
+[21:35] <stephenlb> ice cream is important.
+[21:40] <rudebwoy> http://pastie.org/910249
+[21:41] <_ry> rudebwoy: yeah.. that makes sense to do
+[21:43] kriszyp_ has joined the channel
+[21:46] okito has joined the channel
+[21:46] charlesjolley has joined the channel
+[21:49] maushu has joined the channel
+[21:51] <mape>  Is there an easy way of getting the IP of the user connecting to the HTTPD?
+[21:52] <_ry> mape: req.connection.remoteAddress
+[21:52] <mape> _ry: Once again, thanks! :)
+[21:52] sudoer has joined the channel
+[22:01] dgathright has joined the channel
+[22:02] <CIA-77> node: 03Felix Geisendörfer 07master * r1a9c9b0 10/ (5 files in 2 dirs): 
+[22:02] <CIA-77> node: Bring back the old manual style
+[22:02] <CIA-77> node: This brings back the old manual style, including the toc and syntax
+[22:02] <CIA-77> node: highlighting. - http://bit.ly/aUZfuA
+[22:02] <CIA-77> node: 03Felix Geisendörfer 07master * rb544185 10/ doc/pipe.css : 
+[22:02] <CIA-77> node: Fix doc toc for small screens
+[22:02] <CIA-77> node: Only make the toc fixed position for big screens. - http://bit.ly/9k8FPi
+[22:02] <CIA-77> node: 03Ryan Dahl 07master * r499c615 10/ (doc/api.markdown doc/index.html): Doc changes for new API (part 1) - http://bit.ly/9jXnp4
+[22:02] <isaacs> _ry: wow, i see what you mean about stack traces on syntax errors.
+[22:02] <isaacs> _ry: it's as if v8 doesn't *want* you to debug compiled script...
+[22:03] <_ry> oh man. docs are so paintful
+[22:04] <_ry> isaacs: yeah - i think it's just a bug in ReThrow
+[22:04] <isaacs> ACTION .oO(you're writing docs in paint?)
+[22:04] <isaacs> i thought we're going with markdown.
+[22:05] <isaacs> yeah, also, when you catch and rethrow from JS, the message points back at where the error was rethrown
+[22:06] <_ry> i kind of hate the old layout now
+[22:06] <_ry> :)
+[22:07] lifo has joined the channel
+[22:10] <isaacs> gah, so, crashing on process.compile sucks, but this is a lot worse than just not getting the cute ^ thingie
+[22:10] <felixge> _ry: what's the difference between buffer.slice / buffer.binarySlice ?
+[22:10] <isaacs> anything I do to try to make that error catchable also seems to make the message completely misleading and useless.
+[22:10] bpot has joined the channel
+[22:12] mattly has joined the channel
+[22:12] <_ry> felixge: one returns a string the other a buffer
+[22:12] dgathright has joined the channel
+[22:12] <_ry> felixge: btw, i removing cb from the file streams
+[22:12] <_ry> those arguments need to be repurposed
+[22:12] <felixge> _ry: hm
+[22:12] <felixge> _ry: so write() no longer will have a callback?
+[22:13] <_ry> e.g. stream.end('the end of the file\n', 'utf8')
+[22:13] <_ry> no, and it need to accept an encoding
+[22:13] <felixge> hm
+[22:13] <isaacs> _ry: then how do you get notified when the write is done?
+[22:13] <_ry> with 'drain'
+[22:13] <isaacs> fair enough
+[22:13] <felixge> well
+[22:13] <felixge> the problem is that you may want to know about partial drains
+[22:14] <felixge> at least I do in dirty
+[22:14] admc has joined the channel
+[22:14] <isaacs> can't you do the if (typeof enc === "function") { cb = enc; enc = "ascii" } trick ?
+[22:14] <felixge> this effectively forces me to do my own buffering outside the stream
+[22:14] <_ry> felixge: keep a counter of how many bytes are written
+[22:15] <felixge> _ry: I still don't get an event, how would that help?
+[22:15] tekky has joined the channel
+[22:15] <_ry> felixge: oh, you can add an extra event
+[22:15] ako has joined the channel
+[22:16] <_ry> it may also be that the stream isn't the right interface for node-dirty
+[22:16] <_ry> if you need that kind of control
+[22:16] <felixge> _ry: possibly
+[22:16] <avidal> ugg
+[22:16] <felixge> _ry: If that's the case, you tricked me into contributing something I have no use for!
+[22:16] <felixge> :D
+[22:16] <_ry> what about an event 'written'
+[22:16] <avidal> if node had udp support i'd have more fun doing my current office project
+[22:16] silentrob has left the channel
+[22:17] <felixge> _ry: I still don't know why we couldn't have 3rd param for write?
+[22:17] <felixge> _ry: is this just because not all streams would support it?
+[22:17] <_ry> felixge: well - maybe a last param
+[22:17] <felixge> yeah
+[22:17] <felixge> _ry: anyway, throw it out
+[22:17] <felixge> _ry: and I can look into getting it back
+[22:17] <_ry> well, i haven't actually done it yet
+[22:18] <_ry> i'm just not going t add docs for it
+[22:19] <_ry> felixge: is there a way to get a toc with the old ronn stylesheet?
+[22:19] <felixge> _ry: yeah, shouldn't be a problem
+[22:19] <_ry> s/old//
+[22:19] <felixge> _ry: what about making process.stdin a getter instead of having process.openStdin() ?
+[22:19] <_ry> felixge: maybe
+[22:19] <_ry> sounds like a good idea
+[22:20] <_ry> it's a pretty heavy getter
+[22:20] <_ry> starts a watcher
+[22:20] <_ry> reads from the STDIN_FILENO
+[22:20] <felixge> _ry: it would only execute once, right?
+[22:20] <JimBastard_> its funny watching new coworkers choke on git
+[22:20] <_ry> possibly starts a thread
+[22:20] <_ry> right - but it might be surprising
+[22:20] <felixge> _ry: after that it would overwrite itself with a reference to the stream
+[22:21] <_ry> maybe someone wants to just do process.stdin.fd
+[22:21] <_ry> and then gets confused
+[22:21] <felixge> _ry: because it wouldn't be available yet?
+[22:21] <CIA-77> node: 03Ryan Dahl 07master * rb8bb6e9 10/ lib/child_process.js : Close child process stdin on SIGCHLD - http://bit.ly/aR3x8z
+[22:22] <_ry> felixge: stdin is open from the start of the process, but Node has its own setup
+[22:22] <felixge> _ry: anyway, just reviewed the doc commit - looks great! Left a comment about a typo
+[22:22] gf3 has joined the channel
+[22:23] <_ry> i'm going to go have lunch and take second swing at it
+[22:23] <_ry> not sure how to do events
+[22:23] <felixge> _ry: I guess openStdin() is fine with me, just thought it would be neat for consistency : )
+[22:23] <felixge> _ry: events for what?
+[22:23] <_ry> in the docs
+[22:23] <devinus> _ry: me thinks this should be in a url lib http://pastie.org/910360 what do you think ?
+[22:24] <_ry> devinus: it's in the path lib
+[22:24] <devinus> _ry: as what ?
+[22:24] <_ry> join
+[22:24] <felixge> anyway, headed to bed now. _ry I can make a patch to use the ronn layout
+[22:24] <isaacs> devinus: require("path").join("foo", "bar", "baz")
+[22:24] <devinus> _ry: oh, yeah for now. but not all OS's have '/' as a path joiner
+[22:24] <felixge> _ry: I'll pretty much just have to hard copy the header used by ronn, but that shouldn't change much
+[22:25] <_ry> felixge: okay would be cool
+[22:25] <devinus> _ry: all URLs are joined by '/' for sure though
+[22:25] <isaacs> devinus: it's not safe to do that in urls, because foo.com/// is not the same as foo.com/
+[22:25] <_ry> felixge: ah , yeah...
+[22:25] <avidal> you should put me in AUTHORS, it was my css used for the toc in the docs :P
+[22:25] <_ry> alright. lunch. bbiab
+[22:25] <avidal> or i guess i could actually contribute something to node itself
+[22:25] <avidal> whatever
+[22:25] <felixge> gn8
+[22:26] charlesjolley has joined the channel
+[22:26] <isaacs> devinus: path.join actually also normalizes .. and . and whatnot.
+[22:26] <isaacs> devinus: if you want to do url resolution, you should use url.resolve
+[22:26] <devinus> isaacs: yeah dont need that
+[22:27] <isaacs> devinus: windows is the only relevant OS that doesn't use / as the path separator, and there are much bigger obstacles to windows support.
+[22:28] <devinus> isaacs: i understand. just trying to be forward thinking
+[22:28] <isaacs> devinus: well, actually, since windows support will probably be on top of mingw or some other fake-posix thing, it'll probably support / anyhow
+[22:29] <isaacs> devinus: iirc, windows actually lets you cd c:/windows just fine
+[22:29] <avidal> yep
+[22:29] <avidal> it'll translate it internally
+[22:29] <isaacs> so let's just pretend windows uses / for paths ;)
+[22:32] <devinus> isaacs: NEVER!
+[22:32] dantalizing has joined the channel
+[22:52] dysinger has joined the channel
+[22:52] hassox has joined the channel
+[22:52] rtomayko has joined the channel
+[22:53] jed has joined the channel
+[22:55] kriskowal has joined the channel
+[22:59] freshtonic has joined the channel
+[23:00] darkf has joined the channel
+[23:07] fizx has joined the channel
+[23:07] mikeal has joined the channel
+[23:07] <mikeal> _ry: i'm debugging some http proxy code i have running on your master
+[23:07] <mikeal> first off, it seems a lot faster
+[23:08] <mikeal> but i'm getting a weird issue where my clientResponse is already closed
+[23:08] <mikeal> and I didn't close it
+[23:08] <mikeal> and when i try to write to it i get an exception
+[23:08] <devinus> http://github.com/devinus/fotofoo -- Node.js/SproutCore app
+[23:09] <mikeal> any idea what this might be?
+[23:09] <mjr_> mikeal: are you listening for end on the client connections already?
+[23:09] <_ry> mikeal: hm
+[23:10] <mikeal> let me try a few other things
+[23:10] <_ry> yes, that'd be my question too
+[23:11] <mjr_> Although I notice that if a client goes away, the write doesn't always throw, which is interesting.
+[23:12] <_ry> mjr_: define go away?
+[23:13] <_ry> if you just get an 'end' then it should be okay
+[23:13] <mjr_> I'd need to dig up that test again.  I'm pretty sure that listening for end fixed it.
+[23:14] <mjr_> I was surprised that the write to an eded connection seemed to throw sometimes, but not always.
+[23:14] <mikeal> this is crazy
+[23:14] <_ry> so mikeal and mjr_ - I'm not going to get two important issues into this release. Namely throttle HTTP messages and HEAD requests
+[23:14] <mikeal> i added a listener to just tell me if it fires before I call end(), and the problem went away
+[23:14] <mikeal> so confused
+[23:16] <_ry> but soon i will fix those issues
+[23:16] fizx_ has joined the channel
+[23:16] binary42 has joined the channel
+[23:16] creationix has joined the channel
+[23:17] <mjr_> The main thing I really want from HTTP is to easily detect the write queue length.
+[23:17] <mjr_> But for sure a more robust throttling mechanism would be useufl.
+[23:17] sh1mmer has joined the channel
+[23:21] <mikeal> _ry: that's fine for me
+[23:21] <mikeal> i have a workaround
+[23:21] <mikeal> ok, new issue
+[23:21] <mikeal> i'm reusing http clients after their requests have finished
+[23:21] <mikeal> and i'm getting a really weird error
+[23:21] <mikeal> Error: Stream already opened
+[23:21] <mikeal> when I try to close one of them
+[23:22] <mikeal> i'm closing the request
+[23:22] <mikeal> not the client
+[23:23] <_ry> mikeal: do client.destroy() before reusing
+[23:23] <mikeal> what does that do?
+[23:23] <_ry> closes the fd
+[23:23] <mikeal> i want to keep the socket open
+[23:23] <_ry> well in the case of http client - actually - it should handle that itself
+[23:24] <mikeal> to serve multiple requests
+[23:24] <_ry> http client closes the connection after each response
+[23:24] <mikeal> oh really
+[23:25] <mikeal> no more keep-alive?
+[23:25] <_ry> it never had keep-alive
+[23:25] <_ry> http servers support keep-alive and pipelining
+[23:25] <_ry> not the clients
+[23:25] <_ry> (another v important issue)
+[23:26] <mikeal> ok, cool
+[23:26] dgathright has joined the channel
+[23:28] andreavonhollen has joined the channel
+[23:28] <mikeal> ok, stupid Stream.close() bug is back
+[23:28] <isaacs> _ry: !! ok, i think i got it working.
+[23:28] <mikeal> i have a listener on "end" now
+[23:29] <isaacs> _ry: it's a little bit of a hack, but... the idea is that I save a reference to whichever error is *first* sent to ReportException, and then pass in a flag saying whether to report and exit now, or just set the static var and return.
+[23:31] <creationix> grr, github email scrapers http://pastie.org/910520
+[23:31] <creationix> very funny email though
+[23:32] r11t has joined the channel
+[23:35] binary42 has joined the channel
+[23:36] dgathright has joined the channel
+[23:37] <mikeal> i'm wrapping this write call in a try/catch and it's not working, it's still throwing and killing everything
+[23:38] devinus has joined the channel
+[23:38] <creationix> mikeal, can I see the code
+[23:38] <_ry> isaacs: cool
+[23:38] <mikeal> it's a lot of code :)
+[23:38] <_ry> mikeal: what's the error?
+[23:39] <mikeal> TypeError: Cannot call method 'start' of null
+[23:39] <mikeal> in the same code that is trying to call write on a clientResponse
+[23:39] <_ry> that's it?
+[23:39] <mikeal> http://gist.github.com/360681
+[23:40] <mikeal> this is the code that calls it
+[23:40] <mikeal> http://gist.github.com/360682
+[23:40] mrjjwright has joined the channel
+[23:40] <mikeal> i have a listener for "end" that sets clientResponse.ended to true
+[23:41] <isaacs> _ry: never mind.  this approach only works if you end up crashing on the first error that gets raised.
+[23:41] binary42 has joined the channel
+[23:41] <isaacs> ACTION blergh.  rethrow sucks.
+[23:42] <_ry> mikeal: hm
+[23:42] hassox has joined the channel
+[23:42] <mikeal> hold on, i had added some prints to node so the line numbers might be a little odd in that trace
+[23:42] <mikeal> i've set it back to a vanilla master
+[23:43] <_ry> http://github.com/ry/node/blob/b8bb6e90074452b41c45a31b03d261484cb841d4/lib/net.js#L477
+[23:43] <_ry> or http://github.com/ry/node/blob/b8bb6e90074452b41c45a31b03d261484cb841d4/lib/net.js#L508
+[23:43] <mikeal> updated http://gist.github.com/360681
+[23:43] <_ry> i guess the first
+[23:43] <isaacs> mikeal, _ry: http://github.com/ry/node/blob/b8bb6e90074452b41c45a31b03d261484cb841d4/lib/net.js#L685
+[23:43] <mikeal> yeah, it's 477
+[23:44] <_ry> mikeal: are you listening for 'close' ?
+[23:45] <mikeal> i'm listening for "end"
+[23:45] <_ry> i think what's happening is it's getting an EPIPE or something (not an EOF) and not emitting 'end' only 'close'
+[23:46] <mikeal> i'll listen to both
+[23:46] <_ry> maybe it should always emit 'end'...
+[23:47] <mikeal> nope
+[23:47] <mikeal> that's not picking it up either
+[23:47] <_ry> 'error' ?
+[23:47] <mikeal> i can reproduce the problem by bringing up a page I'm proxying and cmd+shit+r really fast
+[23:47] <_ry> oh maybe it's a problem that happens while it's connecting
+[23:48] <mikeal> error doesn't catch it either
+[23:49] <mikeal> is there a reason that I can't catch this exception?
+[23:50] <_ry> mikeal: bug? :-/
+[23:51] <mikeal> let me try to write a reduced test case
+[23:52] <JshWright> I'm getting an "invalid UTF-8 JSON" when adding a query string to a view
+[23:53] <JshWright> google is less than useful (mostly references to some issues on OSX)
+[23:55] <CIA-77> node: 03Ryan Dahl 07master * r08a09bb 10/ (5 files in 3 dirs): Use some more Binary/F methods for Buffer - http://bit.ly/aWpV2b
+[23:55] <CIA-77> node: 03Matt Ranney 07master * r631e5bf 10/ doc/api.markdown : Improve child_process documentation. - http://bit.ly/bJm2JC
+[23:56] <creationix> JshWright, what do you mean "adding a query string to a view"
+[23:57] quirkey has joined the channel
+[23:57] <creationix> sup quirkey
+[23:58] <JshWright> creationix:  curl http://localhost:5984/offices/_design/basic/_view/by_uri works,  curl http://localhost:5984/offices/_design/basic/_view/by_uri?key=foo does not
+[23:59] <creationix> what's your code to decode the url?

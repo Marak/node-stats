@@ -1,0 +1,1162 @@
+[00:06] bry4n has joined the channel
+[00:07] <jasondavies> ok, figured it out, the segfault happens when you try to deflate the empty string
+[00:14] erichocean has left the channel
+[00:14] erichocean has joined the channel
+[00:14] <erichocean> ryah: here's all of the changes I made to node after the v8 changes for Solaris had been made: http://github.com/erichocean/node/tree/node-solaris
+[00:15] cloudhead has joined the channel
+[00:15] <erichocean> it's not directly usable because the build system is different, but at least you can see what headers, defines and libraries I had to add/modify to get it build
+[00:16] isaacs has joined the channel
+[00:16] <erichocean> one thing I did is modify all of the other deps to be compilable in C++ mode
+[00:18] dnolen has joined the channel
+[00:20] <ryah> okay. cool
+[00:21] <ryah> erichocean: what about ce87eedca9c0eaedea5c9e5b3f0ab26ca4a0328c
+[00:21] <ryah> seems like a lot of moving around in platform files?
+[00:22] <erichocean> oh, so
+[00:22] <erichocean> the v8 team has these platform abstractions
+[00:22] <erichocean> they assumed that all Unix platforms could share that implementation, but they can't
+[00:22] <erichocean> so I refactored them to their individual platform overrides
+[00:22] <erichocean> you could use a #define if you'd rather
+[00:23] soveran has joined the channel
+[00:24] <erichocean> my guess is that the v8 team will have their own opinions on how to handle this stuff
+[00:24] <ryah> wow - were you trying to snapshot the node libraries?
+[00:24] <erichocean> but working code is better than no code
+[00:24] <ryah> definitily
+[00:24] <erichocean> I thought about it, but ran out of time
+[00:25] <erichocean> it should be possible since the whole build is done with scons now
+[00:25] <isaacs> snapshotting the node libs would be all kinds of hot.
+[00:25] <isaacs> but it should be a configurable option. it's really annoying to have to recompile every time you make a change.
+[00:27] <isaacs> ACTION does not love CommonJS Package/1.0, ratified or not...
+[00:34] mikeal has joined the channel
+[00:36] <_Ray_> isaacs, re: your question about my comet problems. I'm calling flush() and sendBody(), never calling finish(), yet the transmission is being RST'd by node (apparently). On the client side, the 'error' event of the xmlhttprequest object fires. The second sendBody() never seems to go through the wire.
+[00:38] isaacs_ has joined the channel
+[00:39] <hassox> isaacs: why
+[00:39] <hassox> isaacs: what's wrong with it?
+[00:39] <hassox> ACTION hasn't looked closely
+[00:39] <isaacs> well, it seems like most of the stuff in it falls into a few different categories...
+[00:40] <isaacs> 1) absolutely necessary stuff that we may as well synchronize on, which might be a little diff from my preferences, but whatever.
+[00:40] <isaacs> 2) stuff that's not strictly necessary, but nice to have, like author, bug reporting lists, description, keywords, etc.
+[00:40] <isaacs> and 3) stuff that doesn't belong in a package manager at all, imo, full on crazy skyscraper version 9.0 stuf.
+[00:41] <hassox> can you give me an eg of 3?
+[00:42] <isaacs> being able to have a package file require() something from a package that is not yet installed, and have the system smart enough to go out and fetch just what's necessary.
+[00:42] <isaacs> that's craziness.  clever, awesome, neat, fun to use maybe, but also hugely nontrivial.
+[00:43] <isaacs> in a browser commonjs impl, that kinda makes sense, but imo, the browser is so insane, it kinda makes sense to just ignore it and do what's right for ssjs, and keep using stuff like dojo and yui and jquery for the client-side management of modules.
+[00:44] <hassox> you want to be able to automatically install dependencies though right?
+[00:44] <isaacs> yeah, but *at instlal time*
+[00:44] <isaacs> ie, you do "npm install foo" and it says "hey, foo requires bar, so i'll install that first"
+[00:45] <isaacs> if you have the information about what each thing requires, then forming the install list is trivial.
+[00:45] <hassox> oh yeah
+[00:45] <hassox> install time is what I meant
+[00:46] <isaacs> also, in category 1, the biggest offender to me is the fixed folder structure semantics.
+[00:46] <isaacs> esp when the package.json doesn't explicitly state them, and you can find things in more than one place.
+[00:46] <isaacs> ie, there's no package.json, but there IS a packages/foo/package/ folder which has the data inside there or something.
+[00:47] <isaacs> but, that's all bikeshedding.
+[00:49] <isaacs> i don't mind making npm work with that stuf.
+[00:50] rictic has joined the channel
+[00:50] <isaacs> but i'd much rather simplify the whole thing, and just say "you use tarballs, because we all have tar.  you give the thing a url to the tarball you want installed, and it expects a package.json in there, and it all just works."
+[00:51] mdg has joined the channel
+[00:52] <isaacs> if you're using almost any kind of scm, you have tarballs for free (or almost)
+[00:54] <kriskowal> isaacs, i'm going to start a conversation w/ you on #commonjs
+[00:59] <mikeal> i'm thinking of starting to work on a packaging system for node.js
+[00:59] <mikeal> has anyone written one yet?
+[01:00] <orlandov> mikeal: there was supposed to be one named kiwi, but i dont didn't see anything its repo
+[01:00] <inimino> mikeal: isaacs is talking about his in #commonjs (though it's not for node)
+[01:01] <isaacs> mikeal: workin on it.
+[01:01] <isaacs> inimino: it IS for node.
+[01:01] <mikeal> i don't see how you could handle the majority of the problem with only commonjs
+[01:01] <isaacs> the "n" in "npm" == "node"
+[01:01] <mikeal> found http://github.com/isaacs/npm
+[01:01] <inimino> mikeal: scratch that, it *is* for node
+[01:01] <inimino> isaacs: noted
+[01:02] <mikeal> are you doing dependencies or versioning yet?
+[01:02] <mikeal> you're extending the builtin require, nice
+[01:02] <orlandov> isaacs: very cool
+[01:02] <_Ray_> inimino: the test case is at http://fedelebron.com/node.tar.bz2 . it starts with "node example.js", and the upload page is fileUpload.html. the code that's actually executed in the upload is all in uploadFile.js , and it prints every packet sent to console (as well as other info). tell me if there's any file missing for it to work, and many thanks if you get to it :)
+[01:03] <mikeal> isaacs: I want to get semver working with this
+[01:03] <isaacs> mikeal: i'm just using what's already there, and putting things where node expects them to be, in a simple way
+[01:03] <isaacs> what's semver?
+[01:03] <mikeal> so you can find/install packages by name
+[01:03] <mikeal> http://semver.org/
+[01:03] <hassox> isaacs: that sounds reasonbable
+[01:03] <inimino> _Ray_: I'll take a look
+[01:04] <_Ray_> thanks :)
+[01:04] <isaacs> oh, yes, semver.  definitely
+[01:04] <isaacs> when i get vers, they'll be sem, i promise :)
+[01:04] <_Ray_> (it also outputs info with console.log)
+[01:04] <mikeal> i think at some point you'll need to abstract the directory tree from the builtin directory require expects
+[01:05] <mikeal> because you'll want to have a couple versions of the same package loaded for different deps
+[01:05] <isaacs> mikeal: already considered that
+[01:05] <isaacs> just gonna drop them in .node_libraries/<pkg>/package-<ver>/ and then symlink the "active" one to .../package
+[01:06] <isaacs> and do some juggling to make sure it all works right, manage dependencies, etc.  things get multidimensional when you add versions.
+[01:06] <erichocean> http://nixos.org/ is cool
+[01:06] <mikeal> do you really need to keep an "active" one
+[01:07] <hassox> isaacs: with js though we can load multiple versions at the same time though rihgt?
+[01:07] <hassox> cause they're all just objects....
+[01:07] <mikeal> if you have two libraries import two different versions, and in their require they state which version
+[01:07] <mikeal> think of like
+[01:07] <mikeal> var name = rrequire("name", "1.1")
+[01:08] <erichocean> http://www.cs.utah.edu/flux/papers/knit-osdi00.pdf the ideas here would work well in JavaScript
+[01:10] <mikeal> i really want to get this right, I've been cursing Python packaging for like 5 years now
+[01:10] <hassox> isaacs: I think the start you propose is great...
+[01:11] <hassox> very simple and clean
+[01:11] <mikeal> yeah, what is here looks great
+[01:11] <hassox> a single pacakge.json file in the dir
+[01:11] <hassox>  / tarball
+[01:11] <hassox> and roll from there
+[01:11] <mikeal> this gets a little more complex when you need build steps
+[01:11] <mikeal> for C based libraries
+[01:12] <isaacs> hassox: thanks for the encouragement.
+[01:12] <isaacs> i'd like to avoid doing run-time selection of versions.
+[01:12] <isaacs> there's a reason no other platforms do that.  it's craziness.
+[01:13] <mikeal> actually i know why other platforms don't do it
+[01:13] <mikeal> it's because their internal import systems keep around pointers to the module in a global context
+[01:13] <mikeal> but node's import system is so light that you could just provide an alternate method that didn't do that
+[01:13] <technoweenie> yea you should be able to do 'foo = require('foo/v1.2'), foo2= require('foo/v1.3')
+[01:14] <mikeal> other platforms compile to byte code so they want to avoid re-importing the same code whenever possible
+[01:14] <mikeal> there is no technical reason that this wouldn't be nice and clean in node
+[01:14] <mikeal>  what you cannot do is code reloading after import
+[01:14] <mikeal> you can clean up all the references
+[01:20] <inimino> _Ray_: are you on HEAD?
+[01:20] <inimino> I get "cannot find module "./url""
+[01:21] <inimino> _Ray_: looks like it's a relative path, so maybe a missing file
+[01:21] <_Ray_> doubt it...
+[01:21] <_Ray_> "url" is just the url module, it's standard I thought?
+[01:21] <_Ray_> I have an "/usr/local/lib/node/libraries/url.js"
+[01:22] <_Ray_> And the code is 'url         = require("url");', so it should look for that I thought?
+[01:22] <inimino> the code is "url = require("./url")"
+[01:22] <_Ray_> O.o?
+[01:22] <inimino> in directoryListing.js
+[01:23] <_Ray_> oh, but that's never accessed
+[01:23] <inimino> well, the example now runs
+[01:23] <_Ray_> it didn't before? O.o
+[01:24] <_Ray_> odd, it didn't whine for me
+[01:25] <inimino> it crashed with an exception about that
+[01:25] <inimino> now I'm getting a 404 because there's a path hardcoded in
+[01:26] <_Ray_> which one?
+[01:26] <_Ray_> oh, in config.js maybe?
+[01:26] DamZ has joined the channel
+[01:26] <_Ray_> yeah, that needs to be edited for your config
+[01:26] <inimino> yes
+[01:26] <_Ray_> sorry for not mentioning it!
+[01:26] <_Ray_> completely forgot :(
+[01:27] DamZ has joined the channel
+[01:28] <inimino> _Ray_: ok, so it runs now
+[01:29] <_Ray_> :)
+[01:29] <_Ray_> try uploading a file - stdout displays each time it sendBody()s, yet the connection is closed after the first one it seems
+[01:29] <_Ray_> from the client side, the xmlhttprequest fires the 'error' event, which I dump to firebug's console
+[01:29] <inimino> and upload doesn't seem to work at all
+[01:30] <inimino> ah, I don't use Firebug
+[01:30] <inimino> looks like your client side code is broken without it
+[01:30] <isaacs> mikeal, technoweenie: you will be able to do that, yes.
+[01:31] <_Ray_> inimino, without a console.log, yeah
+[01:31] <isaacs> except it'll be require("foo") for the active version, or require("foo-1.0"), require("foo-1.1"), etc
+[01:32] <mikeal> do you mean "latest"
+[01:32] <isaacs> mikeal: no, active.
+[01:32] <isaacs> you may want to roll back
+[01:32] <_Ray_> inimino, what are you using?
+[01:32] <mikeal> i see
+[01:32] <mikeal> i may hack on this a bit
+[01:32] <isaacs> so, internally, "foo" is just a symlink to the "foo-1.0" folder or whatever.
+[01:32] <isaacs> not 100% sure what that'll look like.
+[01:32] <inimino> _Ray_: I don't use anything
+[01:33] <_Ray_> O.o
+[01:33] <isaacs> _Ray_: inimino is Hard Core.
+[01:33] <isaacs> his javascript comes out pre-minified.
+[01:33] <inimino> _Ray_: you can use something like log=('console' in window)?console.log:function(){}
+[01:34] <_Ray_> or maybe console=console?console:{log:function(){}}
+[01:34] <isaacs> _Ray_: you'll get an undefined thing if you do that.
+[01:34] <inimino> that's what I used to do when I used Firebug
+[01:34] <_Ray_> Why?
+[01:34] <inimino> or that, sure
+[01:34] <isaacs> window.console=(typeof console === "undefined")?console:{log:function(){}};
+[01:35] <_Ray_> oh right, cause I'm using the same thing I'm testing
+[01:35] <_Ray_> I wouldn't expect U.B., but it could happen
+[01:35] <inimino> console=window.console||{log:function(){}}
+[01:35] <inimino> if you like typing "console.log" instead of just "log"
+[01:36] <isaacs> inimino: you win this round of golf ;)
+[01:36] <inimino> ^.^
+[01:36] JimBastard has joined the channel
+[01:37] <JimBastard> is there anything for doing email from node?
+[01:37] <JimBastard> smtp and whatnot
+[01:37] <_Ray_> inimino, ok, that should work, though I'm still relying on .multipart support from the browser, which I'm not sure if everything supports - FF I'm sure does
+[01:37] <webben> Yes. See the wiki on github.
+[01:37] <isaacs> fyi those of you who may have been interested (hassox, mikeal) npm is going to use package.json files that match the CommonJS style, but much of hte stuff in them will be ignored.
+[01:37] <JimBastard> webben you talking to me?
+[01:38] <mikeal> isaacs: are you working on this pretty actively right now?
+[01:38] <webben> JimBastard: yes
+[01:38] <JimBastard> which project? i checked
+[01:38] <isaacs> mikeal: right now i'm just talking about it.
+[01:38] <isaacs> but last night, whoo boy.
+[01:38] <mikeal> hehe
+[01:38] <isaacs> and probably a few more times soonish
+[01:38] <mikeal> I might spend some time hacking on it
+[01:38] <inimino> _Ray_: the other thing you can do is actually write a function that outputs to an element on the page when console isn't there
+[01:38] <inimino> _Ray_: yeah, I'm using Firefox
+[01:39] <JimBastard> webben the email.js project doesnt seem to send mail
+[01:39] <webben> JimBastard: Yeah, apologies, that's what I was thinking of.
+[01:40] <mikeal> if someone doesn't write SMTP client code for node in like 3 months I'll probably have to write it
+[01:40] <mikeal> that's about when I'll need it
+[01:41] <_Ray_> inimino, well, fb has nice formatting for objects
+[01:42] <inimino> _Ray_: it's just that I'm usually using a trunk build of Firefox and it's not convenient to keep it installed
+[01:42] <inimino> _Ray_: also it's buggy
+[01:43] <JimBastard> mikeal do you mean writing an actual smtp server in node or building a binding to talk to an existing smtp server
+[01:43] <mikeal> client
+[01:43] <_Ray_> that I agree with, it's buggy as hell
+[01:43] <JimBastard> mikeal im gonna have to build one in the next day or so, its the next item on my list
+[01:43] <inimino> _Ray_: I do use it every now and then for profiling though
+[01:43] <mikeal> awesome
+[01:43] <inimino> JimBastard: you could just start up /usr/bin/sendmail and give it your mail on stdin
+[01:43] <JimBastard> i was just gonna hack something quick together , if you have any ideas hit me up
+[01:43] <mikeal> when you create the repo tell me so that i can follow it
+[01:44] <JimBastard> im kinda an smtp noob
+[01:44] <mikeal> it's a **really** simple protocol
+[01:44] <JimBastard> word
+[01:44] <JimBastard> ill try to make a module then
+[01:44] <mikeal> this probably enough info to implement it http://en.wikipedia.org/wiki/Simple_Mail_Transfer_Protocol
+[01:45] <isaacs> ACTION would love to see a lamson port
+[01:45] <JimBastard> i was looking at lamson
+[01:45] <mikeal> inimino: there are bugs in receiving stdio read events 
+[01:45] <JimBastard> but it didnt seem as well supported as sendmail
+[01:46] RayMorgan has joined the channel
+[01:46] <inimino> mikeal: ah
+[01:46] <inimino> isaacs: oh hell yes
+[01:47] <inimino> _Ray_: so it seems to work for small files anyway
+[01:48] <_Ray_> inimino, because it doesn't give you time to see the xmlhttprequest failing
+[01:48] <_Ray_> try a larger file, and you'll see the 'error' event is being triggered
+[01:49] <inimino> so I see progress in the terminal, but not in the browser, is that the issue?
+[01:49] <_Ray_> yes
+[01:50] <_Ray_> the terminal spits out every sendBody
+[01:50] <_Ray_> but Wireshark will show you nothing is being transmitted (a RST is sent from node), and the terminal will show finish() wasn't called
+[01:50] <mikeal> if you have a Mac you can use HTTPScoop
+[01:50] <inimino> ok
+[01:53] <inimino> dammit my keyboard isn't working right
+[01:59] <inimino> _Ray_: hm, I can't tell what's going on here
+[02:00] <_Ray_> Which part?
+[02:00] <_Ray_> The code flow is confusing?
+[02:02] <inimino> _Ray_: sorry, I think it's just too complicated for me to see what the issue is at the moment
+[02:03] <_Ray_> 's ok
+[02:03] <inimino> ACTION needs to get some food, bbl
+[02:07] bryanl has joined the channel
+[02:09] biv_ has joined the channel
+[02:11] <isaacs> ryah: didn't you bump the version to 0.1.25?  i'm still showing process.version = "v0.1.24-102-g4dfed0f"
+[02:12] brandon_beacher has joined the channel
+[02:14] isaacs has joined the channel
+[02:14] rtomayko has joined the channel
+[02:14] isaacs has joined the channel
+[02:15] soveran has joined the channel
+[02:17] eddanger has joined the channel
+[02:25] scudco has joined the channel
+[02:37] mikeal has joined the channel
+[02:39] brandon_beacher_ has joined the channel
+[02:43] brosner has joined the channel
+[02:47] mattly has joined the channel
+[02:48] voodootikigod has joined the channel
+[03:06] robrighter has joined the channel
+[03:20] inkubus08 has joined the channel
+[03:33] jed has joined the channel
+[03:51] richtaur has joined the channel
+[04:03] <JimBastard> so how do i get node to send messages to my stmp server
+[04:03] <JimBastard> smtp
+[04:04] eddanger has joined the channel
+[04:06] malkomalko has joined the channel
+[04:06] <JimBastard> tcp.createConnection?
+[04:15] JamesHayton has joined the channel
+[04:22] <rektide> ryah: has anyone done preliminary investigation / work on supporting multiple isolated contexts ?
+[04:27] <_Ray_> rektide, is this it? http://github.com/brosner/nip
+[04:28] <rektide> _Ray_: that looks like a deployment tool
+[04:28] eddanger has joined the channel
+[04:28] <rektide> i'm interested in making SecurableModules isolated contexts
+[04:29] <cloudhead> is there an easy way to convert unboxed types to boxed types? as in "hello" to new String("hello") ?
+[04:29] <rektide> afaik modules can still pollute the global namespace; i'd like to isolate them
+[04:30] <JimBastard> can anyone help me with using the tcp module to talk to an smtp server?
+[04:30] <JimBastard> ive got everything setup, just having difficulty sending the packets i think
+[04:33] <keeto> cloudhead: what for?
+[04:34] <JimBastard> cloudhead there arent really types in JS aside from the built in ones
+[04:34] <cloudhead> keeto: to call some methods on them
+[04:35] <keeto> all natives (boolean, string and numbers) are already boxed.
+[04:35] <keeto> "string".toUppercase();
+[04:35] <cloudhead> ahm yea I guess 'boxed' isn't the right word
+[04:35] <cloudhead> I mean object wrappers
+[04:36] <keeto> hmm, still don't get yah. :)
+[04:36] <keeto> we have String, Number and Boolean object wrappers, created automatically for natives.
+[04:36] <cloudhead> keeto: but "hello" isn't the same as new(String)("hello")
+[04:37] <JimBastard> http://github.com/Miksago/node.js-smtp/blob/master/lib/smtp.js
+[04:37] gbot2 has joined the channel
+[04:38] <inimino> js> [typeof "abc", typeof new String('abc')]
+[04:38] <gbot2> inimino: ["string","object"]
+[04:39] <keeto> cloudhead: yes, but like I said, I really don't get why you'd want it, as methods on the String prototype are propagated into literals as well.
+[04:39] <inimino> he wants to attach properties to strings
+[04:39] <cloudhead> keeto: but I don't want to extend the prototype
+[04:40] <cloudhead> just a singular object
+[04:40] <keeto> ah.. so just an instance?
+[04:40] <cloudhead> yar
+[04:40] <inimino> the best approach is not to do that
+[04:40] <inimino> if you want an object that has a particular string representation you can give it a toString method
+[04:40] <inimino> but why do you need it?
+[04:41] <cloudhead> for a dsl
+[04:41] <inimino> there's probably some other way
+[04:47] <jed> cloudhead: resig would probably recommend creating your own custom object, and then assigning the prototypes you need from the original object.
+[04:48] <jed> cloudhead: this is what he does for arrays, instead of subclassing.
+[04:49] <jed> cloudhead: from secrets of the ninja: "In general it's a better strategy to implement individual pieces of functionality from native objects, rather than attempt to sub-class them completely, such as implementing the push method directly"
+[04:49] <jed> cloudhead: (oh, but you still want to use the literal form? if so, nevermind...)
+[04:56] <cloudhead> jed: yea, thanks for the insight though
+[04:56] <cloudhead> I'd like it to behave as close as possible to the original
+[04:56] <cloudhead> anyway, I figured a solution out, it's just not very elegant
+[04:58] <jed> cloudhead: what did you end up doing?
+[04:59] <JimBastard> has anyone tried http://github.com/Miksago/node.js-smtp yet?
+[05:02] <cloudhead> jed: sort of what I do here: http://github.com/cloudhead/rig.js/blob/master/rig.js#L49-64
+[05:03] <cloudhead> wrapping the types in their respective object wrappers
+[05:03] <JimBastard> o.O
+[05:07] <jed> cloudhead: how about something like this?
+[05:07] <jed> cloudhead: function( obj ){ return window[ toString.call( obj ).split(/\W/)[2] ]( obj ) }
+[05:08] <jed> cloudhead: (for use in a browser, in this case.)
+[05:08] lifo has joined the channel
+[05:11] <jed> cloudhead: or maybe this would work? function(obj){ return obj.constructor( obj ) }
+[05:12] <cloudhead> jed: hmmm yes
+[05:12] <cloudhead> let me test these out : )
+[05:12] <jed> cloudhead: (sorry if i'm not clear on what you want to accomplish...)
+[05:14] <cloudhead> jed: aha `new obj.constructor(obj)`
+[05:14] <cloudhead> seems like it could do the trick
+[05:14] <jed> cloudhead: ah, right.
+[05:14] <jed> cloudhead: though i think new is inferred on all native types.
+[05:15] <cloudhead> yes but it won't create it properly without
+[05:16] <jed> cloudhead: ah, good to know. what doesn't get done correctly?
+[05:16] mikeal has joined the channel
+[05:16] <cloudhead> if I do var x = "foo".constructor("foo"); x.foo = 1; x.foo
+[05:16] <cloudhead> it returns undefined
+[05:17] <cloudhead> because constructor is probably pollutiing the global namespace at this point
+[05:55] alex-desktop has joined the channel
+[05:57] ryanmcgrath has joined the channel
+[06:01] jamiew has joined the channel
+[06:01] jamiew has left the channel
+[06:02] rictic has joined the channel
+[06:07] micheil has joined the channel
+[06:15] sprsquish has joined the channel
+[06:18] isaacs has joined the channel
+[06:23] okito has joined the channel
+[06:31] biv has left the channel
+[06:38] dnolen has joined the channel
+[06:56] micheil has joined the channel
+[07:41] tlockney has joined the channel
+[07:45] binary42 has joined the channel
+[07:46] DamZ has joined the channel
+[07:56] scudco has joined the channel
+[08:00] micheil has joined the channel
+[08:22] mikeal has joined the channel
+[08:32] markwubben has joined the channel
+[08:52] JimBastard has joined the channel
+[09:12] teemow has joined the channel
+[09:26] lifo_ has joined the channel
+[09:38] DamZ has joined the channel
+[09:39] felixge has joined the channel
+[09:52] xantus_ has joined the channel
+[09:53] jasondavies has joined the channel
+[09:54] lifo has joined the channel
+[10:02] Vito` has joined the channel
+[10:15] <felixge> ryah: hey, you still up?
+[10:20] hassox has joined the channel
+[10:43] bry has joined the channel
+[10:50] DamZ has joined the channel
+[10:57] <hassox> ryah: ping
+[10:57] <JimBastard> pong
+[10:57] <JimBastard> oops
+[10:57] <elliottcable> hey. what the hell, I’ll jump in on the lovin’ too: ryah! I love you! d-:
+[10:58] <JimBastard> does anyone wanna help me get tcp.client to connect locally to an smtp server and send messages?
+[10:58] <JimBastard> free beer
+[10:59] <elliottcable> JimBastard: I’d help, but I dislike beer.
+[10:59] <JimBastard> free cake
+[10:59] <hassox> JimBastard: elliottcable lads
+[10:59] <hassox> quesiont on events for you
+[10:59] <elliottcable> I’m an elliottcable lads!
+[10:59] <elliottcable> … waitwhat
+[10:59] <hassox> when a js event is fired
+[10:59] <hassox> say on, response.sendBody
+[10:59] <elliottcable> oh don’t point that thing at me, I’m no JSurt.
+[11:00] <elliottcable> s/urt/p\0/
+[11:00] <hassox> does the callbacks happen before the sendBody is actually sent?
+[11:00] <hassox> ?
+[11:00] <JimBastard> ?
+[11:00] <elliottcable> ?
+[11:00] <JimBastard> dont understand question
+[11:00] <hassox> does that not make sense
+[11:00] <hassox> :(
+[11:00] <hassox> bugger
+[11:00] <hassox> ok
+[11:00] <elliottcable> you know, I need to write a script to watch for multiple people in a channel sending the exact same message in sequence, and then send it myself
+[11:00] <hassox> say I wanted to modify the chunk of a sendBody before it's sent
+[11:01] <elliottcable> then I’d *always* be in on the c-c-c-combo fun!
+[11:01] <hassox> can I do that with events?
+[11:01] <JimBastard> you'd just modify the variable you send to sendBody right?
+[11:01] <elliottcable> I honestly don’t know, hassox. I don’t know enough about Node’s internals.
+[11:01] <hassox> JimBastard: right well I can do that
+[11:01] <JimBastard> so if you have a closure in play, you'd probaly want sendBody inside the closure, or triggered from it
+[11:02] <elliottcable> ACTION ponders
+[11:02] <elliottcable> so I have a function that iterates on `arguments`
+[11:02] <JimBastard> so the shit is ready before it gets there?m
+[11:02] <hassox> but what about when I'm gzipping chunks as an external thing
+[11:02] <JimBastard> not sure
+[11:02] <hassox> kk
+[11:02] <JimBastard> havent done that yet
+[11:02] <elliottcable> I’m quite tempted to define the function as `function (label1, label2 /* labelN */)`, for clarity
+[11:02] <hassox> k
+[11:02] <elliottcable> is that a bad idea?
+[11:02] <hassox> JimBastard: I have _a_ solution...
+[11:02] <JimBastard> named arguments?
+[11:02] <hassox> elliottcable: what would it do?
+[11:02] <elliottcable> I’ll never actually *use* `label1` and `label2`; but I want to ensure that the source is as clear as possible
+[11:03] <JimBastard> ehhh
+[11:03] <elliottcable> and I find that functions that manually screw with `arguments` are often unclear
+[11:03] <JimBastard> sounds like a fancy problem to have
+[11:03] <elliottcable> JimBastard: huh?
+[11:03] <JimBastard> im working on a simple one, node needs to send emails before EOD
+[11:03] <elliottcable> haha
+[11:03] <hassox> EOD?
+[11:03] <elliottcable> end of data?
+[11:03] <JimBastard> end of day
+[11:03] <elliottcable> oh
+[11:03] <elliottcable> hahaha
+[11:04] <elliottcable> same diff d-:
+[11:04] <JimBastard> http://github.com/Miksago/node.js-smtp/issues/#issue/1
+[11:04] <elliottcable> ACTION throws in a U+0004 for good measure
+[11:04] <JimBastard> ive been chatting with that guy, but im not sure how much more needs to be done to his code
+[11:06] mikekelly has left the channel
+[11:06] <JimBastard> ive never really implemented anything at the tcp level before, ive always been a few layers up
+[11:06] <JimBastard> so im a bit lost
+[11:06] <elliottcable> heh
+[11:07] <JimBastard> :-\
+[11:07] <elliottcable> luckily for me, I’m working entirely in pure JS
+[11:07] <elliottcable> don’t have to deal with networking, protocols, data of any sort; just code.
+[11:07] <elliottcable> code in code out.
+[11:07] <JimBastard> normally same here
+[11:07] <elliottcable> the most externally-interfacing bit I’m going to have to deal with … is reading files in to parse them.
+[11:07] <JimBastard> but i need to have my app send emails
+[11:07] <JimBastard> maybe there is a quick and easy hack?
+[11:08] <JimBastard> i dont know
+[11:08] <elliottcable> hey weigh in, people: http://tau.pe/7704522812
+[11:08] <elliottcable> hassox: you’re free to opine as well
+[11:08] <JimBastard> fuck twitter and url shorteners
+[11:09] <JimBastard> ACTION has weighed in
+[11:09] <hassox> what am I looking at?
+[11:09] <elliottcable> oi be nice, I *wrote* that URL shortener.
+[11:09] <elliottcable> as, possibly, the first *actual, production* Node.js app
+[11:09] <JimBastard> which one?
+[11:09] <elliottcable> d-:
+[11:09] <elliottcable> tau.pe
+[11:09] <JimBastard> yeah
+[11:09] <elliottcable> github.com/elliottcable/taupe
+[11:09] <JimBastard> i was actually talking about theo ne in your twitter post
+[11:09] <JimBastard> so fuck both of them
+[11:09] <elliottcable> ah, cldly; that’s not a URL shortener
+[11:09] <hassox> ha
+[11:09] <elliottcable> it’s a file hosting service that only takes me a key to use d-:
+[11:09] <JimBastard> url shorteners are a huge step back
+[11:10] <elliottcable> watch:
+[11:10] <elliottcable> http://cld.ly/4811pf
+[11:10] <JimBastard> ehhh
+[11:10] <hassox> I prefer the first one
+[11:10] <JimBastard> i use drop.io
+[11:10] <elliottcable> (four seconds, total, from saying ‘watch,’ to posting a link to the screenshot of me saying ‘watch’)
+[11:10] <JimBastard> nice
+[11:10] <elliottcable> very, *very* conveient
+[11:11] <elliottcable> … s/\w+$/convenient/
+[11:11] <JimBastard> so does anyone have any suggestions for getting emails sent from node? assume i have a working smtp server already 
+[11:11] <elliottcable> I’d help if I could, JimBastard )-:
+[11:11] <elliottcable> JimBastard: I just know jack-all about SMTP; and haven’t touched any networking code in months )-:/
+[11:13] <JimBastard> ffffffffuuuuuuuu
+[11:13] <JimBastard> lol
+[11:13] <JimBastard> doing this project in node is defintely an adventure
+[11:15] <JimBastard> ill ask aadvark
+[11:15] <elliottcable> is that any good?
+[11:15] <JimBastard> ehhh ive been banned a few times
+[11:15] <JimBastard> evaded it many times
+[11:16] <JimBastard> wrote them a funny email about security
+[11:16] <mediacoder> JimBastard: you looked at  node.js-smtp?
+[11:16] <JimBastard> mediacoder - http://github.com/Miksago/node.js-smtp/issues/#issue/1
+[11:16] <JimBastard> check that out, i am marak
+[11:16] <mediacoder> ah
+[11:17] <JimBastard> so yes, its installed right now
+[11:17] <JimBastard> but im clueless
+[11:17] <JimBastard> i assumed i just create a client with tcp.client and send a packet? but im like durrr
+[11:18] <mediacoder> JimBastard: thats how i do it:
+[11:18] <mediacoder> http://pastie.org/776281
+[11:18] <JimBastard> ohhh wow
+[11:18] <JimBastard> i was close, but didnt know it
+[11:19] <JimBastard> i started this http://gist.github.com/276114 but stopped because i didnt know if it was right , just a guess
+[11:19] <JimBastard> reading your code some more...
+[11:20] <JimBastard> so whats good mediacoder will that send out a simple message?
+[11:20] <JimBastard> can i use that?
+[11:21] <mediacoder> sure, go ahead.. ive taken it from another package and nodified it a bit :-)
+[11:22] <JimBastard> cool beans, ill see what i can do...if it works ill do a really simple repo for it
+[11:22] <mediacoder> yea, it will send a message ..atleast for me it does that, pretty reliably
+[11:22] <JimBastard> any chance you could paste me the sample usage? if you cant, its okay
+[11:22] <JimBastard> would make it a little easier :p
+[11:22] <mediacoder> sec
+[11:22] <JimBastard> thanks man
+[11:22] <JimBastard> much ablidged
+[11:24] <mediacoder> http://pastie.org/776285
+[11:24] <mediacoder> to is the recipient
+[11:24] <mediacoder> you can pass the constructor a hash to change toe sender and subject
+[11:25] <JimBastard> what is the point of using prototype here? is this so you can spawn multiple messages without blocking?
+[11:26] <JimBastard> or is it just a coding style?
+[11:26] <micheil> JimBastard: node-smtp?
+[11:26] <JimBastard> sup micheil?
+[11:26] <micheil> well, you were interested in node-smtp
+[11:26] <JimBastard> yeah
+[11:27] <mediacoder> JimBastard: not really thaught about it and just typed.. so thing might not be neccessarry and can also be done much better
+[11:27] <JimBastard> mediacoder , just wondering. i usually go for singleton caus im dumb
+[11:29] <micheil> JimBastard: I really just needed an smtp server running on an alternative port, I'm half way through setting up a server locally, although the harddrives have been sent out with the wrong screws, so I can't install anything on it yet
+[11:29] <JimBastard> micheil are you the author of node-smtp?
+[11:29] <micheil> yes
+[11:29] <JimBastard> ahhh
+[11:29] malkomalko has joined the channel
+[11:29] <JimBastard> sup
+[11:29] <micheil> not a lot
+[11:30] <JimBastard> i was the dude on the github
+[11:30] <JimBastard> so yeah
+[11:30] <JimBastard> it seems you have started a full smtp implementation right
+[11:30] <JimBastard> like a full featured client
+[11:30] <JimBastard> mediacoder sent me a quick hack that seems to send messages
+[11:31] <micheil> yeah, there is a quick way, and then theres the full way
+[11:31] <mediacoder> :-)
+[11:31] <JimBastard> in this case, im down for both
+[11:31] <JimBastard> do you not have a working smtp server to test with?
+[11:32] <micheil> I wasn't actually intending on using setSecure just yet, although, the testing server I had from a mate @ uxebu.com had their server setup on port 25, which my isp blocks
+[11:32] <micheil> so I had to resort to trying to talk with gmail servers
+[11:32] <JimBastard> why not just pay 10 bucks and get a rackspace instance?
+[11:32] <micheil> because, I don't have 10 bucks for that just right now
+[11:32] <JimBastard> rackspace doesnt bill for months
+[11:32] <JimBastard> ;-)
+[11:33] <micheil> they would surely need a credit card / payment up front
+[11:33] <JimBastard> they need a valid card
+[11:33] <JimBastard> but they dont charge
+[11:33] <JimBastard> until end of month
+[11:33] <micheil> exactly, I don't have a valid card right now
+[11:33] <JimBastard> got ya
+[11:33] <mediacoder> "smtp for rackspace"-deal? ;-)
+[11:33] <JimBastard> id totally juice one up for you im poor too
+[11:34] <JimBastard> i have my instance here but it occurs to me its only local and id have to give you root to my dev box
+[11:34] <JimBastard> and as much as i love internet strangers and all
+[11:34] <micheil> Well, I'm actually planning on migrating off webfaction to rackspace cloud later on in the year, but, uh, the books need to balance first
+[11:35] <JimBastard> surely someone must have a public facing smtp that they will give you an account at
+[11:35] <JimBastard> i dont have root to any public relays atm
+[11:35] <micheil> hopefully my colleague at uxebu will setup a proxy port to his smtp server soon
+[11:35] <micheil> although, being it's just out of the holiday season, things are a bit slow.
+[11:36] <JimBastard> i must say i did like your bash colors script
+[11:36] <micheil> heh, that was a sanity hack
+[11:36] <malkomalko> awww snap
+[11:36] <elliottcable> lol
+[11:36] <elliottcable> wait what
+[11:36] <elliottcable> bash colours script
+[11:36] <micheil> if you've actually tried running the demos, you'll see how much stuff I had it printing out
+[11:36] <JimBastard> ohh its open right now
+[11:36] <JimBastard> i tried using it before i started bitching on github
+[11:37] <elliottcable> link me!
+[11:37] <elliottcable> I’m writing an absolutlely comprehensive ANSI printer for JS right now
+[11:37] <JimBastard> http://github.com/Miksago/node.js-smtp/blob/master/lib/bash_colors.js
+[11:37] <micheil> elliottcable: it's just a javascript file that uses key/value pairs for the ansi colours
+[11:37] Vito` has joined the channel
+[11:37] sveimac has joined the channel
+[11:37] <micheil> nothing awesome or anything, just something to aid development
+[11:38] <elliottcable> Uhhhhhhhh
+[11:38] <JimBastard> damn  i gotta get some ice tea and rong rips and try to implement this smtp code
+[11:38] <JimBastard> bbl
+[11:38] <elliottcable> JimBastard: Uhhhhhhhh
+[11:38] <elliottcable> JimBastard: http://cld.ly/7a11pl
+[11:38] <JimBastard> ahaha elliottcable
+[11:38] <JimBastard> where you find that
+[11:39] <elliottcable> worse yet, this came up a moment later: http://cld.ly/a011pm
+[11:39] <micheil> dude.
+[11:40] <JimBastard> also how is my fake facebook account linked with aadvark oofa
+[11:41] <malkomalko> lol
+[11:42] <elliottcable> was that supposed to be ‘oops?’ Because I don’t see how ‘p’ becomes ‘f’
+[11:45] <JimBastard> http://www.urbandictionary.com/define.php?term=oofa!
+[11:46] <elliottcable> o_O
+[11:46] <elliottcable> Where the fuck is that from? British thing?
+[11:47] <JimBastard> dunno
+[11:47] <JimBastard> coding time bbl
+[11:47] <JimBastard> wait
+[11:47] <JimBastard> i couldnt resistre
+[11:47] <JimBastard> (This just in! From Langue F./M/Vilnius,Lithuania, Re: **SMTP**)
+[11:48] <JimBastard> open connection to port 25 and then use smtp protocol to send email. 
+[11:48] <elliottcable> …
+[11:48] <JimBastard> (To reply, type 'Langue:' followed by a message, or type 'flag' if this answer is inappropriate. Type 'more' for options.)
+[11:48] <elliottcable> this is why ’vark sucks
+[11:48] <elliottcable> I talked to some of their engineers at RubyConf this year
+[11:48] <JimBastard> there isnt an emoticon out there to express how disappoint i am
+[11:48] <elliottcable> but srsly it’s just like all other such services; people will provide stupid / useless data for reputation/karma/wtevar
+[11:49] <JimBastard> http://bbsimg.ngfiles.com/1/20229000/ngbbs4ae2d79d92aab.jpg
+[11:51] <elliottcable> … wtf
+[12:15] charlenopires has joined the channel
+[12:18] <JimBastard> so mediacoder it seems to be working....im gonna create a quickie github project. you got any ideas for a name? im thinking node_mailer
+[12:19] <elliottcable> god, you guys are even less creative than me for names
+[12:19] <JimBastard> there is a time and place for creativity
+[12:20] <elliottcable> that time and place is *everywhere*
+[12:20] <JimBastard> a mail tag is not one of them
+[12:20] <JimBastard> what would you call it elliottcable
+[12:20] <elliottcable> no idea
+[12:20] <JimBastard> its not node-smtp caus its not even close to a full implementation
+[12:21] <elliottcable> I don’t generally start projects with a specific problem to fix; I start them with a specific API to build.
+[12:21] <micheil> it will be
+[12:21] <elliottcable> so naming is easy; APIs have a personality.
+[12:21] <elliottcable> unfortunately, problems… generally don’t.
+[12:21] <micheil> JimBastard: I'd just build it into your app for now
+[12:21] <JimBastard> micheil im talking about my code right now, not your project
+[12:22] <micheil> so.. uh, what is node_mailer then?
+[12:22] <JimBastard> connects to localhost smtp and sends email
+[12:22] <JimBastard> to: message:
+[12:22] <micheil> so, why create a github project for that?
+[12:22] <JimBastard> caus when i needed it yesterday there wasnt one?
+[12:23] <micheil> no, node-smtp has been around since november
+[12:23] <JimBastard> o.O ?
+[12:23] <JimBastard> can it send messages? im confused
+[12:23] <micheil> it can't send messages yet, no.
+[12:23] <JimBastard> ....
+[12:23] <JimBastard> code that works....code that doesnt work....
+[12:24] <micheil> if it's only a very basic thing like mediacoder's version, then I wouldn't bother sticking it up as a github project
+[12:24] <JimBastard> i think ill just create the project and talk shit about how awesome it is until you finish yours and outshine me
+[12:24] <JimBastard> :-D
+[12:24] <JimBastard> BETTER HURRY UP
+[12:25] <elliottcable> that tends to be my approach.
+[12:25] <micheil> fair enough then
+[12:25] <JimBastard> but seriously, i look forward to seeing a full featured client
+[12:25] <JimBastard> considering i cant connect to a remote server, its a hack
+[12:26] <JimBastard> lots of missing features
+[12:27] <micheil> yeah, currently I have a lot of the handshaking working, it's only because I don't have a non-ssl server to test on as to why I can't progress to sending and formatting messages
+[12:28] <JimBastard> why cant you do it all on a local network?
+[12:28] <JimBastard> what mail server are you using?
+[12:29] <JimBastard> techinically you could test with a fucked up relay, if the failed messages still go into the spool
+[12:29] <JimBastard> or whatever
+[12:43] <micheil> umm.. yeah, I don't have any mailservers running on my local network
+[12:43] <hassox> tlrobinson: prolly more appropriate in here dude
+[12:43] <micheil> JimBastard: the server I talked of before is one that's sitting behind me off because it doesn't have hdd's atm
+[12:43] felixge_ has joined the channel
+[12:43] <tlrobinson> hassox: probably more appropriate in #commonjs but this works :)
+[12:43] <hassox> tlrobinson: I think the api and cleanness of jsgi is awesome and the chain code is pretty dirty
+[12:44] <hassox> k we can take it in there
+[12:44] <tlrobinson> no i'm kidding this is fine
+[12:51] alex-desktop has joined the channel
+[13:20] gwoo has joined the channel
+[13:23] <JimBastard> http://github.com/Marak/node_mailer
+[13:23] <hassox> JimBastard: is that your's?
+[13:23] <hassox> yorus
+[13:23] <hassox> yours
+[13:27] <JimBastard> its my repo
+[13:27] <JimBastard> mediacoder hooked up most of the code
+[13:27] <JimBastard> i changed it up a bit 
+[13:28] <hassox> ACTION watches
+[13:28] <JimBastard> cool beans
+[13:28] <hassox> that's awesome man
+[13:28] <hassox> congratulations on getting that done :D
+[13:28] <JimBastard> lol thanks
+[13:28] <JimBastard> well
+[13:28] <hassox> it looks dirt simple
+[13:29] <JimBastard> ive taken on this project for a client
+[13:29] <JimBastard> and i choose node.js
+[13:29] <JimBastard> and i have to build a full fledged web app
+[13:29] <JimBastard> so ive been building a lot of stuff
+[13:29] <JimBastard> >.<
+[13:29] <hassox> !! :D
+[13:29] <JimBastard> session, rest api builder, email, routes, etc
+[13:29] <JimBastard> using whats out there too
+[13:29] <hassox> sweet :)
+[13:29] <JimBastard> the best though is something i havent published yet
+[13:29] <JimBastard> application.js
+[13:30] <hassox> I need to start making some chain links that we can re-use
+[13:30] <hassox> what's that do?
+[13:30] <JimBastard> ill post a gist
+[13:30] <hassox> ergh... I have to go to bed!
+[13:30] <hassox> damn this interesting stuff
+[13:30] <JimBastard> night
+[13:30] <hassox> ;)
+[13:30] <elliottcable> hahaha
+[13:30] <elliottcable> gnite hassox
+[13:30] <hassox> JimBastard: yeah I should go
+[13:30] <hassox> I'll ask you to gist tomorrow ;)
+[13:31] <JimBastard> http://gist.github.com/276185
+[13:31] <JimBastard> its really simple, i dont use a database
+[13:31] <JimBastard> i store everything in memory
+[13:32] <JimBastard> and serialize the state of the app into json on shutdown/save and reload the state on boot
+[13:32] <JimBastard> ....still...doing...the...performance testing..... not intended for large apps
+[13:35] <hassox> that's cool
+[13:35] <hassox> must sleep
+[13:35] <hassox> gnight :D
+[13:35] <inimino> micheil: you need an SMTP account somewhere?
+[13:35] <elliottcable> hassox: oh
+[13:35] <micheil> yeah
+[13:35] <elliottcable> hassox: you might like this,
+[13:36] <hassox> can't stay dude
+[13:37] <hassox> I have to be up in 5.5 :(
+[13:37] <hassox> cya lads
+[13:37] <elliottcable> hassox: http://github.com/elliottcable/Percival
+[13:37] <elliottcable> hassox: ah, ’ta then. Sleep well!
+[13:37] <hassox> grr
+[13:37] <hassox> oh 
+[13:37] <hassox> :)
+[13:37] <hassox> noice
+[13:37] <elliottcable> hassox: tomorrow, take a peek at the source
+[13:37] <hassox> awesome even :)
+[13:37] <elliottcable> hassox: it’s finally working, and fairly well, to d-:
+[13:37] <hassox> yeah
+[13:37] <hassox> gotta go
+[13:38] <elliottcable> hassox: all that’s left is to start adding lenses for core objects
+[13:38] <inimino> micheil: ah, I can offer you one but my server requires cram-md5 SMTP auth, which you probably don't want to implement
+[13:38] <elliottcable> o7 hassox 
+[13:38] <micheil> inimino: In the end, I'm implementing them all, it's just a matter of whether I can do it using node
+[13:38] <inimino> micheil: unless you're running on localhost, of course
+[13:38] <inimino> micheil: well, apt-get install postfix anyway
+[13:39] <micheil> atm, I can't get ssl / tls handshaking to work properly, so, that's what's held up work
+[13:39] <micheil> inimino: I'm not on my ubuntu box atm, it's out of action for a while
+[13:39] Vito` has joined the channel
+[13:39] <inimino> ah
+[13:40] <JimBastard> yeah i mean im using node_mailer to send account confirmation emails and password resets for one application, nothing too fancy
+[13:40] <inimino> in most cases the SMTP server will be local and you can inject without authentication
+[13:40] <JimBastard> aye
+[13:40] <JimBastard> thats the plan!
+[13:41] <JimBastard> but obviously remote and auth is needed badly
+[13:41] <JimBastard> im sure my rackspacecloud emails go straight to most spam folders
+[13:41] <inimino> JimBastard: for that I'd really just use /usr/bin/sendmail, really...
+[13:41] <inimino> yes, for a full-featured SMTP client, sure
+[13:42] <JimBastard> inimino im using sendmail
+[13:42] <JimBastard> but through node
+[13:42] <JimBastard> you mean like doing command line?
+[13:42] <JimBastard> im still a fucking noob
+[13:42] pjb3 has joined the channel
+[13:42] <JimBastard> please forgive
+[13:42] <micheil> seriously, who came up with jset?
+[13:42] <inimino> ok, good
+[13:43] <micheil> javascript isn't php y'know.
+[13:44] <inimino> JimBastard: yes
+[13:44] <inimino> JimBastard: as in, open a /usr/sbin/sendmail process, pipe your mail to it, done
+[13:45] pmuellr has joined the channel
+[13:45] <JimBastard> micheil , did you read the email post?
+[13:45] <micheil> not yet
+[13:45] <JimBastard> jset would be a port of CFPARAM
+[13:45] <JimBastard> i rewrote it as jparam
+[13:45] <JimBastard> still fucking around
+[13:45] <inimino> JimBastard: the same way people normally send emails from PHP
+[13:45] <inimino> (it's what mail() does)
+[13:45] <micheil> you don't need it
+[13:46] <JimBastard> id rather do it over smtp then pipe it
+[13:47] <JimBastard> since i already did that :p
+[13:47] <JimBastard> micheil you dont need what? jset?
+[13:47] <micheil> JimBastard: at most all you could want is something like.. http://github.com/Miksago/Jet-js/blob/master/src/jet.js#L126-152
+[13:47] <micheil> yeah, don't need jset
+[13:47] <JimBastard> i know, its syntax sugar
+[13:47] <micheil> and besides.. that'd be the better way to do that
+[13:47] <micheil> eval is nasty.
+[13:47] <inimino> yeah jset was already torched on the mailing list
+[13:48] <JimBastard> ugh im not getting into an implementation discussion on sudo code
+[13:48] <JimBastard> if i wanted to write perfect code everytime id be a proffesor and never build anything
+[13:48] <JimBastard> pseudo code
+[13:48] <JimBastard> YOU CAN DO IT WITHOUT EVAL
+[13:48] <JimBastard> yarrgg
+[13:48] <JimBastard> rong rip time
+[13:48] <inimino> sufficiently to discourage its use I hope...
+[13:48] <inimino> heh
+[13:49] <JimBastard> http://github.com/Marak/node_mailer/blob/master/node_mailer.js lines 43-47, uber ugly
+[13:49] <JimBastard> i could fix this a few ways, but id rather just one a one line setter for each
+[13:49] <JimBastard> personal perference
+[13:51] <micheil> http://gist.github.com/276194
+[13:51] <JimBastard> thats pretty cool
+[13:52] <JimBastard> now you gotta add in the validators!
+[13:52] <JimBastard> http://maraksquires.com/jsparam/
+[13:52] <micheil> also, you don't need to use typeof in those lines
+[13:52] <inimino> JimBastard: that can be written much more concisely
+[13:52] <JimBastard> thats what i got started, dunno what its status is
+[13:53] <JimBastard> really dont care about the implementation right now
+[13:53] <JimBastard> more thinking about the validators
+[13:53] <JimBastard> http://maraksquires.com/jsparam/js/param.js
+[13:53] <JimBastard> there we go
+[13:53] <JimBastard> forgot i did that
+[13:53] <JimBastard> i put it down caus i got really busy
+[13:53] <micheil> there's seriously no need for that stuff in js.. 
+[13:53] <JimBastard> i started to stub out the validators
+[13:53] <JimBastard> dude
+[13:53] <JimBastard> look at the types i have in the docs
+[13:54] <JimBastard> you are telling me there is no need for that?
+[13:54] <JimBastard> URL: an http, https, ftp, file, mailto, or news URL.
+[13:54] <JimBastard> UUID: a Universally Unique Identifier, formatted 'XXXXXXXX-XXXX-XXXX-XXXXXXXXXXXXXXX', where 'X' is a hexadecimal number
+[13:54] <JimBastard> zipcode: U.S., 5- or 9-digit format ZIP codes.
+[13:54] <JimBastard> creditcard: a 13-16 digit number conforming to the mod10 algorithm.
+[13:54] <micheil> well, even so.. 
+[13:54] mdg has joined the channel
+[13:54] <JimBastard> xml: XML objects and XML strings.
+[13:54] <micheil> you can do most of those tests using very basic regexps
+[13:55] <JimBastard> i dunno about you micheil
+[13:55] <JimBastard> but im lazy as shit
+[13:55] <JimBastard> and fucking hate regex
+[13:55] brandon_beacher has joined the channel
+[13:55] <JimBastard> i wanna write the regex once and forget
+[13:55] <micheil> if you really wanted to, you could write wrappers around them like those isFunction(x) or isString(x)
+[13:55] <JimBastard> aye
+[13:55] <micheil> but it's not really needed
+[13:55] <inimino> JimBastard: http://gist.github.com/276196
+[13:55] <JimBastard> micheil check out http://livedocs.adobe.com/coldfusion/8/Tags_p-q_01.html
+[13:56] <micheil> and if you're going to do it at all, do it cleanly
+[13:56] <JimBastard> its on the back burner
+[13:56] <JimBastard> im crazy i have like a million projects
+[13:56] <JimBastard> you should check out my internet comedy show
+[13:56] <JimBastard> lolwut
+[13:56] <micheil> JimBastard: in that case, I have two million.
+[13:57] malkomalko_ has joined the channel
+[13:57] <JimBastard> i dont know how we got talking about jset 
+[13:57] <micheil> JimBastard: what inimino gave you was the clean way of doing what you were doing
+[13:57] <JimBastard> or param.js
+[13:57] <JimBastard> thanks inimino
+[13:57] <JimBastard> i always forget OR can be abused like that
+[13:57] <inimino> np
+[13:58] <micheil> also, jim, that's the more unreliable way to do smtp, because there's heaps of different and important status codes you can get back, and it's important to make sure you've got a "200 " before continuing
+[13:58] <JimBastard> micheil what the way im doing it now?
+[13:58] <micheil> yeah
+[13:59] <JimBastard> im sure there are many issues, im not too familiar with smtp....do you think i'll run into problems with the setup i have?
+[13:59] <JimBastard> assuming i have moderate to low traffic?
+[13:59] <micheil> for instance, the server might be using smtp and not esmtp, it might require a EHLO instead of HELO
+[13:59] <JimBastard> errrr
+[13:59] <micheil> those are just the very basic problems to meet
+[14:00] <JimBastard> will that code shit out for what im doing?
+[14:00] <JimBastard> assuming its working right now
+[14:00] <JimBastard> (which it is)
+[14:00] <micheil> I couldn't say
+[14:00] <JimBastard> like it seems pretty standard? im assuming sendmail can handle multiple connections and whatnot if i get a lot of requests
+[14:00] <micheil> it depends on both client and server negotiation
+[14:01] <JimBastard> none of that is gonna change and its all local?
+[14:01] <micheil> it shouldn't
+[14:01] soveran has joined the channel
+[14:01] <JimBastard> great success
+[14:01] <JimBastard> moving onto the next problem
+[14:09] <micheil> hmm.. I wouldn't have really announced it on the mailing list like that.. 
+[14:12] weepy has joined the channel
+[14:12] <weepy> hello. I was hoping to look into a debug client server for node
+[14:13] <weepy> so I've been looking at "http://github.com/Connorhd"
+[14:13] <weepy> http://github.com/Connorhd/node_debug
+[14:13] <JimBastard> did you check out http://maraksquires.com/node_debug/ ?
+[14:13] <JimBastard> i forked connor's and slapped on a few features and a gui
+[14:13] <JimBastard> what you trying to do?
+[14:14] <JimBastard> simple exploring or like breakpoints?
+[14:14] <JimBastard> weepy
+[14:14] <weepy> yes i was thinking about bps
+[14:14] <weepy> but i suppose it's rather difficult to do!?
+[14:14] <JimBastard> its been discussed a few times, it hasnt really been implemented yet
+[14:14] <JimBastard> you really gotta check the mailing list / talk to ryah about that one
+[14:14] <weepy> given asynchron of js
+[14:14] <weepy> ah ok
+[14:14] <weepy> ill look it up
+[14:14] <JimBastard> its possible, you gotta hook into the v8 debugger
+[14:15] <JimBastard> i think it will require some C code
+[14:15] <JimBastard> and the v8 debugger....but im not 100% sure
+[14:15] <weepy> yes i said something about ry saying he wanted to do a CLI
+[14:15] <JimBastard> CLI? sorry
+[14:16] <weepy> command line interface
+[14:16] <JimBastard> got ya
+[14:16] <micheil> I just realised that because my dad has a window's server running in the house that I can talk with it's smtp server
+[14:16] <weepy> here's a commit back in October " * Feature: Enable V8 debugging (but still need to make a debugger)"
+[14:16] <JimBastard> see, all it takes is a few backhanded insults on the mailing list
+[14:16] <JimBastard> and progress is made!
+[14:16] <JimBastard> ^_^
+[14:17] <JimBastard> a git repo never hurt either
+[14:17] <JimBastard> aye weepy
+[14:17] <JimBastard> if you get anything together please let me know, im interested in working on the front-end of a web debugger
+[14:17] <JimBastard> even if its base view is as simple as a REPL / command line
+[14:18] <weepy> yeh i think realisticly im gonna have to wait till Ry implements
+[14:18] <weepy> a CLI
+[14:18] <weepy> then we can hook in
+[14:18] <weepy> is there a road map for node ? I haven't check on progress for a while
+[14:20] <JimBastard> i dunno. i don't work here, just hanging out for the moment. :D
+[14:21] <weepy> :D
+[14:21] <weepy> cooooolio
+[14:21] <weepy> what do u think of coffee script ?
+[14:22] cloudhead has joined the channel
+[14:22] <JimBastard> coffee script?
+[14:22] <JimBastard> well
+[14:22] <JimBastard> its good to standardized patterns for clean code
+[14:23] <JimBastard> but im not thrilled about it yet
+[14:23] <JimBastard> i like the idea, needs to be thought out a bit more
+[14:23] <weepy> in what sense ?
+[14:24] <JimBastard> i dunno, id like to see it implemented in JS
+[14:24] <JimBastard> if thats not already done
+[14:24] <JimBastard> or possible
+[14:24] <weepy> i think some peeps are working on it
+[14:24] <JimBastard> really its just application framework code for JS
+[14:25] <JimBastard> there are many ways to do this
+[14:25] <weepy> im not sure about that
+[14:25] <JimBastard> ehh
+[14:25] <weepy> its more just smoothing out the warty bits and making it nicer to code in
+[14:25] <weepy> there's no STDLIB or anything
+[14:25] <JimBastard> this is true
+[14:25] robrighter has joined the channel
+[14:26] <weepy> actually they're writing the JS parser in CS
+[14:26] <JimBastard> CS?
+[14:26] <weepy> coffee script
+[14:26] <JimBastard> got ya
+[14:26] <JimBastard> so you generate it
+[14:26] <weepy> which sounds kooler than it really is
+[14:26] <weepy> yes u compile it
+[14:27] <JimBastard> once it can dynamically create more coffee script in js i'll probaly take another look
+[14:27] <JimBastard> i dunno
+[14:27] <JimBastard> i gotta see where it goes
+[14:27] <JimBastard> and id like to see some competitors in the space
+[14:27] <weepy> ultimately it's just an alternate syntax 
+[14:28] <JimBastard> yeah
+[14:28] <weepy> so if u **love** the new syntax then all good
+[14:28] <JimBastard> not everyone comes from ruby
+[14:28] <weepy> theres quite alot from python too
+[14:31] <micheil> if you like coffeescript, what about objective-j?
+[14:32] <weepy> haven't seen it
+[14:32] <weepy> looking ...
+[14:33] <weepy> .... me no likey
+[14:33] <micheil> :P
+[14:33] <weepy> at least on first look !
+[14:51] charlenopires has joined the channel
+[14:52] cloudhead has joined the channel
+[14:52] DamZ_ has joined the channel
+[14:57] Booster has joined the channel
+[15:12] <JimBastard> have i said how awesome mustache is today
+[15:13] <mediacoder> im also getting more and more fan of coffee-script .. really awesome
+[15:14] <micheil> I'm more of a fan of pure javascript. Have I said how awesome javascript is today?
+[15:14] <mediacoder> plus a good help on "style standards" (if everybody would write coffee-script)
+[15:14] <JimBastard> yeah
+[15:15] <JimBastard> i still do too much crazy eval() code to jump ship to coffee
+[15:15] <JimBastard> bad habits
+[15:15] <mediacoder> thats why im starting my simple webfrramework for node in coffescript :-)
+[15:15] <micheil> I might write a yaml parser in js one day..
+[15:15] <micheil> just for shits and giggles.
+[15:15] DamZ has joined the channel
+[15:15] <JimBastard> im gonna write a json parser in node one day
+[15:15] <JimBastard> oops
+[15:16] <micheil> fail.
+[15:16] <inimino> micheil: write a PEG for it instead :)
+[15:17] <micheil> no :P
+[15:18] <inimino> hehe
+[15:24] <felixge_> party time, figured out how to get 750k writes / sec instead of 100k :)
+[15:25] deanlandolt has joined the channel
+[15:25] gwoo has joined the channel
+[15:26] <inimino> felixge_: oh?
+[15:27] <felixge_> inimino: I just had my setup tuned poorly, doing writes every 100 documents really killed performance.
+[15:27] <felixge_> :)
+[15:27] <inimino> ah
+[15:28] <felixge_> Now the benchmark doesn't flush the data until all keys have been set
+[15:28] <felixge_> 750k writes is pretty meaningless anyway as you get out of sync with the disk really fast, but its cool for peak performance
+[15:28] <felixge_> :)
+[15:31] DamZ_ has joined the channel
+[15:31] rolfb has joined the channel
+[15:33] <mdg> heh
+[15:39] qFox has joined the channel
+[15:39] jed_ has joined the channel
+[15:52] soveran has left the channel
+[15:52] dnolen has joined the channel
+[15:55] <JimBastard> yo inimino
+[15:56] <inimino> JimBastard: yes?
+[15:56] <JimBastard> if i take the +/ off   chars='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 will that make a big deal?
+[15:56] <JimBastard>   chars='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
+[15:56] <JimBastard> i need random number that is url safe
+[15:58] <inimino> JimBastard: well, it won't have 64 characters anymore
+[15:58] <JimBastard> should i replace it with some other chars?
+[15:58] <inimino> JimBastard: but you can replace it with something else
+[15:58] <inimino> yes
+[15:59] <JimBastard> whats safe besides _
+[15:59] <inimino> if you're going to put the session ID in a URL (yuck)
+[15:59] <JimBastard> its not for session
+[15:59] <JimBastard> something else completely
+[15:59] <inimino> oh
+[15:59] <inimino> well you could just url encode it
+[15:59] <inimino> encodeURIComponent
+[16:00] <inimino> but "_" and "-" would be fine
+[16:00] <JimBastard> _ and - is easy
+[16:00] <JimBastard> thanks
+[16:00] <inimino> np
+[16:08] aurynn has joined the channel
+[16:10] charlenopires has joined the channel
+[16:10] bryanl has joined the channel
+[16:14] kriszyp has joined the channel
+[16:28] scudco has joined the channel
+[16:31] binary42 has joined the channel
+[16:44] <JimBastard> LoL break
+[16:47] n8o has joined the channel
+[16:50] okito has joined the channel
+[16:50] n8o has left the channel
+[16:50] n8o has joined the channel
+[17:04] RayMorgan has joined the channel
+[17:06] hober has joined the channel
+[17:35] quirkey has joined the channel
+[17:39] scudco has joined the channel
+[17:41] aguynamedben has joined the channel
+[17:42] aguynamedben has joined the channel
+[18:00] lifo has joined the channel
+[18:01] charlenopires has joined the channel
+[18:07] okito has joined the channel
+[18:07] sveimac has joined the channel
+[18:16] jed has joined the channel
+[18:17] steadicat has joined the channel
+[18:35] Vito` has joined the channel
+[18:36] stephenlb has joined the channel
+[18:42] aho has joined the channel
+[18:42] rictic has joined the channel
+[18:58] isaacs has joined the channel
+[18:58] beppu has joined the channel
+[19:02] eviltwin has joined the channel
+[19:03] <isaacs> anyone wanna build me a package version registry server in nodejs?
+[19:03] <isaacs> i need one, and i have some specs of what i need, but it doesn't sound fun to me.
+[19:04] mikeal has joined the channel
+[19:04] okito has joined the channel
+[19:04] ericflo has joined the channel
+[19:11] deanlandolt has joined the channel
+[19:12] RayMorgan_ has joined the channel
+[19:27] dnolen has joined the channel
+[19:29] charlenopires_ has joined the channel
+[19:38] jamiew has joined the channel
+[19:40] RayMorgan has joined the channel
+[19:58] ayo has joined the channel
+[19:59] eddanger has joined the channel
+[20:27] ericflo_ has joined the channel
+[20:40] RayMorgan has joined the channel
+[20:44] mahemoff has joined the channel
+[20:46] dnolen_ has joined the channel
+[20:49] jed has joined the channel
+[20:51] voodootikigod has joined the channel
+[20:53] RayMorgan has joined the channel
+[20:54] hassox has joined the channel
+[20:55] <hassox> G'day!
+[20:56] <isaacs> hassox: yo.
+[20:56] <mdg> hi?
+[20:56] <hassox> What's news?
+[20:57] <hassox> Has node taken over the world yet?
+[20:58] sudoer has joined the channel
+[21:01] <ryah> soon
+[21:03] <binary42> 99
+[21:03] <binary42> I think we need 1 more person to make it happen.
+[21:04] <isaacs> ryah: i heard you're going to work at joyent?
+[21:05] <voodootikigod> !log
+[21:06] quirkey has joined the channel
+[21:10] <binary42> There we go. Back to 100. Now we can take over the world.
+[21:12] <ryah> isaacs: yep, there now
+[21:13] Connorhd has joined the channel
+[21:16] <isaacs> ryah: are they gonna start using node for their ssjs stuff?
+[21:17] <voodootikigod> ryah: when did that happen
+[21:18] <voodootikigod> ryah: btw you gonna make me track you down for jsconf
+[21:18] <ryah> i will be working on node
+[21:18] <voodootikigod> or you gonna submit to my json
+[21:18] <ryah> voodootikigod: no, was about to do it the other day but then got distracted
+[21:18] <voodootikigod> cool
+[21:18] <ryah> voodootikigod: i'll submit something tonigth
+[21:18] <voodootikigod> cool
+[21:19] <voodootikigod> whenever
+[21:19] <voodootikigod> but will track you dont if not by the 20th
+[21:19] <voodootikigod> you down
+[21:19] <ryah> :)
+[21:19] <voodootikigod> not dont
+[21:20] <binary42> Oh how I wish I could move this project into node. If only I had an embedded instance of 1.9 running in node.
+[21:21] <isaacs> ryah: corporate sponsorship for nodejs development makes me smile deep inside.
+[21:22] <ryah> me too
+[21:23] <ryah> now if i could just find a place to live and start coding, i'll be really happy :)
+[21:23] <voodootikigod> are you moving to canada
+[21:24] <ryah> no, i'm in sf
+[21:24] <voodootikigod> gotcha
+[21:24] <voodootikigod> did you meet the RS group
+[21:24] <voodootikigod> i am sure you did
+[21:24] <ryah> >
+[21:24] <ryah> ?
+[21:24] <ryah> rs?
+[21:24] <voodootikigod> Reasonable smart
+[21:24] <voodootikigod> James etc
+[21:24] <ryah> oh yeah, sure
+[21:24] <voodootikigod> and their new pick from nitobi
+[21:24] <voodootikigod> Brock
+[21:24] <orlandov> i thought it was new pick/s/
+[21:24] <orlandov> :)
+[21:25] <voodootikigod> sorry
+[21:25] <voodootikigod> rob
+[21:25] <ryah> yeah, both
+[21:25] <voodootikigod> wait
+[21:25] <voodootikigod> both left nitobi
+[21:25] <voodootikigod> ?!?
+[21:25] <voodootikigod> i think brock is still at nitobi
+[21:25] <ryah> nope he's right here
+[21:26] <voodootikigod> haha
+[21:26] <ryah> joyent++
+[21:26] <voodootikigod> i need to ping htem abotu sponsor jsconf again
+[21:26] <orlandov> ryah: do you know if joyent intends to use any of the node.js tech?
+[21:26] <ryah> yeah, i think that will hapen
+[21:26] <orlandov> rad :)
+[21:27] <ryah> ^-- that was for voodootikigod
+[21:27] <voodootikigod> cool
+[21:29] <ryah> orlandov: i can't talk about what joyent is doing
+[21:29] <orlandov> understood, though if you're there it'll likely be cool
+[21:34] RayMorgan has joined the channel
+[21:34] RayMorgan has joined the channel
+[21:37] <voodootikigod> buying up all the talent :)
+[21:37] <voodootikigod> sucks for talentless hacks like me
+[21:37] <voodootikigod> L)
+[21:39] hassox has joined the channel
+[21:40] Kreisquadratur has joined the channel
+[21:40] <Kreisquadratur> Hej!
+[21:42] <Kreisquadratur> I got a question about how to save data to a file. From the documentation I can't grasp what "flags" and "mode" might be. I saw "the constants like O_CREAT are defined at process.O_CREAT" but it didn't help much.
+[21:47] <inimino> Kreisquadratur: they are defined by the open(2) syscall
+[21:47] <Kreisquadratur> ah, syscall.
+[21:48] <inimino> `lucky man 2 open
+[21:48] <gbot2> open(2): open/possibly create file/device - Linux man page - http://linux.die.net/man/2/open
+[21:48] <Kreisquadratur> thanks!
+[21:49] <inimino> np :)
+[21:52] RayMorgan has joined the channel
+[21:54] <kriszyp> what is environment variable for debug mode in node?
+[21:56] DamZ has joined the channel
+[21:56] <kriszyp> nm, found it
+[22:03] <jed> hey isaacs, inimino, and the rest of the javascript gurus here. can i get some help?
+[22:03] <jed> i'm trying to allow pathname munging based on a regexp.
+[22:03] <isaacs> jed: yo
+[22:03] <jed> cool.
+[22:03] <jed> for example, if i have a pattern /(\d{20})\/foo\/(\w{5})/, and it matches the pathname 12345678901234567890/foo/abcde capturing the "12345678901234567890" and "abcde" into  the match object, how can i generically recreate the original pathname after changing the the match object?
+[22:04] <jed> (for example, if i want to change abcde in ABCDE.)
+[22:04] <jed> is there anyway of finding the indexes of the substring matches?
+[22:04] <voodootikigod> yea
+[22:04] <voodootikigod> hold on
+[22:05] <isaacs> jed: provided you don't have nested parens, you can just join the match object.
+[22:05] <isaacs> oh, and provided that everything is paren'ed.
+[22:05] <jed> isaacs: yeah, i can't assume that, unfortunately.
+[22:05] <voodootikigod> wiat
+[22:06] <voodootikigod> what are you trying to do
+[22:06] <jed> you know how node's url library will let you change a property, and then recreate the url for you?
+[22:06] <jed> i want to do the same thing, using only a regexp and the path it matches.
+[22:07] <isaacs> jed: yeah, i'm aware it supports that ;)
+[22:07] <isaacs> don't think there's a corresponding way to do that witha regexp, tho
+[22:07] <voodootikigod> yea
+[22:07] <voodootikigod> i mistook what you were asking for
+[22:08] <isaacs> i mean, you could do some fancy stuff with indexOf and whatnotl.
+[22:08] <jed> hmmm. surely there's a workaround?
+[22:08] <isaacs> or lastIndexOf
+[22:08] <isaacs> you should do it as a generic module and then share it.
+[22:08] <jed> isaacs: right, or maybe find all the stuff in the regexp that's not parenthesized, and parenthesize it?
+[22:09] <jed> so that the match would have all the components?
+[22:09] <isaacs> yikes
+[22:09] <isaacs> that sounds scary
+[22:09] <isaacs> :)
+[22:10] <jed> yeah, i know.
+[22:11] <inimino> hm...
+[22:12] <inimino> jed: maybe look at one of the URL template languages, like the one Joe Gregorio had
+[22:12] <jed> i'm about to relaunch (fab) and would really like to have the functionality for setting captures just as for setting params and headers, etc.
+[22:12] <jed> inimino: cool, will check that out.
+[22:13] <inimino> something like http://example.com/{numeric_id}/foo/{word} and then it generates a parser and a generator for it
+[22:13] <jed> yeah, i'd rather stick to what javascript has than invent another template language.
+[22:14] <jed> i think regexp is plenty elegant for something like this.
+[22:14] <inimino> jed: the general idea being that you probably don't want to start with regex, if you're going to build something else on top of it
+[22:14] okito has joined the channel
+[22:14] <jed> if i assume no nested parens or paren matching, it seems doable. with a simple .split on the regexp source.
+[22:16] hassox has joined the channel
+[22:17] <jed> okay, i'll take a crack at it. thanks for the pointers inimino and isaacs.
+[22:21] <inimino> sure
+[22:40] RayMorgan has joined the channel
+[22:43] mattly has joined the channel
+[22:44] RayMorgan has joined the channel
+[22:59] mikeal has joined the channel
+[23:04] mattly_ has joined the channel
+[23:08] okito has joined the channel
+[23:14] grantmichaels has joined the channel
+[23:15] robrighter_ has joined the channel
+[23:23] mattly has joined the channel
+[23:39] grantmic_ has joined the channel
+[23:40] jed has joined the channel
+[23:40] spoob has joined the channel
+[23:43] richtaur has joined the channel
+[23:44] Kreisquadratur has left the channel
+[23:51] micheil has joined the channel
+[23:52] r11t has joined the channel
+[23:53] bryanl has joined the channel
+[23:55] sudoer has joined the channel

@@ -1,0 +1,1070 @@
+[00:00] tapwater_ has joined the channel
+[00:04] <malkomalko> anyone deploy a node app via capistrano yet?
+[00:05] <isaacs> tlrobinson: so, i think i'm gonna follow up on ryah's task and port (that is, copy) narwhal's uri.js to nodejs.
+[00:06] <tlrobinson> isaacs: ok
+[00:06] <isaacs> and send a patch suggestion that removes the params parsing stuff from node.  that should happen higher up, it seems we all agree.
+[00:06] <isaacs> and then thems that like foo[]=bar&foo[]=baz can have it
+[00:07] <tlrobinson> i foresee a lot of duplicated efforts if we just copy/paste modules though
+[00:08] <tlrobinson> i mean it's better than rewriting the same thing, but then we have the same code in two places that needs to be maintained
+[00:08] <isaacs> tlrobinson: true
+[00:08] <isaacs> it does seem a bit silly
+[00:08] <isaacs> otoh, it's also silly to have a project with a single file that both narwhal and node depend on
+[00:08] <isaacs> for incidental/small things like this
+[00:08] <tlrobinson> yeah
+[00:09] <tlrobinson> perhaps we could split narwhal up
+[00:09] <isaacs> o_O?
+[00:10] <tlrobinson> have a project that provides pure js modules that can be used in node and narwhal
+[00:10] <isaacs> i see
+[00:10] <isaacs> that could be fairly awesome
+[00:10] RayMorgan has joined the channel
+[00:10] <tlrobinson> that was sort of the original intent
+[00:10] <isaacs> the issue i could see is having to double-test things, but that's sort of already an issue.
+[00:10] <tlrobinson> but narwhal also includes the module system with hooks for native modules, etc
+[00:12] <tlrobinson> another alternative is to make node purely about IO, and make it work with narwhal as a narwhal "engine"
+[00:12] <tlrobinson> narwhal could provide all the commonjs stuff
+[00:12] <tlrobinson> aside from low level io
+[00:13] <isaacs> tlrobinson: well, that could work, but the problem i'd see is that node's io and http approaches are sort of designed to be async all the way down.
+[00:14] <tlrobinson> yes, that has been the main thing blocking us from making it work with narwhal
+[00:14] <isaacs> ie, saying "node provides io" is great, but if you assume that your io isn't asynchronous, then that means doing a lot of Promise.wait() stuff
+[00:14] <isaacs> which defeats the purpose.
+[00:14] <isaacs> don't get me wrong, i definitely <3 narwhal
+[00:14] <isaacs> and node.
+[00:14] <isaacs> the fact that they don't get along causes me great </3
+[00:14] <tlrobinson> i'd love to have the async APIs in commonjs / narwhal too
+[00:15] <tlrobinson> and i see ryah's motivation for keeping node purely async
+[00:15] <isaacs> i'd love to have commonjs see the light and ditch synchronicity in favor of promises and callbacks.
+[00:15] <tlrobinson> but IMO it can't be the only option for server-side js
+[00:15] <isaacs> when you really need synchronous behavior, there's .wait()
+[00:15] <isaacs> but you usually don't.
+[00:16] <tlrobinson> if you're writing a server, yes
+[00:16] <tlrobinson> if you're doing many other things, no
+[00:17] <isaacs> most of my experience with js has been in building web pages in browsers, where asynchronicity is the norm, and most of my experience in other langauges has been writing code for web servers, where asynchronicity is almost always better and almost always a pita.
+[00:18] <isaacs> node is not ideal for writing shell scripts, i've found.
+[00:18] <isaacs> but for web programming? yeah, it definitely covers the majority use case.
+[00:19] <isaacs> also, if commonjs were specified with asynchronicity everywhere as the default, then it would be much easier to build in teh browser.
+[00:21] <tlrobinson> i'm 100% for having parallel async APIs in CommonJS
+[00:22] <isaacs> w00t.
+[00:22] <isaacs> what's stopping narwhal from implementing it?
+[00:22] <isaacs> (not asking to be facetious, genuinely curious)
+[00:23] <tlrobinson> nothing really. we have a working version of async JSGI already
+[00:23] <isaacs> neato
+[00:24] <isaacs> i haven't really played with jack or narwhal for a while.  or even nodejs that much, really.  spending too much time on yui and family, not enough extracuricular javascript.
+[00:25] <tlrobinson> yeah, even i haven't been working on narwhal much, mostly focused on cappuccino + atlas
+[00:26] <isaacs> stupid dayjobs.
+[00:27] <isaacs> i was just saying today, ya know, what i wouldn't give for a few months of paid vacation to just code on whatever i feel like.
+[00:27] <tlrobinson> (atlas does use narwhal though. and cappuccino works with narwhal too. i made sure of that)
+[00:27] <isaacs> i wish yahoo would hurry up and realize how useless i am and lay me off already.
+[00:27] <tlrobinson> haha
+[00:27] alexiskander has joined the channel
+[00:27] <isaacs> srsly
+[00:27] binary42 has joined the channel
+[00:27] <isaacs> i think they're just paying me not to work for anyone else.
+[00:28] <isaacs> ACTION .oO( i kid, i kid, this is a great place to work )
+[00:29] alexiskander_ has joined the channel
+[00:29] <jed> is there any particular reason that node isn't closer to the jsgi spec?
+[00:30] <jed> i mean the easy stuff, like pathInfo et al.
+[00:30] <aurynn> Because it is young
+[00:30] <isaacs> jed: because no one's gotten around to writing a jsgi handler on top of nodejs yet
+[00:30] <isaacs> aurynn: the spec or node? ;)
+[00:30] <aurynn> both. ;)
+[00:30] <aurynn> I'm working on postgres support. After that, support for my not-orm.
+[00:30] <jed> it seems like it wouldn't be that hard.
+[00:30] <isaacs> jed: it's been on my to(maybenever)do list for a while now.
+[00:30] <jed> i might take a crack at it.
+[00:31] <isaacs> yes, please do!
+[00:31] <jed> isaacs: what do you think is the best way to provide a wrapper?
+[00:31] <jed> isaacs: i mean, ideally the arguments in handler functions would be jsgi compliant.
+[00:31] <jed> isaacs: but i'm not sure i can get that deep.
+[00:32] <isaacs> jed: id' start with the base jsgi, dont' worry about providing middleware at first.
+[00:32] <isaacs> ie, a program that starts a server, creates the jsgi "request" object, passes it to the app function its given, and then spits out a response based on the jsgi "result" object it returns from the app function
+[00:32] <jed> isaacs: ah i see.
+[00:32] <isaacs> so you'd do something like this:
+[00:33] <sudocarl> aurynn:  nice job on your additions to postgres-js
+[00:33] <isaacs> node node-jsgi-prog.js my-jsgi-app.js
+[00:33] <aurynn> sudocarl, thanks.
+[00:33] <isaacs> so node-jsgi-prog.js does a require() on args[2], then gets the "app" member, and uses that to process requests.
+[00:33] <sudocarl> aurynn, if you have a sec you might want to check out my fork of postgres-js, I have merged in your changes and I also have implemented date parsing
+[00:33] <jed> isaacs: or what about a module instead?
+[00:33] <aurynn> sudocarl, I'm going to update it to use actual bind variables and protocol messages
+[00:33] <sudocarl> aurynn, cool :) looking forward to it
+[00:33] <jed> like require("http-jsgi")
+[00:34] <aurynn> sudocarl, I saw your fork after I wrote mine.. :) So I intend to merge
+[00:34] <aurynn> and if you have merged, great!
+[00:34] <isaacs> my-jsgi-app.js does exports.app = function (req) { return { status: 200, headers:{"Content-type":"text
+[00:34] <jed> isaacs: and just make it parallel.
+[00:34] <isaacs> "
+[00:34] <isaacs> etc.
+[00:34] <sudocarl> aurynn, :) cool
+[00:34] <jed> isaacs: ah, i see.
+[00:35] <isaacs> if you want to then create (like jack does) a collection of middleware and helpers, so much teh better.
+[00:35] <isaacs> but the core needs to work first, imo
+[00:35] <isaacs> (at least, this is the sketch i have in my todo list)
+[00:35] <isaacs> to(never)do list
+[00:35] <jed> isaacs: i was thinking more of just making the res and req objects compliant.
+[00:35] <jed> isaacs: to match this example:
+[00:35] <jed> http://wiki.commonjs.org/wiki/JSGI/Level0/A/Draft2#Request
+[00:35] <tlrobinson> jed are you going for a synchronous or asynchronous version of jsgi?
+[00:36] <jed> tlrobinson: ideally async.
+[00:36] <jed> tlrobinson: but to be honest, i was thinking on a much easier level.
+[00:36] <isaacs> jed: i think you're finding out why there's no jsgi for node yet.  it's a little bit trickier than it seems at first :)
+[00:37] <jed> tlrobinson: and just wrapping the listener functions so that the res and req arguments they return match the spec more closely.
+[00:37] <jed> isaacs: sure sure.
+[00:37] <isaacs> jed: that being said, getting a very small/simple start on it would be useful.
+[00:38] <isaacs> tlrobinson: do you have a link to the async jsgi spec handy somewhere?
+[00:38] <jed> isaacs: but i was thinking less of the middleware paradigm and more about the names of the members returned on the objects themselves.
+[00:38] <jed> isaacs: specifically the request object.
+[00:38] <isaacs> jed: middleware is just a fancy name for a function that returns a function.
+[00:38] <tlrobinson> isaacs: i'm not sure if it's spec'd out yet
+[00:39] <tlrobinson> basically you return a promise (which has a "then" function) instead of the object with the 3 properties
+[00:39] <jed> tlrobinson: where then == addCallback ?
+[00:39] <isaacs> i see
+[00:39] <tlrobinson> yes, i think so
+[00:40] <tlrobinson> promises are definitely something commonjs and node need to converge on
+[00:40] <jed> tlrobinson: and then also handles errors aka addErrback?
+[00:40] <isaacs> personally, i like then because every time you type a character, a butterfly stops being beautiful.
+[00:40] <tlrobinson> i think then takes two args, a callback and errback
+[00:41] <isaacs> tlrobinson: what if you want to add lots of callbacks?
+[00:41] <isaacs> or just an errback?
+[00:41] <tlrobinson> not sure if it supports that
+[00:41] <tlrobinson> i know very little about the promises
+[00:41] <isaacs> ACTION puts a 1 under the "node" column on the chalkboard
+[00:42] <jed> tlrobinson: what about input and error streams?
+[00:42] <tlrobinson> currently those are synchronous APIs
+[00:43] <isaacs> the thing that's a bit wonky about jsgi is that node doesn't just have a "ok i'm done" event that has the whole data, it's got a "chunk received" event, and then a "done" event
+[00:43] <tlrobinson> obviously we'll want async analogs
+[00:43] <tlrobinson> isaacs: for now you'll need to buffer it, i think
+[00:44] <isaacs> tlrobinson: right.  and that's great.  except, even with a forEach-able object, i'm not sure how to go about handling a 2gb upload or something.
+[00:44] <isaacs> or even worse, serving a stream from a posix fifo
+[00:44] <tlrobinson> true, that's why we need an async input stream
+[00:44] <isaacs> it's not like that's going to have a "done reading" event
+[00:44] <isaacs> right
+[00:45] <tlrobinson> for async jsgi 
+[00:45] <isaacs> this all sounds like good stuff for jsgi's 0.3 perhaps :)
+[00:45] <tlrobinson> for sync jsgi its ok
+[00:45] <isaacs> right
+[00:45] <isaacs> well, for sync jsgi, you could just have the forEach wait for the next "chunk" event from the read op
+[00:45] <sudocarl> \away dinner
+[00:45] <isaacs> sudocarl: dos style irc?
+[00:45] <isaacs> :P
+[00:46] cloudhead has joined the channel
+[00:46] hassox has joined the channel
+[00:46] <tlrobinson> isaacs: for sync jsgi you'd just do input.read(chunksize) in a loop, like the multipart parser in jack does
+[00:47] <isaacs> right
+[00:47] <tlrobinson> i guess forEach would be equivalent
+[00:47] <isaacs> at this low-level, the discrepancies between node and narwhal become more and more apparent, i think
+[00:47] <tlrobinson> it's only a matter of sync vs async
+[00:47] <isaacs> hehe.... "only"
+[00:48] <cloudhead> is there a prefered method to check if a js file is being require()d like a common.js module, or should I just check that exports is defined?
+[00:48] <isaacs> saying it's only "sync vs async" is like saying it's only "checkers vs juggling"
+[00:49] <jed> well, for now, i think i'll just make an http-jsgi module that wraps the http module and changes the res and req params to closer match the spec.
+[00:49] <tlrobinson> yes
+[00:49] <jed> that's the only way i'll get anything done. someone more qualified than me can fork it if they'd like,.
+[00:49] <isaacs> jed: that's the way to do it
+[00:49] <isaacs> cloudhead: that works.
+[00:49] <tlrobinson> i just fear javascript on the server will become fragmented as it has been in the past
+[00:49] <cloudhead> isaacs: kk, thanks
+[00:50] <isaacs> cloudhead: var MyThing = (typeof exports === "undefined" ? {} : exports);
+[00:50] <isaacs> then hang everything on MyThing
+[00:50] <isaacs> tlrobinson: i have the same fear.
+[00:50] <cloudhead> isaacs: cool, I'm doing something similar, but that's even better
+[00:52] alex-desktop has joined the channel
+[00:53] <isaacs> tlrobinson: so, i've been thinking though, there's a bit of a problem with the "let's make jsgi asynchronous" approach
+[00:54] <isaacs> jsgi abstracts a lot of the native asynchronicity of http out of the equation.
+[00:54] <isaacs> putting it back in seems wonky to me.
+[00:54] <bentomas> yeah, jsgi, seems a little too inspired by rack and wsgi, (neither of which are async) to be a good fit for node
+[00:55] <tlrobinson> i don't know, i think the use of promises is fairly elegant
+[00:55] <isaacs> that being said, jsgi is REALLY simple and easy to use.
+[00:55] <isaacs> yeah, having the handler return a promise is a great start.
+[00:55] <aurynn> sudocarl, Did you want to collaborate on postgres.js?
+[00:55] <isaacs> (or, more accurately, an event emitter of some sort, since we're not 100% in alignment on what a "promise" is, per se)
+[00:56] <isaacs> the issue is, what events should that thing emit?  a single "done" event that has the whole body defeats the purpose.
+[00:56] <isaacs> it makes more sense to emit a "part" event that has part of the output.
+[00:56] <isaacs> you know?
+[00:56] <jed> isaacs: yeah, that's what i was worried about.
+[00:56] <isaacs> but...
+[00:56] <tlrobinson> yeah, currently i don't think async jsgi supports streaming, but that needs to change
+[00:56] <tlrobinson> or are you talking about the request body
+[00:57] <tlrobinson> (async streaming, i mean)
+[00:57] <isaacs> the point of this thing is that you shouldn't feel like you're writing a freaking web server every time you whip up a site.
+[00:57] <isaacs> tlrobinson: i'm talking about the request body
+[00:57] <jed> isaacs: the response body too, no?
+[00:57] <isaacs> "streaming" is not that different from "serving something really big"
+[00:57] <isaacs> sorry, yes, response body
+[00:57] <isaacs> and request body, though, for that matter.
+[00:58] <jed> request is covered by the input stream in the spec, i thought.
+[00:58] <isaacs> jed: right.  i haven't investigated how hard it would be to make node give you something like that.
+[00:58] <tlrobinson> jed: yes, but so far we only have a way to read input streams synchronously
+[00:59] <tlrobinson> (in narwhal/commonjs)
+[00:59] <isaacs> now, one approach (thinking out loud) is to have, instead of a request object with a body stream, a request object that emits "chunk" events as it gets data.
+[00:59] <isaacs> and then return something that emits chunk and complete events.
+[01:00] <isaacs> not that different, but would allow for true async streaming. your app function would just hook up listeners on the events, and return a thing that fires its own events, and it could be mostly sugared up.
+[01:00] <isaacs> but it feels a lot more complicated ot use than jack.
+[01:00] <tlrobinson> first of all, do you really care about streaming the headers? is it a problem to buffer a few hundred bytes?
+[01:00] <isaacs> tlrobinson: no, i'm talking about the bodies only.  we can buffer headers just fine.
+[01:01] <tlrobinson> k good
+[01:01] <isaacs> the node server has a "headersComplete" event that we could use to know when to pass off to the jsgi app
+[01:02] <isaacs> unless you're running a web server on a wristwatch or something, you've probably got few hundred bytes of ram to spare :)
+[01:02] <tlrobinson> so i think there should just be input/output streams which have both sync and async ways of reading/writing
+[01:03] <tlrobinson> if node doesn't want to implement sync, fine
+[01:03] <tlrobinson> (i would prefer if it did though)
+[01:03] JoePeck has joined the channel
+[01:03] <tlrobinson> then the jsgi app/framework can decide if it wants to read the body synchronously or asynchronously
+[01:04] <isaacs> tlrobinson: i'm not sure how analogous streams are to node's style
+[01:04] <tlrobinson> and use the corresponding response mechanism (3-property object for sync or "promise" for async)
+[01:05] <isaacs> also, if i can return a 3-property object with an asynchronous streaming body, what's the point of a promise?
+[01:05] <isaacs> oh, i guess if you don't know the headers until you parse the input body...
+[01:05] <tlrobinson> actually yeah, you will know the headers
+[01:05] <tlrobinson> just not the body
+[01:06] <isaacs> well, maybe not.
+[01:06] <tlrobinson> hm really?
+[01:06] <tlrobinson> i think that's necessary for middleware to work
+[01:06] <isaacs> what if i need to parse your posted username and password, and then look it up in a database.  if you're a new user, i want to redirect you to a signup page.
+[01:06] <isaacs> waiting on all that would be annoying.
+[01:07] <tlrobinson> oh sure
+[01:07] <tlrobinson> i mean you have option
+[01:07] <isaacs> and it affects the headers i want to send
+[01:07] <tlrobinson> for example if you get an invalid request and want to return an error you can immediately return a 404 or 500 or whatever
+[01:07] <isaacs> whereas.... if i returned an object that emits a "header" event, and a "headersComplete" event, and so on, we could do that.
+[01:08] <isaacs> right, but hte issue here is, "which Location: header am I sending?"
+[01:08] <isaacs> but returning an event emitter from a jsgi app seems obnoxious to me.
+[01:08] <isaacs> at that point, why not just use nodejs directly?
+[01:08] RayMorgan has joined the channel
+[01:08] <isaacs> jsgi should make things easier, not more complicated.
+[01:09] rtomayko_ has joined the channel
+[01:09] <tlrobinson> yes, the promise is pretty simple. you return a promise, node calls the promise.then() with a callback, and when you're ready to return the headers you fullfil the promise
+[01:10] <tlrobinson> we still need to work out how to stream the body though
+[01:10] <isaacs> right
+[01:10] <isaacs> ok... so that does simplify it a bit.
+[01:10] <isaacs> srsly, take a look at node's http.js
+[01:11] <isaacs> i think that an async jsgi could maybe be a bit simpler/easier/more straightforward if it started with the http conversation
+[01:11] <isaacs> but maybe just the body needs to be an event emitter to be streamable..
+[01:12] <isaacs> as it is, with a forEach-able object, you could just do something like body.forEach = function (fn) { this.on("content", fn); }
+[01:14] <tlrobinson> isaacs: i'm not sure how that works?
+[01:14] <isaacs> tlrobinson: in that case, your "body" would be a thing that fires a "content" function every time it's read in a bit more content.
+[01:15] <isaacs> and the "content" event would be fired with the bytes that were read in
+[01:15] alexiskander has joined the channel
+[01:15] <isaacs> so, if your jsgi framework were set to print out the strings by doing body.forEach(myOutputFunction) or something, then this would just assign it as a callback on the body's "content" event
+[01:16] <isaacs> which would effectively turn it into an async stream
+[01:16] <isaacs> of course... you'd need to know when the bytes were all read so that you could close the cnxn
+[01:16] <tlrobinson> oh, clever
+[01:19] thenduks has joined the channel
+[01:23] deanlandolt has joined the channel
+[01:24] rbranson_ has joined the channel
+[01:25] <thenduks> working on re-doing my blog and I'm wondering what the currently accepted best-method of deploying node apps is... doesn't seem to be much info on this... is it basically start up/manage your own pool of workers and load balance with nginx or something?
+[01:29] <inimino> thenduks: ...pool?
+[01:29] <thenduks> inimino, well i need more than 1 worker serving my website :), you know, i'll run my app on port 8000-8005 or whatever
+[01:30] <inimino> thenduks: oh, ok, sure, just write a little shell script to start them
+[01:30] <thenduks> and if they go down?
+[01:31] <thenduks> that's what i mean, i'll need to do it manually, then
+[01:31] <thenduks> no biggy
+[01:31] <Connorhd> write a node script to manage them? ;)
+[01:31] <thenduks> yea or use monit or god or whatever
+[01:31] <inimino> monit
+[01:31] <thenduks> all good
+[01:31] <thenduks> basically just making sure there's no passenger-ish uber plugin that will just handle everything for me :P
+[01:33] <thenduks> i take it everyone is preferring nginx over apache?
+[01:34] <Connorhd> apache would kind of ruin node wouldn't it
+[01:34] <Connorhd> being 1 thread per connection
+[01:42] scudco1 has joined the channel
+[01:57] quirkey has joined the channel
+[02:08] Tautologistics has joined the channel
+[02:09] <Tautologistics> Wow, lot more people here than participate in google groups =)
+[02:09] paan has joined the channel
+[02:11] alexiskander has joined the channel
+[02:12] <aurynn> It's IRC.
+[02:12] <aurynn> :)
+[02:17] <skampler> it's real-time !
+[02:20] <deanlandolt> tlrobinson: i'm almost done reading the scrollback -- not sure what channel this belongs in but what the hell, this is where the convo happened...do you think it's a good idea to have request.body as a symmetry for response.body (with the same promise api?)
+[02:21] <tlrobinson> deanlandolt: perhaps
+[02:22] <tlrobinson> so (assuming narwhal promises) you'd have req.body.then
+[02:22] <tlrobinson> and res.then?
+[02:22] <tlrobinson> or res.body.then
+[02:22] <deanlandolt> err...is res.then ever useful?
+[02:23] <tlrobinson> for asynchronously determining the headers, right?
+[02:23] <deanlandolt> but typeof req.body.then === "function" certain i could be
+[02:23] <deanlandolt> good point...err, things are getting pretty interesting :)
+[02:23] <deanlandolt> i would figure you're not really ready to roll until you _have_ request headers though
+[02:23] <tlrobinson> yeah we need to be able to asynchronously determine headers and stream the body
+[02:24] <tlrobinson> asynchronously stream the body, that is
+[02:24] <deanlandolt> well, symmetry's where it's at...if we land all that we'll have symmetry with the response, which makes me happy
+[02:25] <deanlandolt> i'll have to write some mock middleware (or try to port jack's) to understand the implications
+[02:40] ciju has joined the channel
+[02:42] <ashb> so res.then seems a little bit reduntant since it would be the only thing on the res
+[02:42] <ashb> but i supose "if there's a then fn its a promise" make ducktyping easier in general
+[02:42] <deanlandolt> ashb: but it's how you grab a handle on headers
+[02:42] <ashb> rathern than just 'a function'
+[02:43] <deanlandolt> heh...good point
+[02:44] <ashb> just thinking that return { then: function() {... }} seems a little silly
+[02:44] <deanlandolt> but it wouldn't usually look like that...
+[02:44] <deanlandolt> there'd be some sort of intercession
+[02:44] <ashb> oh?
+[02:45] <ashb> (i haven't read the scrollback)
+[02:45] <deanlandolt> response.body = ["hello world"] looks stupid too
+[02:45] <ashb> deanlandolt: but would there be other properties on the returned object?
+[02:45] <deanlandolt> but usually you'd have yourself a helper...response.write("hello")...etc
+[02:45] <deanlandolt> well no, the returned object wouldn't have anything because you wouldn't know what to put there yet
+[02:46] <deanlandolt> it's the return of the returned object, so to speak, that has the goodies
+[02:46] <ashb> ACTION shuts up until i've read the m/l post
+[02:50] alexiskander has joined the channel
+[02:50] alex-desktop has joined the channel
+[02:52] <ashb> thenduks: why do you need more than one?
+[02:52] <ashb> the whole point of node is that it can handle lots of connection from a single process
+[02:52] <ashb> just how busy is your website ;)
+[03:12] RayMorgan has joined the channel
+[03:14] tlrobinson has joined the channel
+[03:16] dnolen has joined the channel
+[03:19] populuxe_ has joined the channel
+[03:21] Connorhd has joined the channel
+[03:22] alex-desktop has joined the channel
+[03:22] alexiskander has joined the channel
+[03:22] brandon_beacher has joined the channel
+[03:22] tmpvar_ has joined the channel
+[03:22] aurynn has joined the channel
+[03:22] populuxe has joined the channel
+[03:22] Sembiance has joined the channel
+[03:22] mikekell1 has joined the channel
+[03:22] inimino has joined the channel
+[03:22] shfx has joined the channel
+[03:22] mies has joined the channel
+[03:22] tmpvar_ has joined the channel
+[03:22] inimino has joined the channel
+[03:24] mikekelly has joined the channel
+[03:26] eddanger has joined the channel
+[03:29] emyller has joined the channel
+[03:29] <emyller> heya
+[03:29] <emyller> i'm trying to build node on my vps
+[03:29] <thenduks> ashb, it's not that i need more than 1 worker right now, it's mostly just for production deployment purposes, what if your single worker dies? it's always best to have a pool of workers you can balance between, even if it's just 2 or something for your average blog
+[03:29] <emyller> configure just ran successfully
+[03:30] <emyller> but i'm getting this when i try to make:
+[03:30] <emyller> Waf: Entering directory `/root/labs/node/build'
+[03:30] <emyller> fatal: cannot describe 'e801f420d0b03a7a2bb16e8174ba9f7ecf5720c7'
+[03:30] <inimino> hey emyller
+[03:30] <emyller> hey inimino :)
+[03:31] <inimino> best error message ever, emyller
+[03:31] <emyller> oh, yeah :(
+[03:31] <inimino> I hope that makes you feel better because it's all the help I can offer
+[03:32] Connorhd_ has joined the channel
+[03:32] <emyller> oh, you helped me a lot
+[03:32] <emyller> :P
+[03:32] <emyller> there's also the traceback
+[03:32] binary42 has joined the channel
+[03:33] <sudocarl> emyller, it wouldn't be something left by git would it?  maybe there is a .git directory that waf is looking into?
+[03:33] <emyller> http://pastebin.com/d60133024
+[03:33] <emyller> sudocarl: i just cloned the repo in my local box and compiled flawlessly
+[03:33] <sudocarl> uh
+[03:33] <sudocarl> hm
+[03:34] <sudocarl> so is this on a remote box?
+[03:34] <inimino> hm
+[03:34] <inimino> why are you running sudo as root?
+[03:34] <sudocarl> haha
+[03:34] <sudocarl> didn't even notice that
+[03:34] <sudocarl> dunno if that would change anything
+[03:34] <inimino> (and why are you running a build as root in the first place?)
+[03:35] <emyller> did i do that? :o
+[03:35] <inimino> root@localhost:node/# sudo make
+[03:35] <inimino> ACTION snickers
+[03:35] <emyller> this is the default user
+[03:35] <emyller> hehe
+[03:35] <emyller> anyway, i got it now :)
+[03:36] <sudocarl> what was the problem?
+[03:36] <emyller> just moved the .git dir one level up
+[03:36] <sudocarl> running as root?
+[03:36] <sudocarl> ah called it 
+[03:36] <sudocarl> ACTION dances
+[03:36] <emyller> nope, root is a nice guy :)
+[03:36] scudco has joined the channel
+[03:36] <emyller> ACTION watches to sudocarl dancing
+[03:36] <sudocarl> lulz
+[03:37] <emyller> cool :)
+[03:39] <emyller> ACTION guess that he typed 'sudo make' due to his fag
+[03:40] <emyller> thanks, guys :)
+[03:48] <inimino> :)
+[03:50] <emyller> any way i can integrate nodejs into nginx?
+[03:50] <emyller> is there a node-cgi? :P
+[03:55] <emyller> hmm... proxy_pass http://localhost:3000; (nginx)
+[04:01] <emyller> well, gonna sleep
+[04:01] <emyller> bye :)
+[04:12] rbranson_ has joined the channel
+[04:37] aguynamedben has joined the channel
+[05:11] <Micheil_away> malkomalko: with those cap deploys and monit / restart strategies, could you write a blog post about your setup or something?
+[05:12] <malkomalko> yah I'd love to as soon as I figure out a way that works nicely :)
+[05:16] <Micheil_away> okay
+[05:16] <Micheil_away> I'm going to also be working on similar, although, that'll be over summer.
+[05:24] <malkomalko> have capistrano working no problem
+[05:24] <malkomalko> just need to figure out the proper way to restart the node process
+[05:25] <Micheil_away> write a script to handle it:
+[05:25] <Micheil_away> node myServer.js
+[05:25] <Micheil_away> or something
+[05:25] <Micheil_away> and use SIGTERM or similar
+[05:28] <Micheil_away> or SIGSTOP
+[05:28] <Micheil_away> for stopping the process
+[05:34] bentomas has joined the channel
+[05:36] paan has joined the channel
+[05:54] <simoncpu> ryah: i'd like to implement getmem() for freebsd platform
+[05:58] JimBastard has joined the channel
+[05:58] <JimBastard> sup binary42
+[05:59] <JimBastard> did you see http://dropiohackathon.eventbrite.com/
+[06:00] mattly has joined the channel
+[06:04] Yuffster has joined the channel
+[06:14] <JimBastard> does anyone have any good simple file upload code? im looking at http://debuggable.com/posts/streaming-file-uploads-with-node-js:4ac094b2-b6c8-4a7f-bd07-28accbdd56cb but i dont see part.filename anywhere there
+[06:25] <JimBastard> can anyone help me with a file upload?
+[06:34] <JimBastard> sweet i got it
+[06:35] <sudocarl> what was it?
+[06:37] <sudocarl> JimBastard, where is the filename?
+[06:38] <sudocarl> nvm I foudn it
+[06:38] <sudocarl> found *
+[06:39] <JimBastard> i just did a posix.open / posix.write
+[06:39] <JimBastard> not sure if that is the right way
+[06:39] <sudocarl> oh yea that works
+[06:48] rakeshpai has joined the channel
+[06:51] onar has joined the channel
+[06:57] dnolen has joined the channel
+[07:24] eddanger has joined the channel
+[07:52] <Micheil_away> ryah: thanks for that :)
+[08:00] johan-s has joined the channel
+[08:07] the_undefined has joined the channel
+[08:11] sveimac has joined the channel
+[08:18] rakeshpai has joined the channel
+[08:19] hassox has joined the channel
+[08:31] cmlenz has joined the channel
+[08:50] xjeethux has joined the channel
+[09:11] amduser has joined the channel
+[09:23] teemow has joined the channel
+[09:33] the_undefined has joined the channel
+[10:03] Biscuits has joined the channel
+[10:14] michaelk^ has joined the channel
+[10:36] <simoncpu> hi
+[10:36] <simoncpu> i need to pass -lkvm to the compiler options
+[10:36] <simoncpu> how do i do that?
+[11:05] <erikcorry|away> Dunno
+[11:05] <erikcorry|away> But you might try CCFLAGS=-lkvm <make-command>
+[11:10] <simoncpu> yepp, but how do i add it to nodejs' build script?
+[11:11] <simoncpu> i tried doing  conf.env.append_value('CCFLAGS',  '-lkvm') to no avail
+[11:38] webben has joined the channel
+[11:38] <simoncpu> ok, i've found the solution...
+[11:39] <simoncpu> btw, is gnutls really required for node?
+[11:47] <Micheil_away> simoncpu: no
+[11:48] <Micheil_away> node works fine without it, it just adds encrypted or secure socket support, iirc
+[11:48] <simoncpu> i was wondering why node crashes with the http unit tests
+[11:48] <Micheil_away> yeah
+[11:48] <simoncpu> i thought it needed gnutls or something
+[11:48] <Micheil_away> i mentioned it to ryan yesterday
+[11:49] <simoncpu> btw, i posted something about it in the mailing list, but my post didn't get through...
+[11:49] <simoncpu> btw, i have a working getmem() for freebsd, and everything builds fine
+[11:49] <simoncpu> one problem though: am i supposed to return vsize and rss as 1024 bytes?
+[11:49] <simoncpu> like in ps output?
+[11:50] <Micheil_away> I would have no idea ;P
+[11:50] <simoncpu> *1024 byte units
+[11:50] <Micheil_away> either ask ryah_away when he get's back, or pop it on the ML
+[11:51] <simoncpu> aha... new members are moderated
+[11:52] <Micheil_away> are they?
+[11:52] <simoncpu> ...according to http://groups.google.com/group/nodejs/about
+[11:59] sudocarl has joined the channel
+[12:10] rbranson_ has joined the channel
+[12:11] mlouro has joined the channel
+[12:14] chris_ has joined the channel
+[12:17] chris_ has left the channel
+[12:18] Tautologistics has joined the channel
+[12:22] Tautologistics has left the channel
+[12:23] <Micheil_away> oh man, that guy who's developing node SQLite has to be one of the only guys contributing who's using svn
+[12:24] <richardb> it's using hg, isn't it?
+[12:25] <richardb> yes: http://code.google.com/p/node-sqlite/source/checkout
+[12:26] Tautologistics has joined the channel
+[12:26] Tautologistics has left the channel
+[12:27] <simoncpu> at least it's not cvs
+[12:33] <simoncpu> aha! it's in hg! w00t!
+[12:33] <simoncpu> ACTION loves hg than git
+[12:33] <simoncpu> hg was my first love... first love never dies <3
+[12:35] alex-desktop has joined the channel
+[12:37] Tautologistics has joined the channel
+[12:39] <Micheil_away> I thought gcode only did svn?
+[12:39] <Connorhd_> they added mercurial a while ago now
+[12:39] Tautologistics has joined the channel
+[12:52] shoez has joined the channel
+[12:52] <shoez> hi all!
+[12:52] <shoez> is it me... or do multi-line regexp's not seem to work ?
+[12:55] <shoez> I do a... /^(\d\d) (.*)$/m.exec('some data with new lines...'); and it cuts off at the new line mark
+[12:55] <shoez> really odd!
+[12:57] <Micheil_away> you'd need I think the /g flag
+[12:57] <shoez> I've even tried /mgi
+[12:58] <Micheil_away> oh
+[12:58] <Micheil_away> it's the last $
+[12:58] <Micheil_away> that matches the end of a line
+[12:58] <Micheil_away> https://developer.mozilla.org/en/Core_JavaScript_1.5_Reference/Global_Objects/RegExp/multiline
+[13:00] <shoez> Bizarre... yeah - I've even tried removing the ^ and $ - no joy
+[13:00] <Micheil_away> no idea then
+[13:01] <shoez> Yeah me either.. I'm so confused
+[13:04] <Connorhd_> . doesn't match \n
+[13:05] <Micheil_away> ([\S\s]*)
+[13:05] <Connorhd_> for example /.*/.exec("a\nb"); matches "a" /[^c]*/.exec("a\nb"); matches "a\nb"
+[13:06] alexiskander has joined the channel
+[13:10] <shoez> Ahh...
+[13:12] <shoez> Thanks! 
+[13:26] Micheil has joined the channel
+[13:37] quirkey has joined the channel
+[13:38] <Micheil> hmm.. jake looks interesting: http://github.com/280north/jake/
+[13:38] <Micheil> despite being a Narwhal component, It could probably easily be ported to standalone v8 or something
+[13:39] soveran has joined the channel
+[13:40] <Micheil> is it possible to access v8 without loading up Node.js (from within a node.js server?)
+[13:41] <frodenius> not without altering node's source
+[13:41] <Micheil> okay
+[13:42] <Micheil> mm... nothing quite like a hot orange peko tea...
+[13:44] pdelgallego has joined the channel
+[13:45] shfx has joined the channel
+[13:45] jasondavies has joined the channel
+[13:54] <malkomalko> how about a nice new york bagel?
+[13:54] <malkomalko> :)
+[13:55] <Micheil> malkomalko: no thanks.. it's 1am
+[13:55] <malkomalko> lol
+[13:56] <Micheil> not to self, in this english essay, don't accidentally type Peter Weird instead of Peter Weir
+[14:01] pmuellr has joined the channel
+[14:19] jasondavies has joined the channel
+[14:28] davidsklar has joined the channel
+[14:35] cloudhead has joined the channel
+[14:47] rbranson_ has joined the channel
+[15:24] <Tautologistics> Anyone here familiar with erlang/mochiweb/webmachine?
+[15:26] ciju has joined the channel
+[15:34] aurynn has joined the channel
+[15:34] <voodootikigod> Tautologistics: yea whats up
+[15:35] apgwoz has left the channel
+[15:36] <Tautologistics> Ever developed a complete app with webmachine?
+[15:37] <Tautologistics> I'm almost done porting it to node (nodemachine) and starting to question if it's a good idea
+[15:44] <voodootikigod> haha
+[15:44] <voodootikigod> how close is almost
+[15:44] <voodootikigod> there is an awful lot in there
+[15:45] <voodootikigod> but in terms of a restful toolkit
+[15:45] <voodootikigod> its pretty much top notch
+[15:51] Micheil1 has joined the channel
+[15:52] rtomayko has joined the channel
+[15:52] <jasondavies> Tautologistics: I've heard good things about webmachine
+[15:53] <malkomalko> think I'm going to bring some wine tonight voodootikigod 
+[15:53] <jasondavies> Tautologistics: never actually developed a complete app though
+[15:53] <voodootikigod> hahah
+[15:53] <voodootikigod> malkomalko: just to snub my beer geekery?
+[15:53] <malkomalko> just to have a few more options :)
+[15:56] binary42 has joined the channel
+[16:00] <simoncpu> malkomalko: i'm going to drink tuba, fermented coco nectar!
+[16:00] <simoncpu> die, wine-loving-heathens, die!!!!
+[16:00] <malkomalko> hAHA
+[16:00] <malkomalko> hey nowwwww
+[16:01] <simoncpu> die you all beer drinkers out there!
+[16:01] <simoncpu> beer drinkers with large tummys and bad breath!!!!!
+[16:01] <simoncpu> diiiiiieeeeee
+[16:01] <simoncpu> ACTION is obviously bored
+[16:03] bentomas has joined the channel
+[16:04] <Micheil> hmm.. how would one implement email sending on top of node.js
+[16:05] dnolen has joined the channel
+[16:05] <aurynn> write an smtp library on tcp
+[16:06] <simoncpu> i can't play with node.js because it crashes on bsd :(
+[16:06] <Micheil> aurynn: nah duh.
+[16:06] <Micheil> ;P
+[16:06] <aurynn> Micheil, SMTP is well-known.. :)
+[16:06] <Micheil> aurynn: I'm just trying to figure out how to do that
+[16:07] <aurynn> read the RFC. Figure out the req/response pattern.
+[16:07] <aurynn> Each request is a callback.
+[16:07] <Micheil> hmm..
+[16:07] <Micheil> I'd probably use.. promises I guess
+[16:07] apgwoz has joined the channel
+[16:10] <aurynn> probably. :)
+[16:11] <Micheil> I don't know why, but I keep read SMTP as SNTP
+[16:13] <mediacoder> Micheil: http://pastie.org/737427
+[16:13] <Tautologistics> Well, the port is done except for some encoding support. The work left is finishing tests to exercise all the decisions and fix the found bugs
+[16:13] <Micheil> mediacoder: wouldn't wanna be quick or anything?
+[16:14] <mediacoder> huh? just read "send email" ..thats how i quick n dirty send email 
+[16:14] <Tautologistics> I haven't commited the latest code but on github it's about 90% done: http://github.com/tautologistics/nodemachine
+[16:14] <Micheil> mediacoder: I said I'd try and implement it, and then kaboom! it's there almost with you
+[16:14] <Micheil> ;P
+[16:15] <mediacoder> well.. my stuff is not tested, or anything..:-) currently im just playing and having fun..with node
+[16:19] <Micheil> mediacoder: I'm thinking I'll base my off Ruby's Net::SMTP module
+[16:19] <Micheil> it looks like it has a good API
+[16:21] <aurynn> Tautologistics, neat :)
+[16:22] <mediacoder> Micheil: great. i just needed a quick thing, that sends me an email once in a while ..so this worked out for me :-)
+[16:22] <Micheil> mediacoder: yeah, I'm looking to create and contribute back into node more modules
+[16:22] <mediacoder> yea, sae here.. wish i was better in js and had more time tho :-)
+[16:23] <Micheil> mediacoder: I'm actually coming from frontend js to serverside, so that's why I do things the long way, because I don't have that serverside backing
+[16:24] <Micheil> anyone know of an SMTP server that I could use for testing this on?
+[16:27] <Micheil> oh well, night folks (expect a possible SMTP lib from me in the coming weeks.)
+[16:35] johan-s has joined the channel
+[16:36] rtomayko has joined the channel
+[16:38] DanWrong has joined the channel
+[16:40] <aurynn> ooh, that's something I should do. Write a twitter library.
+[16:45] scudco has joined the channel
+[16:52] <jasondavies> aurynn: yes, I would use it
+[16:54] DanWrong_ has joined the channel
+[16:55] sudoer has joined the channel
+[17:02] <mediacoder>  aurynn jasondavies: i have a quick n dirty twitter oauth-client implementation and a twitter streaming-api client http://github.com/mediacoder
+[17:03] <jasondavies> mediacoder: cool
+[17:03] <aurynn> mediacoder, definitely putting together the node infrastructure :)
+[17:04] RayMorgan has joined the channel
+[17:04] <mediacoder> lol.. if i can do it, anyone could..shows how great nodejs is :-D
+[17:08] <aurynn> And how good a coder you are ;)
+[17:12] <mediacoder> ;-)
+[17:21] <simoncpu> hi
+[17:21] <simoncpu> is ryan online? 
+[17:22] <simoncpu> anyone here familiar with the code? what file/section do i need to explore to see how nodejs listens for connections?
+[17:22] <aurynn> *deploys a backhoe to ryan's location*
+[17:22] <aurynn> No, no he's not.
+[17:22] <simoncpu> i'm especially interested on making IPv6 work
+[17:22] saikko has joined the channel
+[17:22] <simoncpu> it looks like a good hobby
+[17:25] <voodootikigod> any have or working on a good csv parser?
+[17:28] <ashb> DanWrong: http://github.com/ashb/template/blob/master/lib/Template.js#L346-364
+[17:28] <ashb> was taht what you were after
+[17:28] <ashb> ah nm
+[17:28] aguynamedben has joined the channel
+[17:28] <simoncpu> uh....
+[17:29] <simoncpu> how do you guys explain node.js to your girlfriend?
+[17:29] <simoncpu> "i'm here at the office right now playing with node.js"
+[17:29] <DanWrong> I want a deep merge, but that would nearly do it...and its cleaner than jquery's extend
+[17:29] <DanWrong> although ive just noticed proces.mixin _is_ jquery's extend
+[17:29] <DanWrong> so going to use that
+[17:30] deanlandolt_ has joined the channel
+[17:30] <ashb> i stole that function fomr somewhere else
+[17:30] <ashb> i oporbably should have attirbuted it
+[17:30] mlouro has joined the channel
+[17:31] <DanWrong> simoncpu: I'd say just don't try to explain..."im here at the office working" is enough detail :)
+[17:32] <simoncpu> but i'm not really working
+[17:32] <simoncpu> and it's 1:34am here in my timezone =)
+[17:32] <simoncpu> "honey, i'm playing with grand theft auto 4 and with node.js"
+[17:33] <simoncpu> "node.js is an exciting game too, just like gta4, except that it's useful"
+[17:34] voodootikigod has joined the channel
+[17:36] <rektide> ashb &all: i'd like to work with the envjs people to get envjs running on node.js
+[17:36] <rektide> the main issue seems to be that envjs is a simulated web environment
+[17:37] <rektide> which means everything goes into the global namespace
+[17:37] <rektide> everything is built on "this"
+[17:37] <jasondavies> simoncpu: just say "I'm having an affair but don't worry, it's purely intellectual"
+[17:37] <simoncpu> hahaha
+[17:38] <rektide> i'm wondering what kind of containerization node.js has, how i might be able to allow multiple instances of envjs to run, and how to keep them polluting a global namespace
+[17:38] <ashb> *keep them from polluting
+[17:39] <rektide> so, in envjs, you might call load("env.rhino.js");window.open("http://slashdot.org") to load the envjs runtime and open slashdot.org
+[17:40] <rektide> slashdot.org js might define, i dunno titles = ["RMS living in basement again", "node.js takes over planet", "eric raymond sitll crazy"]
+[17:40] <jasondavies> heh
+[17:40] <rektide> the intepretter now has a this.titles set
+[17:41] <rektide> i'd like a way to containerize envjs
+[17:41] <jasondavies> is envjs synchronous?
+[17:41] <ashb> it tries to emulate the browser
+[17:41] <deanlandolt_> jasondavies: as syncronous as a browser...so, not very
+[17:42] <rektide> it tries to emulate the browser, yes
+[17:42] <deanlandolt_> presumably require could provide a sandboxed global to each frame node wants to kick off
+[17:42] <jasondavies> might be better spawned as a separate process, that way you can keep node.js lean and mean, and also maintain a separate namespace
+[17:42] <rektide> what i'd like to divise is a way to have multiple sandboxed browsers
+[17:42] <jasondavies> deanlandolt_: ah ok
+[17:42] <rektide> deanlandolt_: thats exactly what i'm looking for, a sandbox
+[17:43] <rektide> does each require() create a sandbox and re-run the init code for the module ?
+[17:43] onar has joined the channel
+[17:43] <deanlandolt_> not automatically but it can be provided in a sandbox
+[17:44] <deanlandolt_> how narwhal does it: http://github.com/280north/narwhal/blob/master/lib/sandbox.js
+[17:47] scudco has joined the channel
+[17:57] <rektide> is brian hammond / fictorial around at all?  he suppoesdly had a node-sandbox at some point
+[18:02] <rektide> i might be able to spend a week staring at narwhal's sandbox and only half understand.  however, it seems to use a lot of eval()... i can only assume thats comes with a significant performance penalty
+[18:03] soveran has joined the channel
+[18:07] eddanger has joined the channel
+[18:13] ericflo has joined the channel
+[18:21] aurynn has joined the channel
+[18:24] <jasondavies> is there a way to gracefully terminate node.js i.e. wait for all pending events to finish but don't accept any new connections?
+[18:25] Wes- has joined the channel
+[18:25] <ashb> if not there should be
+[18:26] jtaby has joined the channel
+[18:27] <jasondavies> I guess it's only particular events that I care about i.e. any pending writes to disk or to a database
+[18:27] malkomalko has joined the channel
+[18:28] <ashb> well you want to shut down the http acceptor
+[18:29] <ashb> and then anything else should finish and then the loop.run() would stop of its own accord (if i grok libev right)
+[18:29] <Tautologistics> Everything is just an event emitter so there's no way to know that there are more events expected
+[18:29] <ashb> sure, but the important one is the http acceptor
+[18:29] <Tautologistics> As an developer, one could keep track of what has not wrapped up yet and wait on the,
+[18:29] <ashb> for oms t cases
+[18:29] <ashb> *most
+[18:30] <Tautologistics> you mean close the socket
+[18:30] <ashb> if you want to be techmical about it, sure
+[18:30] <ashb> :(
+[18:30] <ashb> ACTION likes to deal in conceptual
+[18:30] <ashb> (i dont, thats a huge lie)
+[18:31] <jasondavies> Tautologistics: so I could keep a special queue of critical events and then wait on them before actually exiting, hmm good idea
+[18:31] <jasondavies> is it possible to listen for the event that's triggered by ctrl+c?
+[18:31] <Tautologistics> yes
+[18:32] <jasondavies> is it "SIGINT" or something else?
+[18:32] <aurynn> probably sigint.
+[18:32] <Tautologistics> process.addListener("SIGINT", function () { ... });
+[18:32] <aurynn> you can listen for the one from sigkill, too, but you don't get much time to run code in a sigkill
+[18:34] <Tautologistics> You're the only one that can know there are more events expected so I don't think you'd ever see this deferred shutdown as core feature
+[18:34] <aurynn> if something ignores a sigint, I break out sigkill.
+[18:35] <jasondavies> cool, it worked
+[18:37] isaacs has joined the channel
+[18:39] jcrosby has joined the channel
+[18:46] sudoer has joined the channel
+[18:55] ciju has joined the channel
+[18:55] jed has joined the channel
+[18:59] <jasondavies> is it possible to listen on multiple ports simultaneously? I see that server.listen(...) is synchronous...
+[19:01] <aurynn> I suspect that'll need to wait for either threaded v8, or just running multiple instances on different ports
+[19:01] <jasondavies> ah, maybe the docs are out of date? I managed to run two server instances on different ports within the same node.js instance
+[19:02] <jasondavies> server.listen(...) doesn't appear to be synchronous after all
+[19:02] <JimBastard> i think node_debug works like this
+[19:02] <JimBastard> it runs on another port while your node app runs on its regular port
+[19:02] <jasondavies> in fact the hello world example has a sys.puts(...) call after server.listen(...)
+[19:04] <rektide> aurynn: "threaded v8"... is that being worked on? what are the goals?
+[19:04] <aurynn> rektide, I have no idea
+[19:04] <aurynn> I doubt it, given that chrome uses a multi-process model
+[19:05] <aurynn> and each window just gets its own v8 process, internally
+[19:05] <jasondavies> so we are agreed, server.listen() is async? I updated the docs and I'll send a pull req
+[19:06] hassox has joined the channel
+[19:07] jed has left the channel
+[19:20] ciju has joined the channel
+[19:20] the_undefined has joined the channel
+[19:24] the_undefined_ has joined the channel
+[19:27] <inimino> rektide: someone has a Web Workers implementation, check the mailing list
+[19:28] <JimBastard> i use to be a web worker, until i got fired
+[19:28] <aurynn> ACTION is impressed with the speed at which node infrastructure is being put together
+[19:29] lmorchard has joined the channel
+[19:29] <inimino> jasondavies: server.listen is synchronous, in that it returns when the socket is open
+[19:30] <jasondavies> inimino: aha, ok
+[19:30] <inimino> jasondavies: I never read the docs any other way, but maybe they can be clarified
+[19:30] <jasondavies> yeah I will update it then
+[19:32] <jan____> yo jasondavies!
+[19:32] <jan____> whatcha doing here? :)\
+[19:32] <jasondavies> jan____: hey :)
+[19:32] <jasondavies> jan____: discovering the awesomeness, what else :)
+[19:33] <JimBastard> anyone else going to the nyc.js meetup tonight?
+[19:33] <aurynn> Sadly no, as I'm very far from nyc.
+[19:33] <jan____> jasondavies: good highfives!
+[19:34] <jasondavies> jan____: ^5
+[19:36] teemow has joined the channel
+[19:50] cmlenz has joined the channel
+[19:51] <Tautologistics> Where is the nyc.js?
+[19:54] <aurynn> nyc, I'd imagine
+[20:01] <rbranson__> nyc is a big place
+[20:07] j4c has joined the channel
+[20:09] <j4c> hello, I try to grab an image from a server and forward it to the client on every HTTP request, but it doesn't work :( See my current code here: http://gist.github.com/253621. Any ideas?
+[20:15] michaelk^ has joined the channel
+[20:18] sudocarl has joined the channel
+[20:20] <isaacs> j4c: i'm trying your code with the latest nodejs from ry's repo
+[20:21] <isaacs> for starters, webserver.get(... should be webserver.request("GET", ...
+[20:21] <nefD> can anyone remember when firebug used to be fairly quick?
+[20:21] <nefD> ahh, those were the days
+[20:23] <j4c> isaacs: what's the difference?
+[20:23] <isaacs> j4c: just new preferred style, so that we can support arbitrary request verbs without adding new methods
+[20:24] <isaacs> i'm getting a message in my web browser that the image contains errors and cannot be displayed
+[20:25] <j4c> I get something like that when I try it within safari
+[20:25] <j4c> when I save the image, I also can't open it with any image tool
+[20:26] <mediacoder> j4c: response.sendBody(webserverChunk,"binary");
+[20:27] <Tautologistics> Damn you encoding!
+[20:27] <mediacoder> heh
+[20:27] <isaacs> ah
+[20:27] <isaacs> yeah, that fixes it
+[20:27] bentomas has left the channel
+[20:27] <j4c> :) I already thought it was the encoder, but I didn't knew how to set the encoding of the output
+[20:27] <j4c> thanks a lot :)
+[20:27] <mediacoder> :-)
+[20:28] <isaacs> j4c: also, you don't need to buffer it
+[20:28] <isaacs> don't bother with the webserverChunk var, just send each piece as you get it
+[20:28] <isaacs> the only reason why you'd need to buffer is if you don't know the size.
+[20:28] <j4c> I don't wanted to do it, but the example code did it so I thought, it might be recommanded
+[20:28] <isaacs> but, since the backend server told you the size, you don't need that bit
+[20:30] <isaacs> imagine you were proxying a 300gb file.
+[20:30] <isaacs> trying to buffer it in memory would be prohibitive
+[20:32] <j4c> so, this is okay:         webserverResponse.addListener("body", function (chunk) { response.sendBody(chunk); });?
+[20:38] <isaacs> j4c: webserverResponse.addListener("body", function (chunk) { response.sendBody(chunk, "binary") });
+[20:38] <aurynn> read a buffer, raise that you have the buffer filled, read the buffer, write that you have it filled, et
+[20:39] <j4c> yeah, of couse
+[20:42] <isaacs> heh, that'd be a good use case for _ify
+[20:43] <aurynn> It seems reasonable to me to do the buffer like that for all cases
+[20:43] <isaacs> webserverResponse.addListener("body", response.sendBody._(_,"binary"))
+[20:43] <aurynn> IE, let the underlying application determine when to emit amFull
+[20:43] <aurynn> or whatever
+[20:43] <isaacs> aurynn: if you want to be a buffer, sure.
+[20:43] <isaacs> if you want to just be a direct dumb proxy that does nothing with the data, no need to buffer more than the size of a single chunk.
+[20:44] <aurynn> even then, you say "I have filled my buffer, and here's an EOF."
+[20:47] <aurynn> or raise an eof, so whatever's reading from the buffer knows to stop caring
+[20:47] <isaacs> aurynn: i'm not sure i grok the use-case you're talking about.
+[20:47] <isaacs> it sounds kinda interesting, though
+[20:47] <isaacs> got any code that describes it more explicitly?
+[20:48] <aurynn> anything that reads from a file, or a web app that writes stuff piecemeal
+[20:48] <aurynn> fx
+[20:48] <aurynn> emit a haveData every time you've read some from the disk (or generated a piece of content)
+[20:48] <aurynn> and at the end just emit EOF
+[20:49] <aurynn> so upstream listeners know they can ignore you now
+[20:49] <isaacs> aurynn: doesn't node already give you that with the posix module methods?
+[20:50] <aurynn> right, so why not replicate that for server methods?
+[20:51] <ashb> how do you registerd for reading on the http body?
+[20:51] <isaacs> aurynn: well, you kinda do have that...
+[20:52] <aurynn> nvm, I'm not being clear :) Carry on
+[20:52] <isaacs> an http client emits a "body" event whne it's read a few bytes...
+[20:52] <isaacs> that's why i was asking for code, not (just) to be a dick.
+[20:52] <isaacs> :)
+[20:52] <isaacs> i think node gives you what you need to make that happen.  i'm curious about the api that you have in mind, since it sounds like it could be handy.
+[20:53] <aurynn> Unfortunately, I don't have time to put it to code right now :(
+[20:53] <isaacs> it would be good to have a fileStream type of thing that worked a bit like an HTTP client
+[20:54] <ashb> isaacs: this is going ot be a stupid question, but how do i registerd for an event? :D
+[20:54] <ashb> this is the first time i've actually written any node code
+[20:55] <isaacs> ashb: blah.addListener(event, listener) http://nodejs.org/api.html#_events
+[20:55] <ashb> ah i missed than i a quick skim
+[20:55] <isaacs> ashb: promises have sugar methods to add listeners to the "success" and "failure" events.
+[20:55] <ashb> yeah say that
+[20:55] <ashb> *i saw
+[20:55] <ashb> thanks
+[20:55] <isaacs> ashb: myPromise.addCallback(successHandler).addErrback(failHandler)
+[20:55] <isaacs> kewl
+[20:55] <ashb> ACTION goes to pick up the takeaway
+[20:56] <isaacs> aurynn: anyway, yeah... maybe something like: fs = new FileStream("/etc/passwd");  fs.addListener("data", handleData); fs.addListener("eof", closeThingie); fs.read();
+[20:57] <isaacs> and then it could have stuff like fs.stop(), fs.rewind(), fs.goto() etc. to control the flow.
+[20:57] <aurynn> fs.addListener("eof", handleDataandClose);
+[20:57] <isaacs> rightright
+[20:57] ciju has joined the channel
+[20:57] <isaacs> that'd be a hell of a lot handier than nesting a dozen promises jsut to read a file.
+[20:58] <isaacs> especially for really big files, or file-ish fifo's that might not even have an end.
+[20:58] <isaacs> aurynn: ok, you've got a spec now, go write it ^_^
+[20:58] <ashb> isaacs: fs.addListeners("data", hD)("eof", close);
+[20:59] <isaacs> ashb: does addListeners exist and return itself?
+[20:59] <aurynn> And if you were sufficiently bored
+[20:59] <ashb> not yet
+[20:59] <ashb> was an idea
+[20:59] jed has joined the channel
+[20:59] <aurynn> you could implement an XML SAX parser like this
+[20:59] <ashb> it would return a bound function
+[20:59] <isaacs> ashb: pitch it.  i like it.
+[20:59] <isaacs> right
+[20:59] <ashb> isaacs: consider it pitched :D
+[20:59] <ashb> i'm on enough mailing lists
+[20:59] <isaacs> aurynn: or you could implement something that kills fewer kittens than SAX
+[21:00] <isaacs> but yeah
+[21:00] <isaacs> it would make it possible to do some interesting token-stream and parser type things
+[21:00] <aurynn> xml = new XmlReader("xml"); xml.addListener("open", openTag); xml.addListener("close", closeTag); xml.addListener("eof", validateXml);
+[21:00] <isaacs> without having to buffer tons of stuff in memory
+[21:00] kassandry has joined the channel
+[21:01] mattly has joined the channel
+[21:01] <isaacs> whoa, promise.cancel, where have i been! promise.addCancelback(listener) nice!
+[21:02] voodootikigod[tr has joined the channel
+[21:03] <isaacs> aurynn: honestly, i'm less excited about SAX style parsers, and more interested in using fifo's as message queues a la erlang-style mailboxes.
+[21:04] <aurynn> isaacs, Can definitely do that. You can implement most parsers like this
+[21:04] <isaacs> not sure if it'd be terribly efficient. might be better to do it different ways.
+[21:04] <isaacs> ie, without getting the FS involved.
+[21:07] <aurynn> Hitting the FS will kill you, performance-wise
+[21:18] pdelgallego has joined the channel
+[21:19] quirkey has joined the channel
+[21:20] teemow has joined the channel
+[21:21] sudoer has joined the channel
+[21:26] JimBastard has joined the channel
+[21:34] hassox has joined the channel
+[21:36] tomdale has joined the channel
+[21:41] jcrosby has joined the channel
+[21:43] michaelk^_ has joined the channel
+[21:50] dnolen has joined the channel
+[21:52] pmuellr has left the channel
+[22:04] tapwater has joined the channel
+[22:08] jcrosby has joined the channel
+[22:16] <emyller> hey :) is there any performance difference between | foo = foo || {} | and | if (!foo) foo = {} | ?
+[22:17] <JimBastard> 42
+[22:19] <sudocarl> emyller, I wouldn't think so...
+[22:19] <frodenius> emyller: not really
+[22:19] <sudocarl> both involve testing foo
+[22:19] <Micheil> only slight
+[22:19] <sudocarl> but I think the first is better wouldn't it?
+[22:19] <Micheil> i do believe that foo = foo || {} is quicker
+[22:19] <sudocarl> since it won't do a test if food isn't null
+[22:19] <emyller> sudocarl: it can save some bytes :)
+[22:19] <frodenius> you can write !foo || (foo={})
+[22:19] <Micheil> as it a ternary operator or something
+[22:19] <sudocarl> emyller,  :D
+[22:20] <Micheil> besides, it's easier to read foo = foo || {}
+[22:20] <emyller> yea
+[22:20] <emyller> i'm just worried if can an assignment cost something
+[22:21] <frodenius> imo it's easier to read if(!foo)foo={}
+[22:21] <emyller> if yes, frodenius' suggestion 'd be better
+[22:21] <frodenius> well, foo=foo||whatever makes an assignment in any case
+[22:21] <Micheil> emyller: you could try and benchmark it, although, you'd probably get environmental errors in your benchmarks
+[22:22] <frodenius> but this is really not a performance problem
+[22:22] <Micheil> you bigger performance problems will be on how you iterate arrays and objects
+[22:22] <Micheil> *your
+[22:23] <emyller> | if (!foo.bar.baz) foo.bar.baz = []; foo.bar.baz.push(item); | against | (foo.bar.baz = foo.bar.baz || []).push(item) |
+[22:23] <Micheil> true
+[22:23] <Micheil> although if typeof foo.bar.baz == string, then you have a problem
+[22:23] <Micheil> you also have problems if foo doesn't exist
+[22:24] <emyller> not in my case, foo.bar must exist in my piece of code
+[22:24] <Micheil> and that's possibly when you need something like a namespacer
+[22:24] sudoer has joined the channel
+[22:25] <Micheil> reference: http://github.com/Miksago/Jet-js/blob/master/src/jet.js#L126-152
+[22:26] <frodenius> in that case if(!..) is fastest because it only needs to make the three variable lookups once
+[22:26] <Micheil> resolves about 40 levels deep in < 5ms
+[22:27] <Micheil> .. the commented out part was where I was trying to make it faster or better at some stage
+[22:27] <Micheil> oh well, bye folks
+[22:28] <frodenius> ok try http://pastie.org/738019
+[22:28] <frodenius> on my machine, the second is fastest
+[22:29] <emyller> frodenius: what tool do you use for benchmarkings?
+[22:30] <frodenius> hm i usually code up a small test case file and run it with several js shells
+[22:31] <frodenius> no specific tools really
+[22:31] <emyller> ah :)
+[22:31] <frodenius> but i don't do a lot of extensive benchmarking
+[22:31] <JimBastard> can anyone see whats malformed about this request?
+[22:31] <JimBastard> http://retardbox.com:8000/images/corky.jpg
+[22:31] <JimBastard> i think im having a mime type / encoding issue?
+[22:32] <JimBastard> anyone?
+[22:33] <emyller> no idea.
+[22:34] <JimBastard> does the header look okay?
+[22:34] murz has joined the channel
+[22:36] <sudocarl> does anyone know how to install d8 (the v8 debugger)
+[22:36] <JimBastard> negatron
+[22:36] <JimBastard> do you know whats wrong with my request sudocarl?
+[22:36] <sudocarl> lemmi check
+[22:36] <JimBastard> thanks man
+[22:37] <davidsklar> sudocarl:try  scons d8 console=readline
+[22:37] <sudocarl> davidsklar, will do in a sec :D thanks
+[22:37] <davidsklar> http://groups.google.com/group/v8-users/browse_thread/thread/9c5f75ac682bd142/57561d28277463a2 has a bit more info too
+[22:38] <sudocarl> davidsklar, thanks :)
+[22:38] <sudocarl> JimBastard, .......  hmmmm
+[22:38] <JimBastard> nice i can see all your requests in the node_debug
+[22:38] <sudocarl> it looks like it shoudl work
+[22:38] <JimBastard> 		      resp.sendHeader(200,{'Content-Type':'image/jpeg', "Content-Length":jsPage.length ,'Set-Cookie':session.setCookieHeader()});			 
+[22:38] <JimBastard> resp.sendBody(image);	
+[22:38] <sudocarl> take off the set cookie
+[22:38] <JimBastard> tried that
+[22:38] <JimBastard> maybe its posix.cat ?
+[22:38] <JimBastard> should be open?
+[22:39] <sudocarl> perhaps
+[22:39] <mediacoder> resp.sendBody(image,"binary");
+[22:39] <sudocarl> can I see your code?
+[22:39] <JimBastard> posix.cat("./" + req.uri.path).addCallback(function (image) {
+[22:39] <mediacoder> i should get a dollar everytime i say this
+[22:39] <JimBastard> its a huge block of crap
+[22:39] <sudocarl> try what mediacoder said
+[22:39] <JimBastard> aight
+[22:39] <JimBastard> i tried setting the encoding manually
+[22:40] <JimBastard> yeah no dice
+[22:40] <JimBastard> i had .setEncoding before
+[22:40] <JimBastard> doesnt work that way either
+[22:40] <sudocarl> huh weird
+[22:40] <sudocarl> so your catting the jpeg
+[22:40] <sudocarl> have you tried printing out image
+[22:40] <JimBastard> is that wrong?
+[22:40] <sudocarl> see if cat is actually reading the right thing?
+[22:41] <JimBastard> hrmm
+[22:41] <sudocarl> see what "./"+req.uri.path is actually building
+[22:41] <JimBastard> ohh yeah
+[22:41] <JimBastard> its an image
+[22:41] <sudocarl> I think that it builds: .//blah.jpeg
+[22:41] <JimBastard> i did a sys.puts and its a bunch of binary info
+[22:41] <sudocarl> ok
+[22:41] <JimBastard> looks just like when i a did a dump of an image before
+[22:41] <JimBastard> could it be something with multipart?
+[22:41] <sudocarl> then your sending it to the browser
+[22:41] <sudocarl> maybe it needs to be chunked?
+[22:42] <mediacoder> JimBastard: i actually get some data, which looks binary, seems to be a broken image
+[22:42] <JimBastard> where do a specify that?
+[22:42] <emyller> another question: i am about to start the development of the public face of http://mandoojs.com/; i really want to do it with node, but i dunno if i can go safely; i need some couchdb connection, a wiki parser and basic functionalities.
+[22:42] Tautologistics has joined the channel
+[22:42] <emyller> should i proceeed with node.js?
+[22:42] <sudocarl> if you want to send it chunked send the body in multiple pieces
+[22:42] <JimBastard> hrmm mediacoder the image can be viewed 
+[22:42] <sudocarl> emyller, what is that site going to be about?
+[22:42] <JimBastard> just not via node.js
+[22:43] <emyller> sudocarl: about my javascript library; must have docs, some dynamic pages and some interactivity with users (comments, custom pages, etc)
+[22:44] <JimBastard> you should probaly just use couchdb + sammy.js
+[22:44] <sudocarl> then yea build it with node for sure :)
+[22:44] <sudocarl> whats sammy? :)
+[22:44] <mediacoder> emyller: sure, why not.
+[22:44] <JimBastard> google sammy.js
+[22:44] <JimBastard> node.js is pretty cool, but a lot of goodies arent built in yet
+[22:44] <JimBastard> just starting to get made
+[22:44] sudoer has joined the channel
+[22:45] onar has joined the channel
+[22:45] <sudocarl> ah I see
+[22:45] <sudocarl> :)
+[22:45] <isaacs> emyller: node.js is like python, not django
+[22:45] <isaacs> er... sudocarl, that is
+[22:45] <emyller> "Sammy is a tiny javascript framework built on top of jQuery" « :(
+[22:45] <JimBastard> ?
+[22:45] <JimBastard> whats wrong with that
+[22:45] <sudocarl> isaacs, I get that :) I just hadn't heard about sammy
+[22:46] <emyller> i dont like jquery's philosophies. that's why i created the project the site will be about
+[22:46] <sudocarl> JimBastard,  
+[22:46] <sudocarl> http://github.com/carlsverre/node-router/blob/master/node-router.js#L267
+[22:46] <emyller> but thanks for the suggestion, i'll take a look at it anyway
+[22:46] <sudocarl> an example of a working static handler
+[22:46] <JimBastard> yeah yeah
+[22:46] <JimBastard> ive been looking through all the routing frameworks
+[22:46] <JimBastard> and fu.js
+[22:47] <JimBastard> the code is all there
+[22:47] <sudocarl> weird...
+[22:47] <sudocarl> maybe try a different image
+[22:47] <sudocarl> or just a text file
+[22:47] <JimBastard> im just gonna give up for now
+[22:47] <JimBastard> ive got a presentation tonight
+[22:47] <sudocarl> lol
+[22:47] <JimBastard> showing off node 
+[22:47] cmlenz has joined the channel
+[22:47] <mediacoder> JimBastard: i get data which looks like jpeg, but it obvoiusly is not a correctly encoded image..otherwise it would show
+[22:47] <JimBastard> ill just get the hash table of all the mime types
+[22:47] <JimBastard> and hook that up
+[22:48] onar_ has joined the channel
+[22:48] <emyller> sudocarl, mediacoder, isaacs: i'll give node.js my first try, then :)
+[22:48] <JimBastard> http://retardbox.com:8000/
+[22:48] <JimBastard> there we go
+[22:48] <sudocarl> emyller, good stuff :)
+[22:48] <JimBastard> check it out, debugger running in real-time
+[22:48] <JimBastard> http://retardbox.com:8080/
+[22:48] <sudocarl> very awesome JimBastard 
+[22:48] <sudocarl> :)
+[22:48] <isaacs> http://retardbox.com:8000/flerg
+[22:49] <JimBastard> Lapeeeedooo
+[22:49] rolfb has joined the channel
+[22:49] <isaacs> hey, the picture didn't get uploaded.
+[22:49] <isaacs> wtf, mang?
+[22:49] <JimBastard> yeah ill comment that out
+[22:49] <JimBastard> sorry
+[22:49] <isaacs> hehe
+[22:49] <JimBastard> so check this out
+[22:49] <emyller> is there any wiki-based language parser out there?
+[22:49] <JimBastard> http://retardbox.com:8000/session.html
+[22:49] <JimBastard> try #mediawiki
+[22:49] <JimBastard> they use markdown i think
+[22:50] <emyller> JimBastard: in js, that work on node.js :)
+[22:50] <JimBastard> http://retardbox.com:8000/debug.html
+[22:50] <JimBastard> dont really know what you mean
+[22:50] <sudocarl> like a markdown parser in js?
+[22:50] <emyller> yea
+[22:50] <JimBastard> there is a wiki node application
+[22:50] <JimBastard> its on the github
+[22:50] <sudocarl> JimBastard, lol open requests: -28
+[22:50] <aurynn> There's a lot of cool node shit already :)
+[22:50] <JimBastard> ahaha yeah i know
+[22:50] <JimBastard> im on it
+[22:50] <JimBastard> also retardbox is techinically a wiki, but i wouldnt recommend using it
+[22:51] <emyller> well, if there's not any i'll write a parser. that seems to be quite easy :)
+[22:51] <JimBastard> aight fixed and restarted, http://retardbox.com:8000/debug.html
+[22:51] <JimBastard> you should just use mustache
+[22:51] <JimBastard> and html
+[22:51] <sudocarl> davidsklar, that scons thing didn't work?
+[22:51] <JimBastard> yaarg
+[22:51] <JimBastard> brb
+[22:51] <sudocarl> davidsklar,  error: gnu/stubs-32.h: No such file or directory
+[22:51] <Connorhd_> emyller, wikicreole or something i think
+[22:52] <davidsklar> sudocarl: ruh roh. 
+[22:52] <JimBastard> silly edge cases
+[22:52] <davidsklar> sudocarl:  I asked The Google about that error message and got back: http://www.cyberciti.biz/faq/x86_64-linux-error-gnustub-32h-missing-error-and-solution/
+[22:52] <sudocarl> haha I coulda done that :D thanks :)
+[22:52] <davidsklar> n/p :)
+[22:53] <Connorhd_> emyller, http://www.ivan.fomichev.name/2008/04/javascript-creole-10-wiki-markup-parser.html
+[22:54] <JimBastard> ohh yeah now i remember, wikimedia uses that crazy markup that makes no sense
+[22:54] the_undefined has joined the channel
+[22:54] <JimBastard> i wish someone made a nice html markup language like html, on nm
+[22:54] <emyller> Connorhd_, JimBastard: ty :)
+[22:55] <JimBastard> np
+[23:02] <sudocarl> random humor I  just found during a 404 search: http://www.ziff.net/404/404.htm
+[23:13] <tapwater> what's the current status of node binary data support?
+[23:13] <sudocarl> JimBastard, did you figure out the problem?
+[23:13] soveran has joined the channel
+[23:13] <sudocarl> or are you leaving the jpeg stuff?
+[23:15] mahemoff has joined the channel
+[23:15] mahemoff has left the channel
+[23:16] mahemoff has joined the channel
+[23:17] sifi has left the channel
+[23:18] alex-desktop has joined the channel
+[23:28] <JimBastard> im coming back to it
+[23:28] <JimBastard> for now
+[23:28] <JimBastard> gtg
+[23:28] <JimBastard> demo time
+[23:29] <mediacoder> JimBastard: good luck
+[23:29] <sudocarl> JimBastard, good luck :)
+[23:30] <JimBastard> thanks!
+[23:48] <nefD> *huge* ups to Guille for node.dbslayer.js  ..!
+[23:57] <aurynn> that reminds me, I need to hack on postgres.js tonight.
+[23:57] <aurynn> and I should define a DBI api
+[23:59] jcrosby has joined the channel

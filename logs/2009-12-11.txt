@@ -1,0 +1,964 @@
+[00:07] hassox has joined the channel
+[00:08] quirkey has joined the channel
+[00:13] jspiros has joined the channel
+[00:15] onar_ has joined the channel
+[00:18] binary42 has joined the channel
+[00:19] emyller: we could build something like django on nginx :)
+[00:20] emyller: joining up all these mini-projects into a full-featured (but as simple as possible) framework
+[00:20] aurynn: we definitely need a DB api spec.
+[00:20] aurynn: I believe I shall write that tonight.
+[00:21] emyller: great :)
+[00:22] aurynn: is there a NodeWiki?
+[00:29] onar__ has joined the channel
+[00:30] onar__ has joined the channel
+[00:32] RayMorgan_ has joined the channel
+[00:33] onar_ has joined the channel
+[00:36] RayMorgan__ has joined the channel
+[00:41] ciju has joined the channel
+[01:12] RayMorgan has joined the channel
+[01:13] RayMorgan has joined the channel
+[01:13] rbranson_ has joined the channel
+[01:17] jed has joined the channel
+[01:25] fictorial has joined the channel
+[01:26] isaacs has joined the channel
+[01:30] sudoer has joined the channel
+[01:40] RJ2 has joined the channel
+[01:40] RJ2: how much memory does an idling client connection use? (ie a comet connection waiting to send some data to the client when something happens serverside)
+[01:43] Tautologistics: Testing shows somewhere between 8 - 10K (this was with 20k+ connections so it should be pretty close.
+[01:43] RJ2: thanks, that's a pretty respectable figure
+[01:44] Tautologistics: There's a thread in google groups all about performance, concurrent connections, and memory used.
+[01:46] RJ2: ah, the one by simon willison, cool. was talking to him about it last week
+[02:11] ciju has joined the channel
+[02:17] emyller: aurynn: i found one on github, but didnt test it
+[02:19] rictic has joined the channel
+[02:44] tomdale has joined the channel
+[02:58] soveran has joined the channel
+[03:10] nefd_ has joined the channel
+[03:28] mattly has joined the channel
+[03:28] aurynn: emyller, I was thinking more, where's a good place to post an RFC
+[03:29] Yuffster has joined the channel
+[03:35] frodenius: aurynn: the ml is always good
+[03:41] tapwater has joined the channel
+[03:44] mahemoff has joined the channel
+[03:45] emyller: aurynn: yeah, a ml is cool. but if you find a place that is really efficient, please let me know :)
+[03:46] aurynn: :)
+[03:46] emyller: (ml didnt work for me some times)
+[04:04] eddanger has joined the channel
+[04:05] aurynn: First, to merge sudocarl's stuff
+[04:05] sudocarl: aurynn, :)
+[04:05] mattly has joined the channel
+[04:05] sudocarl: aurynn, hope its acceptable :)
+[04:06] aurynn: hm
+[04:06] aurynn: ACTION is still a git nooblet
+[04:12] aurynn: sudocarl, this looks great. :)
+[04:12] sudocarl: aurynn,  :) glad to hear
+[04:12] aurynn: Did you do bits.js?
+[04:13] sudoer has joined the channel
+[04:20] aurynn: because that is pretty nice to have
+[04:26] inimino: crikey... 75 unread messages on the list
+[04:30] sudocarl: aurynn, no creationix does
+[04:30] sudocarl: did*
+[04:31] sudocarl: aurynn, I did type-oids.js and parsers.js
+[04:31] aurynn: *nod*
+[04:31] aurynn: I'm starting to handle queries properly, it looks like
+[04:34] sudocarl: one thing that needs to happen is that the whole framework should switch from callbacks to promises
+[04:34] sudocarl: so that everything is consistent
+[04:34] aurynn: Oh?
+[04:35] aurynn: Why?
+[04:35] sudocarl: because the rest of node is promises
+[04:35] sudocarl: I feel that being consistent between libraries would be better...
+[04:35] aurynn: All the rest?
+[04:35] sudocarl: plus sometimes you just want to execute a query and forget about it
+[04:36] sudocarl: If you look at the node.js api, everything works via promises and events
+[04:36] inimino: writing a MySQL library?
+[04:36] sudocarl: by doing function f(arg1, arg2, callback) rather than just returning a callback I think it results in cleaner code
+[04:36] aurynn: inimino, postgresql
+[04:36] aurynn: sudocarl, isn't that how it works right now?
+[04:36] sudocarl: inimino, http://github.com/creationix/postgres-js
+[04:37] aurynn: db.query(query, [args], callback) ?
+[04:37] sudocarl: sorry I messed upw hat I wanted to say
+[04:37] sudocarl: up what*
+[04:37] sudocarl: I meant doing that is worse than returning a promise
+[04:37] sudocarl: also errors are handled in a nicer way
+[04:37] sudocarl: with addCallback/addErrback versus having a function which has to handle both cases
+[04:38] aurynn: Ahh.
+[04:38] sudocarl: I dunno just sorta the feeling I am getting about generic node dev
+[04:38] aurynn: I could see moving to events
+[04:38] inimino: aurynn: oh, I thought there was a postgres client library already, is this one better?
+[04:38] sudocarl: I try to use promises as much as possible
+[04:39] sudocarl: inimino, this one is 100% javascript and is farther along than ry's c++ implementation
+[04:39] aurynn: inimino, this is me hacking on the postgres-js library to improve it. Clean up the API, and implement protocol messages.
+[04:39] inimino: sudocarl: ah, ok, cool
+[04:39] sudocarl: ry's is implemented as a node.js module which needs a bit of kicking to work
+[04:39] inimino: ah
+[04:39] inimino: sounds good
+[04:39] aurynn: sudocarl, sure, let's use events on the external interface
+[04:39] sudocarl: aurynn, sounds good
+[04:40] aurynn: First, though, I want to do parameterized queries properly
+[04:40] sudocarl: I can make the change tonight after I finish my rendering code
+[04:40] sudocarl: (seperate thing)
+[04:41] aurynn: sudocarl, going over the protocol, it looks like the underlying mechanism is prepare/bind
+[04:42] aurynn: no matter what
+[04:42] sudocarl: aurynn, what exactly do you mean by that?
+[04:42] aurynn: sudocarl, if you have a query with parameters, you prepare it, then bind your parameters.
+[04:42] aurynn: then execute it
+[04:42] sudocarl: ah I see
+[04:43] aurynn: as opposed to a Query message
+[04:43] aurynn: which is a straight bit of SQL
+[04:43] sudocarl: yea
+[04:43] sudocarl: what about for one-off queries though?
+[04:44] aurynn: even then, it appears that it does Prepare/Bind.
+[04:44] aurynn: or Query, which doesn't (appear) to use parameters.
+[04:45] aurynn: Right now postgres.js uses Query
+[04:45] aurynn: hm
+[04:45] sudocarl: yea
+[04:45] jspiros has joined the channel
+[04:46] aurynn: ACTION adds it in
+[04:50] aurynn: Ah
+[04:50] aurynn: Part of it is already handled
+[04:59] rtomayko has joined the channel
+[05:01] aurynn: okay, variable types are desired - but we don't know what they are, in advance.
+[05:03] sudocarl: ah
+[05:03] aurynn: which is valid
+[05:06] aurynn: Do we want to return a promise, or an event?
+[05:06] sudocarl: promise
+[05:07] sudocarl: I am working on it right now
+[05:07] aurynn: on which?
+[05:07] sudocarl: switching callbacks to promises
+[05:07] aurynn: That's fine
+[05:07] aurynn: I'm rewriting my prepared methods
+[05:14] sudocarl: aurynn, ok check my fork I just pushed promises
+[05:15] sudocarl: huh weird... aparently git didn't push
+[05:15] sudocarl: 1 sec
+[05:15] aurynn: hm
+[05:16] onar_ has joined the channel
+[05:16] isaacs has joined the channel
+[05:16] aurynn: This isn't good.
+[05:16] sudocarl: there we go
+[05:16] aurynn: I need to be able to remove a function from a listener once the response has come in
+[05:17] sudocarl: what do you mean?
+[05:17] aurynn: well
+[05:17] aurynn: you send a Parse
+[05:17] aurynn: it responds with a ParseComplete
+[05:17] aurynn: which means we don't want to listen for further ParseComplete messages
+[05:17] aurynn: so we handle it, and remove our handler
+[05:18] aurynn: right?
+[05:19] sudocarl: ok
+[05:19] sudocarl: can't you do that?
+[05:19] brandon_beacher has joined the channel
+[05:19] aurynn: I'm trying to think how
+[05:19] sudocarl: emitter.listeners(event)
+[05:19] sudocarl:     Returns an array of listeners for the specified event. This array can be manipulated, e.g. to remove listeners.
+[05:19] aurynn: events.removeListener("event", this); ?
+[05:20] sudocarl: for (var i = 0; i < events.listeners("event").length; i++) delete events.listeners("event")[i]
+[05:20] sudocarl: something like that
+[05:20] aurynn: hm.
+[05:20] sudocarl: that was crude but it would work
+[05:21] sudocarl: I quoted from the events section in: http://nodejs.org/api.html#_events
+[05:21] aurynn: That begs the question, should we allow for multiple Parse events simultaneously?
+[05:21] sudocarl: dunno
+[05:22] sudocarl: brb gotta get some tea
+[05:23] aurynn: ParseComplete doesn't specify, I don't think
+[05:24] sudocarl: back
+[05:25] aurynn: Ah. Here's a nice little hack.
+[05:34] Pilate has joined the channel
+[05:40] tomdale has joined the channel
+[05:42] scudco has joined the channel
+[05:42] RayMorgan has joined the channel
+[05:46] rbranson_ has joined the channel
+[05:48] jed has joined the channel
+[06:11] aurynn: Hah.
+[06:11] aurynn: sudocarl, I like the promise architecture.
+[06:11] sudocarl: aurynn, :)
+[06:11] sudocarl: glad
+[06:11] sudocarl: good to hear
+[06:12] simoncpu: promise architecture? 
+[06:12] simoncpu: is that some sort of purity band and chastity ring or something?
+[06:12] simoncpu: =)
+[06:12] aurynn: simoncpu, re-implementing postgres.js to use promises instead of callbacks
+[06:14] simoncpu: hehehehe
+[06:14] simoncpu: saw the code while strolling across github
+[06:15] simoncpu: btw, i thought promises were just nodejs-speak for callbacks
+[06:15] aurynn: kinda?
+[06:15] simoncpu: where can i read the docs? google seems to have trouble searching for "promise"
+[06:15] simoncpu: promise is a generic word.... blah
+[06:15] sudocarl: http://nodejs.org/api.html#_events
+[06:16] simoncpu: google hits include "the promises lyrics" "10,000 promises" (backstreet boys?)
+[06:16] sudocarl: simoncpu, promise is exactly nodejs-speak for callbacks
+[06:16] sudocarl: :D
+[06:16] sudocarl: postgres-js was using callbacks of the form: function f(args..., callback) rather than returning a promise
+[06:17] simoncpu: now, if only i can run nodejs on freebsd....
+[06:17] sudocarl: lulz
+[06:17] sudocarl: virtualbox gooooo
+[06:17] simoncpu: nodejs crashes on freebsd
+[06:17] sudocarl: http://wiki.freebsd.org/VirtualBox
+[06:17] simoncpu: i prefer hosting nodejs on freebsd because it has the power to serve....
+[06:17] sudocarl: lol
+[06:18] sudocarl: or just stop using bsd and use something better like linux :D
+[06:18] simoncpu: booooo :p
+[06:18] sudocarl: atleast node runs on linux
+[06:18] inimino: it's not exactly a callback
+[06:18] sudocarl: inimino, fair enough
+[06:18] sudocarl: its a promise
+[06:18] sudocarl: which is like a callback on crack
+[06:18] inimino: it's a kind of EventEmitter, which is an object that has a list of callbacks on it
+[06:18] simoncpu: a promise i made to you..... ohhhhh....
+[06:19] simoncpu: a promise i maaaaade... to youuuuuuuuuuuuuuu
+[06:19] aurynn: hm
+[06:19] inimino: it's a less efficient and in some cases more convenient alternative to a callback function
+[06:19] sudocarl: I like the fact that its easy to seperate error handlers and data handlers
+[06:20] sudocarl: also multiple handlers done well  = win
+[06:20] sudocarl: it would be cool to implement a memcache sorta system using promise callbacks
+[06:21] inimino: you can also do that with callback functions by passing two of them
+[06:21] inimino: I was just reading this thread on the mailing list...
+[06:23] cmlenz has joined the channel
+[06:24] emyller: well
+[06:24] emyller: coded too much for one day
+[06:24] emyller: wrote an animation engine today, am exhaust now ×.×
+[06:25] emyller: 'nite, guys o/
+[06:25] sudocarl: goodnight emyller 
+[06:25] inimino: see you emyller
+[06:27] miksago has joined the channel
+[06:28] mahemoff has joined the channel
+[06:34] aurynn: ACTION has completely broken this code
+[06:35] simoncpu: hi
+[06:36] simoncpu: does dropping evcom and src/node_http* solve the freebsd crashes?
+[06:36] simoncpu: ACTION suspects so
+[06:45] bentomas has joined the channel
+[06:58] scudco has joined the channel
+[07:03] scudco has joined the channel
+[07:16] sudocarl: ok coding is over for the night, cheers all
+[07:21] JimBastard has joined the channel
+[07:21] hassox has joined the channel
+[07:22] JimBastard: yeah lots of node.js stuff at the nyc.js meetup;
+[07:28] aurynn: ACTION decides she'll implement notifications into postgres.js too :D
+[07:29] JimBastard: theres a girl in here?!?!
+[07:29] aurynn: uh, yes?
+[07:53] elliottcable: ACTION what JimBatard said
+[07:54] elliottcable: aurynn: what’re you coming to Node from?
+[07:54] elliottcable: actually, JimBastard is wrong, Bluebie ocassionally drops by.
+[07:57] scudco has joined the channel
+[08:03] bentomas has left the channel
+[08:07] jspiros has joined the channel
+[08:09] sudoer has joined the channel
+[08:17] binary42 has joined the channel
+[08:18] michaelk^ has joined the channel
+[08:20] cmlenz has joined the channel
+[08:27] johan-s has joined the channel
+[08:40] micheil has joined the channel
+[08:40] micheil: hmm..
+[08:44] simoncpu: hi
+[08:44] simoncpu: is there a way to determine the theoretical maximum bandwidth for an interface
+[08:44] simoncpu: using node.js?
+[08:45] micheil has left the channel
+[08:48] Micheil has joined the channel
+[08:50] the_undefined has joined the channel
+[08:58] micheil_ has joined the channel
+[09:03] micheil_ has left the channel
+[09:04] micheil_ has joined the channel
+[09:05] micheil_ has left the channel
+[09:07] micheil_ has joined the channel
+[09:15] olivvv has joined the channel
+[09:16] teemow has joined the channel
+[09:17] Micheil: ryah_away: can you ping me when you're about? thanks.
+[09:29] JimBastard has joined the channel
+[09:51] the_undefined has joined the channel
+[10:04] mahemoff has joined the channel
+[10:06] hassox has joined the channel
+[10:12] micheil_ has joined the channel
+[10:16] michaelk^ has joined the channel
+[10:16] michaelk^: i have a question that some js wizard in here might be able to answer: http://pastebin.com/m3664916b
+[10:17] michaelk^: how can i get callback in the scope of the inner function?
+[10:17] elliottcable: afaik it hsould be defined, michaelk^ 
+[10:17] elliottcable: michaelk^: but if not, try `var callback = callback;` or something.
+[10:18] michaelk^: ReferenceError: callback is not defined
+[10:18] michaelk^: with or without that :/
+[10:19] elliottcable: well I’d start poking at it, but i’m screwing with my node, so my install is broken
+[10:19] elliottcable: lol “Error: Cannot find module 'sys'”
+[10:19] simoncpu: aha!
+[10:19] simoncpu: i have a sudden enligthenment
+[10:20] simoncpu: on something that's very obvious
+[10:20] simoncpu: node is based on v8, right? so basic javascript should work
+[10:20] elliottcable: …
+[10:20] elliottcable: uh, duh?
+[10:20] simoncpu: how can i echo something in v8?
+[10:20] elliottcable: o_O
+[10:20] elliottcable: simoncpu: ‘echo?’
+[10:20] simoncpu: like sys.print()
+[10:20] micheil_: wow, we're active?
+[10:20] jasondavies: sys.puts?
+[10:21] elliottcable: simoncpu: `require('sys'); sys.puts()`; or `process.stdio.write(string + '\n')`
+[10:21] michaelk^: sys.outs
+[10:21] michaelk^: sys.inspect is also very helpful
+[10:21] elliottcable: no.
+[10:21] elliottcable: it’s completely unhelpful.
+[10:21] elliottcable: It blows up on any input you couldn’t figure out yourself.
+[10:21] elliottcable: I wrote http://github.com/elliottcable/probe to replace it.
+[10:22] elliottcable: A bit overly verbose, but in the situations where I need it, that verbosity is good.
+[10:22] michaelk^: well, it helped me see whats inside request.headers
+[10:22] elliottcable: michaelk^: don’t need sys.puts for that. JSON.stringify().
+[10:22] michaelk^: sys.inspect is json.stringify
+[10:22] elliottcable: exactly, except that you have to require an extra module for it.
+[10:22] elliottcable: Hence, stupid.
+[10:22] michaelk^: whatever
+[10:23] elliottcable: If it actually handled undefined and other erraneous responses, as I wrote probe to, it’d be a lot more useful
+[10:23] micheil_: hmm..
+[10:26] micheil_: hmm..
+[10:27] micheil_: man is colloquy kinda crap.
+[10:27] micheil_ has left the channel
+[10:34] simoncpu: irssi irsssi
+[10:54] simoncpu: yay, nodejs compiles on ubuntu
+[10:54] simoncpu: and it doesn't crash
+[11:11] Micheil: nice
+[11:11] Micheil: what did you need to do that?
+[11:11] Micheil: ACTION is yet to build & install on his new MBP
+[11:13] pdelgallego has joined the channel
+[11:15] milann has joined the channel
+[11:16] logicuce has joined the channel
+[11:16] soveran has joined the channel
+[11:31] micheil_ has joined the channel
+[11:45] simoncpu: Micheil: no special libs to download... just download, configure, and make install
+[11:45] Micheil: oh
+[11:45] Micheil: okay
+[11:45] simoncpu: if only this is as stable as nodejs in freebsd....
+[11:45] Micheil: umm.. let's see.. what's the mac equivilant of apt-get?
+[11:46] simoncpu: dunno... macports use "port", i think
+[11:46] simoncpu: ACTION doesn't have his macbook
+[11:46] Micheil: simoncpu: heh, I'm just trying to get Git and a few other things
+[11:48] simoncpu: ah... i dunno how to do that using macports
+[11:48] simoncpu: i've just compiled mine from the source....
+[11:48] simoncpu: ACTION is still on 10.4
+[12:34] renatoalbano has joined the channel
+[12:43] alex-desktop has joined the channel
+[12:45] jspiros has joined the channel
+[12:48] Wes- has joined the channel
+[12:48] renatoalbano has left the channel
+[12:55] jasondavies has joined the channel
+[13:11] simoncpu: ok, i've managed to make nodejs listen to IPv6 connections
+[13:11] simoncpu: but wasn't able to do so with both IPv4 and IPv6 connections
+[13:11] malkomalko has joined the channel
+[13:12] simoncpu: weird... in linux, IPv6 sockets accept IPv4 connection tooo... weird......
+[13:13] sztanpet: whats so weird about it
+[13:13] sztanpet: you get an ipv6 mapped ipv4 address, and you need only one socket
+[13:16] simoncpu: this behavior is insecure
+[13:16] sztanpet: what now
+[13:16] simoncpu: weird... this is the default sysctl value in linux
+[13:16] simoncpu: net.ipv6.bindv6only = 0
+[13:16] simoncpu: it should be 1
+[13:16] malkomalko: top of the mornin
+[13:16] simoncpu: there was a draft about this
+[13:17] simoncpu: ACTION googles
+[13:17] simoncpu: http://tools.ietf.org/html/draft-itojun-v6ops-v4mapped-harmful-02
+[13:17] simoncpu: damn, itojun has already passed away
+[13:17] simoncpu: but his work still comes up often
+[13:17] simoncpu: =)
+[13:54] webben has joined the channel
+[13:56] erichocean has joined the channel
+[14:01] erichocean: anyone around?
+[14:01] erichocean: I'm having an issue with the redis client
+[14:01] erichocean: but it appears to be a lower-level Node issue where the same data is handed to the connection listener twice in a row
+[14:02] erichocean: causing the output of the previous command to be considered to be the output of the next command (which happens to have returned nothing)
+[14:06] milann has left the channel
+[14:13] mlouro has joined the channel
+[14:28] davidsklar has joined the channel
+[14:29] jasondavies has joined the channel
+[14:31] erichocean: hmm, either Redis is sending the same four bytes twice or node.js is emitting "receive" on the connection twice with the same data
+[14:40] malkomalko has joined the channel
+[14:41] Yuffster has joined the channel
+[14:43] jtaby has joined the channel
+[14:46] paan has joined the channel
+[14:48] alexiskander has joined the channel
+[14:48] zh has joined the channel
+[14:55] bentomas has joined the channel
+[14:57] chrisfarms has joined the channel
+[15:14] rolfb has joined the channel
+[15:18] chrisfarms: only just properly looked at node... looks really nice!, had I found it six months ago I would probably not gone down the path I did using moz jsapi for a few projects
+[15:20] chrisfarms: well... was wondering if there is any direction for node on how modules might work? .... I've basically built something similar to node and will probably now try and track node/commonjs apis
+[15:20] chrisfarms: im looking into adding ctypes support is this direction likly to be followed by node?
+[15:21] chrisfarms: be nice to be able to share modues without having to write for V8/spidermonkey/jscore
+[15:21] Wes-: chrisfarms: are you looking to continue re-using any jsapi code in the future? I have code you might want if so.
+[15:22] chrisfarms: yeah due a need for e4x I can't jump ship to node ... but thought I would just try and get my api compatible-as-i-can with node 
+[15:23] chrisfarms: Wes-: I've already got a simple dynamic library system ... but ctypes looks like the way
+[15:23] Wes-: chrisfarms: I have FFI for jsapi
+[15:23] Wes-: chrisfarms: as long as you build with gcc and not on windows
+[15:24] chrisfarms: I'm reading the libffi doc as we speak .... that would be perfect!
+[15:26] Wes-: chrisfarms: *sigh* - my documentation needs work, though: http://www.page.ca/~wes/opensource/gpsee/docs/modules/jazzdocs.html
+[15:27] Wes-: chrisfarms: I've used libffi to implement a build system that helps to insure cross-platform FFI for libc, knows values for simple #defines by parsing headers, reflects structs onto JS objects, etc
+[15:28] Wes-: chrisfarms: source code etc in here: http://code.google.com/p/gpsee/  ... there is an FFI tutorial in the wiki, but it ain't nowhere near done yet
+[15:29] chrisfarms: thanks Wes- sure it'll help
+[15:29] cloudhead has joined the channel
+[15:29] Wes-: chrisfarms: lemme know if you need anything - I'm normally in #gpsee EST office hours
+[15:39] erichocean: does anyone have any pointers on how to debug a TCP socket on Mac OS X?
+[15:39] erichocean: the behavior I'm seeing is a response from the server (4bytes long) is being sent to my "receive" callback in node.js twice in a row
+[15:39] erichocean: on startup
+[15:39] erichocean: but only occassionally
+[15:40] erichocean: what I'm trying to figure out is if the server is sending the same response twice, or if node.js is just handing me the same response twice
+[15:42] Wes-: erichocean: just sniff it at the network level
+[15:43] erichocean: yes, that's what I want to do, but my Google searches are completely overwhelmed by windows crapware
+[15:44] erichocean: so I'm having trouble finding a tutorial on how to do that
+[15:44] jasondavies: wireshark is quite good
+[15:44] Tautologistics has joined the channel
+[15:44] chrisfarms: tcpflow
+[15:45] erichocean: sweet, I see both of them
+[15:45] jasondavies: I think it runs on OS X but haven't tried - only on Linux
+[15:45] Tautolog_ has joined the channel
+[15:45] jasondavies: I like the follow TCP stream feature of wireshark - you can view a whole stream of related packets that way
+[15:45] davidsklar: ACTION loves follow-tcp-stream
+[15:46] Tautolog_ has left the channel
+[15:47] Tautologistics has joined the channel
+[15:48] sifi has joined the channel
+[15:48] sifi: has anyone thought of doing a DB manager plugin?
+[15:49] deanlandolt_: sifi: what do you mean by that exactly?
+[15:51] sifi: a more generic plugin system for DBs.  Like a frontend interface for RDBM DBs
+[15:51] deanlandolt_: sifi: i think that's kriszyp's goal with pintura
+[15:51] deanlandolt_: so that's well underway
+[15:52] sifi: cool.  I will have to check that out
+[15:52] deanlandolt_: not really ready for general use but it's up on github to poke around at
+[15:53] deanlandolt_: the general idea though is different store implementations (implementing the websimpledb api) that give you a consistent abstraction into different stores (not just rdbms but lucene, mongo, couch, etc)
+[15:54] dnolen has joined the channel
+[15:57] sifi: it seems like pintura is a json/object frontend to different engines but not directly related to node.js
+[15:57] erichocean: wow, follow tcp stream is tight!
+[15:57] deanlandolt_: sifi: not directly, but it's intended to be able to run on node -- i know that's a priority
+[15:57] deanlandolt_: (and why async is so important to get right in the JSGI spec)
+[15:59] davidsklar: erichocean: right on :)
+[16:09] michaelk^ has joined the channel
+[16:12] quirkey has joined the channel
+[16:19] ismasan has joined the channel
+[16:21] erichocean has joined the channel
+[16:21] erichocean: okay, the issue is definitely in node.js
+[16:22] erichocean: the second "receive" event on a tcp connection is a duplicate of the first, and the actual second data chunk is never sent
+[16:23] erichocean: ...Wireshark FTW
+[16:23] Tautologistics_ has joined the channel
+[16:24] Tautologistics_ has joined the channel
+[16:24] Tautologistics_ has left the channel
+[16:26] Tautologistics has joined the channel
+[16:26] Tautologistics has joined the channel
+[16:35] erichocean: I've narrowed things down to this sequence: send1, receive1, send2, send3, [DUP] receive1, /* receive2 ommitted */, recevie3, ... 
+[16:36] erichocean: if receive2 comes back before send3, everything works
+[16:36] emyller: ACTION just read the backlog and is surprised that aurynn is a girl. "cool! :D"
+[16:45] Tautologistics: emyller: and making a point of it is why a lot of females don't admit to being such online
+[16:53] frodenius: it's a neverending circle, girls not revealing themselves online, nerds therefor thinking "there are no girls on the internet" and consequently making a fuss about it when one apper
+[16:54] frodenius: *appears
+[17:03] Connorhd has joined the channel
+[17:08] RayMorgan has joined the channel
+[17:08] sudoer has joined the channel
+[17:10] erichocean: okay, I can confirm that the duplicate "receive" event is not coming via Connection::OnReceive()
+[17:22] Tautologistics: erichocean: what is this about?
+[17:22] erichocean: bug in the redis-client
+[17:22] erichocean: I think I've got it figured out
+[17:22] erichocean: the redis-client code auto-connects
+[17:23] erichocean: at startup, there's a point where it's "opening", so it adds duplicate listeners
+[17:23] erichocean: which is why the first "receive" event is handled twice
+[17:23] erichocean: I'm refactoring to handle all possible tcp connection states
+[17:25] Tautologistics: aha
+[17:31] erichocean: and...problem solved!
+[17:39] pmuellr has joined the channel
+[17:44] soveran has joined the channel
+[17:54] isaacs has joined the channel
+[17:56] saikko has joined the channel
+[17:56] sztanpet has joined the channel
+[18:02] sztanphet has joined the channel
+[18:03] scudco has joined the channel
+[18:06] eddanger has joined the channel
+[18:08] shoez has left the channel
+[18:08] eddanger has left the channel
+[18:09] aurynn has joined the channel
+[18:10] pmuellr has joined the channel
+[18:15] martyn_ has joined the channel
+[18:19] ericflo has joined the channel
+[18:20] binary42 has joined the channel
+[18:24] aguynamedben has joined the channel
+[18:39] jcrosby has joined the channel
+[18:39] Tautologistics: It's done! http://github.com/tautologistics/nodemachine
+[18:40] aurynn: hurray!
+[18:42] inimino: Tautologistics: wow, looks interesting
+[18:43] Tautologistics: Now the hard part is completing tests and fixing the bugs that come up
+[18:43] aurynn: this is so win :)
+[18:43] aurynn: I should have a new postgres.js out this weekend. hopefully.
+[18:45] Tautologistics: Will it fit in with the work to abstract DB access?
+[18:45] Tautologistics: There's a discussion on google groups
+[18:47] aurynn: I was actually working on a doc for abstract DB
+[18:47] aurynn: that there's one on the lists is awesome
+[18:47] aurynn: ACTION goes to subscribe
+[18:47] jasondavies: does anyone have any tips on avoiding large numbers of nested callbacks?
+[18:48] Tautologistics: very adhoc at this point so get involved now
+[18:48] inimino: jasondavies: write extra functions that take and return promises or event emitters
+[18:48] jasondavies: I thought about defining the callbacks first e.g. var cb = function() {...}; doSomething(cb); but that involves having to think in reverse
+[18:48] Tautologistics: jd: define named functions and use them
+[18:48] nefD has joined the channel
+[18:49] tjholowaychuk has joined the channel
+[18:49] jasondavies: inimino: hmm, are there any good examples of this kind of usage?
+[18:50] hober has joined the channel
+[18:50] aurynn: Tautologistics, the sqlite thread?
+[18:50] Tautologistics: no reverse thinking involved, just take existing inline functions and move them out; you only lose your closures and have to pass context explicitly
+[18:50] inimino: jasondavies: I don't know of any, someone should blog about some of these patterns that are cropping up though...
+[18:50] tjholowaychuk: anyone interested in helping with Express ? http://github.com/visionmedia/express
+[18:50] Tautologistics: aurynn : http://groups.google.com/group/nodejs/browse_thread/thread/93911db9fa278e2/1727c5fde8aebd44?lnk=gst&q=database#1727c5fde8aebd44
+[18:50] inimino: jasondavies: there are also people working on libraries to make some of these things easier
+[18:50] tjholowaychuk: I have had more time lately to do the re-write and things are going well so far, but need some more labour lol
+[18:51] aurynn: Tautologistics, that's an ORM.
+[18:51] Tautologistics: Oh, then yes, it's the sqlite one =)
+[18:52] Tautologistics: jd: an example of avoiding creating tons of anonymous functions: http://github.com/tautologistics/node_loadtest/blob/master/client.js
+[18:52] jasondavies: inimino: most of my code involves multiple db calls, and then combining this data via an HTML template
+[18:53] jasondavies: I'd still like to stream the output though
+[18:53] jasondavies: so each callback does its own res.sendBody(...)
+[18:53] jasondavies: but as the order matters, I'm having to chain the callbacks
+[18:54] jasondavies: is there a way to asynchonously do all the db calls at once, but still send data in the right order?
+[18:54] inimino: you can write some "higher-order" functions that do nice things like that for you
+[18:55] Tautologistics: If you know how many calls have to return, create a single callback for them all that collects results and keeps track of what is still pending. Once everything clears, proceed to the rendering portion
+[18:55] jasondavies: Tautologistics: sounds perfect
+[18:56] inimino: yes, you can just increment a counter every time you make an async call
+[18:56] jasondavies: if I can perform partial rendering too, that would be even better
+[18:56] inimino: decrement it when a callback comes in
+[18:56] jasondavies: maybe I could keep an ordered list of the events
+[18:57] jasondavies: and only perform rendering for contiguous portions of them at a time
+[18:57] Tautologistics: While everything runs in a single thread, a lot of threaded patterns can be applied to an evented model (sometimes with a little twist)
+[18:58] jasondavies: so if I have [a,b,c,d] and a, b and d are marked as complete, I can safely render a and b, but not d yet
+[18:58] Tautologistics: jd: sounds like you are optimizing a little early. get it working simply an then get fancy
+[18:59] aurynn: Works, then works well.
+[18:59] Tautologistics: bingo
+[19:04] voodootikigod has joined the channel
+[19:10] aurynn: Bah
+[19:10] aurynn: I can't get into my google account
+[19:10] erichocean: is anyone working on a Thrift adaptorA?
+[19:16] frodenius: jasondavies: might be interesting for you http://github.com/fwg/nodejs.irc/blob/master/util/progress.js
+[19:16] isaacs: you know, something that's been bugging me is that file access is async, and http is async, but they don't much look like one another.
+[19:16] jasondavies: frodenius: cool, thanks
+[19:17] frodenius: np
+[19:17] isaacs: it'd be neat if there was a way to have a reader not care where its data is coming from, whether it's a file or a url.
+[19:18] erichocean: after about 2^16 rapid HTTP requests in a row, I'm getting a lengthy pause
+[19:18] erichocean: i'm closing the connections, is there anything else I need to do?
+[19:19] frodenius: uh jasondavies that is an old version of my script, buggy, don't use it
+[19:19] eddanger has joined the channel
+[19:19] jasondavies: frodenius: ah, ok
+[19:19] isaacs: frodenius: you don't need the "var Progress" here: var Progress = exports.Progress = function Progress(){
+[19:20] isaacs: oh, wait, yeah you do, since it's all one line.
+[19:20] isaacs: nvm
+[19:20] frodenius: ;)
+[19:20] isaacs: used to exports.Progress = Progress; function Progress () {...
+[19:20] inimino: exports.Progress=Progress; \n function Progress(){ ...
+[19:20] inimino: heh
+[19:20] isaacs: ACTION is a frontend at yahoo. shaving 4 bytes is winful.
+[19:21] isaacs: of course, it SO doesn't matter on the server
+[19:23] aurynn: Tautologistics, actually, this is awesome
+[19:23] Tautologistics: what is?
+[19:24] aurynn: the thread
+[19:24] aurynn: it's what I was looking for
+[19:24] Tautologistics: Ah, there are a lot of gems on there
+[19:28] aurynn: ACTION is subscribed
+[19:41] nefD: hrm.. running an interesting comparison experiment to test the speed of jquery ajax requests & returns via a php script (via json) and a node instance (via jsonp)
+[19:41] nefD: node seems to be faster, but it seems like im getting some speed fluctuation due to my shitty VPN provider.. i miss linode :(
+[19:42] nefD: it does appear that using dbslayer (for mysql queries within node) might be quicker than doing mysql calls through php, though
+[19:44] Tautologistics: so the results are definitively ambiguous? cool
+[19:45] aurynn: Yay for ambiguity.
+[19:45] aurynn: Who's writing the templating engine?
+[19:45] nefD: hrm.. after the speed hiccup, things ran more quickly for both, so I ran 5 tests.. using 100 sequential ajax requests which produce 3 mysql rows in JSON format as the response, the average time per response for ajax via php is 80.06, and for node+dbslayer is 70.9
+[19:45] nefD: (i averaged those results from the results of 5 tests, that is to say)
+[19:46] nefD: and actually, the node+dbslayer method is having to send a wee bit more data than the jquery method
+[19:47] aurynn: I know people are talking about 8000 r/s to postgresql on the lists
+[19:47] Tautologistics: What was the concurrency of queries?
+[19:48] nefD: actually.. the jquery responses were only 80 bytes, while the node responses were 202 bytes (due to the response being in jsonp, and actually, because i think had a bug in my ajax.php script which was only returning the first row, and not all 3)
+[19:48] JimBastard has joined the channel
+[19:48] nefD: what do you mean?
+[19:48] JimBastard: zomg its voodootikigod plz dont hax my gibsen
+[19:49] JimBastard: and malkomalko ! its a JS party!!
+[19:49] nefD: i was firing the ajax requests one after the other, imimedately
+[19:49] nefD: *immediately
+[19:49] mediacoder: JimBastard: how was your talk? ;-)
+[19:49] nefD: so as soon as the success callback is hit for one request, the next request starts
+[19:49] JimBastard: short and to the point lol
+[19:49] voodootikigod: w00t w00t
+[19:49] mediacoder: hehe
+[19:49] JimBastard: voodootikigod 's was much cooler though
+[19:50] voodootikigod: too kind
+[19:50] voodootikigod: mine sucked
+[19:50] JimBastard: sorry i couldnt stick around for drinks and shennigans i had to get home
+[19:50] voodootikigod: you did miss out
+[19:50] voodootikigod: we rallied hard
+[19:50] voodootikigod: 3am
+[19:50] JimBastard: nice
+[19:51] nefD: urlage.. the php test: http://www.ansi.ws/ajaxtest/php.html , and the node+dbslayer test: http://www.ansi.ws/ajaxtest/node.html
+[19:51] Sembiance has joined the channel
+[19:52] inimino has joined the channel
+[19:52] Tautologistics: was this the NYC.js/
+[19:53] JimBastard: ya brb
+[19:53] alexiskander has joined the channel
+[19:53] brandon_beacher has joined the channel
+[19:53] onar has joined the channel
+[19:53] mies has joined the channel
+[19:53] Tautologistics: damn, too busy yesterday
+[19:53] binary42: voodootikigod: All I have to say is we have to do that again sometime soon.
+[19:54] voodootikigod: the partying
+[19:54] voodootikigod: or the craziness
+[20:00] Sembiance has joined the channel
+[20:01] binary42 has joined the channel
+[20:01] aurynn: And boom goes the dynamite.
+[20:01] teemow has joined the channel
+[20:03] CIA-56 has joined the channel
+[20:10] Tautologistics has joined the channel
+[20:11] n8o has joined the channel
+[20:11] n8o: 87? sweet! last time I was here it was around 6
+[20:12] aurynn: node's getting all like popular and stuff
+[20:13] malkomalko: heh
+[20:13] quirkey has joined the channel
+[20:19] erichocean has joined the channel
+[20:25] RayMorgan has joined the channel
+[20:25] hassox has joined the channel
+[20:25] mikekelly has joined the channel
+[20:25] sudocarl has joined the channel
+[20:30] JimBastard: yo inimino whats up with the session code, did you ever post it to github?
+[20:30] JimBastard: ive got my copy but it synced up and open
+[20:31] inimino: JimBastard: I published a git repo on my own machine
+[20:31] sudocarl: git://boshi.inimino.org/sessions
+[20:31] inimino: thanks, that's it
+[20:32] davidsklar has joined the channel
+[20:32] JimBastard: aight
+[20:32] JimBastard: cool
+[20:37] ryah: so many people...
+[20:37] JimBastard: party in the node.js room
+[20:37] JimBastard: we talked about node a whole bunch last night at nyc.js
+[20:38] JimBastard: ACTION wants mongo driver
+[20:38] binary42: ACTION invites overflow into the nyc.js room.
+[20:38] binary42: We did.
+[20:38] ryah: cool. does mongo use thrift?
+[20:39] JimBastard: not sure
+[20:39] binary42: mongo is all BSON IIRC.
+[20:39] ryah: ah
+[20:39] binary42: BSON == proprietary wire format.
+[20:40] ryah: is that differnt than BERT?
+[20:40] binary42: Yup.
+[20:40] binary42: I personally like BERT and BERT-RPC a lot more.
+[20:40] JimBastard: does that use the rubby ducky protocol?
+[20:41] binary42: There is an ernie server but I don't think rubby ducky has been written yet.
+[20:44] rbranson__: ryah: the data i'm passing thru eio_custom()'s data field is garbage in the worker thread callback. i've tried removing the code where libeio sets the stack size, but to no avail. any hints? it works on OS X and 64-bit Linux, just not 32-bit Linux
+[20:45] jed has joined the channel
+[20:46] ryah: rbranson__: what are you eio_custom-ing?
+[20:47] rbranson__: in my node.js ffi extension, i'm calling eio_custom with a very short function, literally 3 lines of code
+[20:47] ryah: rbranson_: you can try to increase the stacksize to 2mb in wscript:140
+[20:47] rbranson__:     AsyncCallParams *p = (AsyncCallParams *)req->data;
+[20:47] rbranson__:     ffi_call(p->cif, p->ptr, p->res, p->args);
+[20:47] rbranson__:     return 0;
+[20:48] ryah: hmm
+[20:48] rbranson__: it's passing in a valid alloc's address, and then req->data = 0x400 on the worker thread
+[20:48] ryah: and nothing is accessing p in the other thread?
+[20:48] rbranson__: it's even wrong in the finish call
+[20:48] rbranson__: it is doing
+[20:48] rbranson__: return scope.Close(p->promise);
+[20:49] rbranson__: promise = Persistent<Object> handle
+[20:49] rbranson__: but there's no delete
+[20:49] rbranson__: that's the only line of code after the eio_custom() in the main thread
+[20:49] malkomalko: is everyone having a smashing afternoon? :)
+[20:49] jcrosby has joined the channel
+[20:50] rbranson__: it isn't a box-level issue either, because other people have reported the same issue on 32-bit linux
+[20:50] rbranson__: and node.js is passing all the tests on this same box
+[20:50] rbranson__: so I'm assuming it's exercising it's eio_custom() call
+[20:51] ryah: rbranson__: does the ffi_call interact with any other data in the system? seems likely
+[20:51] rbranson__: it crashes before the ffi_call
+[20:51] rbranson__: when it's trying to deref p
+[20:52] rbranson__: to get the data out of it
+[20:56] jazzychad has joined the channel
+[20:56] sztanpet has joined the channel
+[20:56] jcrosby has joined the channel
+[20:56] jed has joined the channel
+[20:56] davidsklar has joined the channel
+[20:56] sudocarl has joined the channel
+[20:56] mikekelly has joined the channel
+[20:56] hassox has joined the channel
+[20:56] RayMorgan has joined the channel
+[20:56] n8o has joined the channel
+[20:56] Tautologistics has joined the channel
+[20:56] CIA-56 has joined the channel
+[20:56] teemow has joined the channel
+[20:56] binary42 has joined the channel
+[20:56] mies has joined the channel
+[20:56] onar has joined the channel
+[20:56] brandon_beacher has joined the channel
+[20:56] alexiskander has joined the channel
+[20:56] inimino has joined the channel
+[20:56] JimBastard has joined the channel
+[20:56] voodootikigod has joined the channel
+[20:56] nefD has joined the channel
+[20:56] ericflo has joined the channel
+[20:56] martyn_ has joined the channel
+[20:56] aurynn has joined the channel
+[20:56] scudco has joined the channel
+[20:56] saikko has joined the channel
+[20:56] isaacs has joined the channel
+[20:56] soveran has joined the channel
+[20:56] sudoer has joined the channel
+[20:56] dnolen has joined the channel
+[20:56] cloudhead has joined the channel
+[20:56] chrisfarms has joined the channel
+[20:56] bentomas has joined the channel
+[20:56] malkomalko has joined the channel
+[20:56] jasondavies has joined the channel
+[20:56] Wes- has joined the channel
+[20:56] mahemoff has joined the channel
+[20:56] Micheil has joined the channel
+[20:56] mattly has joined the channel
+[20:56] RJ2 has joined the channel
+[20:56] kassandry has joined the channel
+[20:56] lmorchard has joined the channel
+[20:56] apgwoz has joined the channel
+[20:56] emyller has joined the channel
+[20:56] tmpvar_ has joined the channel
+[20:56] populuxe_ has joined the channel
+[20:56] tlrobinson has joined the channel
+[20:56] thenduks has joined the channel
+[20:56] elliottcable has joined the channel
+[20:56] noxa- has joined the channel
+[20:56] oleg has joined the channel
+[20:56] richardb has joined the channel
+[20:56] wattz has joined the channel
+[20:56] simoncpu has joined the channel
+[20:56] keeto has joined the channel
+[20:56] cadorn has joined the channel
+[20:56] rbranson__ has joined the channel
+[20:56] gwoo has joined the channel
+[20:56] frodenius has joined the channel
+[20:56] ryah has joined the channel
+[20:56] halorgium has joined the channel
+[20:56] beppu has joined the channel
+[20:56] mediacoder has joined the channel
+[20:56] jan____ has joined the channel
+[20:56] Sinjo has joined the channel
+[20:56] sr has joined the channel
+[20:56] careo has joined the channel
+[20:56] ashb has joined the channel
+[20:56] erikg has joined the channel
+[20:56] tlockney has joined the channel
+[20:56] skampler has joined the channel
+[20:59] jazzychad: consolelog and termcolor
+[20:59] jazzychad: http://github.com/jazzychad/consolelog.node.js
+[21:01] ryah: rbranson__: i don't know - see if you can get gdb to notify you when ssomething in the req->data changes?
+[21:01] ryah: rbranson__: or inspect it after its dereferenced?
+[21:01] rbranson__: gdb says can't access ram 
+[21:01] ryah: i susspect you're modifying it elsewhere
+[21:01] rbranson__: since the pointer is 0x400
+[21:01] rbranson__: well, I would too, but it's only doing this on 32-bit linux
+[21:02] rbranson__: libeio's macroness makes it tough to step thru with the debugger
+[21:03] cmlenz has joined the channel
+[21:04] ryah: rbranson__: try compiling with -g3
+[21:04] rbranson__: k
+[21:04] ryah: rbranson__: wscript:160
+[21:04] sudocarl: jazzychad, wow thats awesome!  thanks for putting that together! :)
+[21:04] jazzychad: sudocarl: no prob. i work at a terminal all day... it's nice to have some colors
+[21:05] sudocarl: jazzychad, the only weird thing is that I have a line through all my log messages
+[21:05] aurynn: sudocarl, there's a thread on the lists you might be interested in, for the DB stuff
+[21:05] sudocarl: just log, not warn/wrror
+[21:05] jazzychad: sudocarl: like a strikethrough?
+[21:05] sudocarl: aurynn, thanks :) ill check it 
+[21:05] sudocarl: jazzychad, yea
+[21:06] jazzychad: sudocarl: hm weird.. what terminal/emualtor are you using?
+[21:06] sudocarl: xfce4-terminal
+[21:07] sudocarl: jazzychad,  I have never seen that sorta thing before...
+[21:07] jazzychad: sudocarl: what happens if you put tc.terminalFontReset(); in between lines 193/194 of consolelog.js ?
+[21:08] jazzychad: sudocarl: or just replace line 194 with that
+[21:09] sudocarl: didn't change it
+[21:11] jazzychad: sudocarl: wild. try sys.print("\033[39;0;49m"); instead?
+[21:11] sudocarl: that did it
+[21:12] sudocarl: but it killed all the colors :D
+[21:12] jazzychad: :(
+[21:13] jazzychad: you put it before the tc.terminalSetFont call, right?
+[21:13] sudocarl: oops :)
+[21:13] sudocarl: I replaced that call
+[21:13] sudocarl: now I have the colors
+[21:13] sudocarl: but...
+[21:13] sudocarl: nope still strikeouts
+[21:14] jazzychad: oh i see
+[21:15] jazzychad: i guess that terminal emulator uses the attribute value 9 for striketrhough
+[21:15] sudocarl: ah that would make sense
+[21:15] jazzychad: try changing like 72 to tc.attrs.RESET ?
+[21:15] sudocarl: aurynn, are you talking about Tim Caswell's high level database abstraction?
+[21:15] jazzychad: *line 72
+[21:15] aurynn: sudocarl, yep
+[21:16] sudocarl: jazzychad, nope
+[21:16] aurynn: It's an ORM, and a great idea. But I think we should also be talking about lower-level APIs
+[21:16] sudocarl: aurynn, yea I was already talking to him about that stuff :)  Its pretty nifty
+[21:18] jazzychad: sudocarl: are you using the example.js to test it? 
+[21:18] sudocarl: jazzychad, yea
+[21:18] jazzychad: sudocarl: might need to change line 65 as well as 72 to tc.attrs.RESET
+[21:18] jazzychad: (of consolelog.js)
+[21:18] sudocarl: that fixed it
+[21:18] sudocarl: :)
+[21:18] jazzychad: sweet
+[21:18] sudocarl: yay pretty colors
+[21:18] sudocarl: :) thanks
+[21:19] jazzychad: i'll update the file and commit it
+[21:20] sudocarl: gracias :)
+[21:21] jazzychad: cool, thanks for testing it out!
+[21:21] zh has joined the channel
+[21:21] jazzychad: gotta run unfortunately... bbl!
+[21:22] jazzychad has left the channel
+[21:23] Tautologistics: Ouch. CodingHorror lost all data. The kicker: the backups were kept....? On. The. Server.
+[21:24] aurynn: That's very unfortunate
+[21:24] sudocarl: ...
+[21:24] sudocarl: V_V
+[21:28] jed has joined the channel
+[21:29] sztanphet has joined the channel
+[21:30] isaacs has joined the channel
+[21:31] Tautologistics: farmer seems to do a lot of splitting
+[21:35] sztanpet has joined the channel
+[21:35] alexiskander has joined the channel
+[21:35] brandon_beacher has joined the channel
+[21:35] onar has joined the channel
+[21:35] mies has joined the channel
+[21:36] eddanger has joined the channel
+[21:37] alexiskander_ has joined the channel
+[21:38] mikekelly has joined the channel
+[21:40] sztanpet has joined the channel
+[21:40] brandon_beacher has joined the channel
+[21:40] onar has joined the channel
+[21:40] mies has joined the channel
+[21:43] Tautologistics has joined the channel
+[21:44] RayMorgan has joined the channel
+[21:45] hassox has joined the channel
+[21:46] sveimac has joined the channel
+[21:47] inimino: heh
+[21:53] simoncpu has joined the channel
+[22:00] sveimac has joined the channel
+[22:00] mies has joined the channel
+[22:00] onar has joined the channel
+[22:00] brandon_beacher has joined the channel
+[22:00] mikekelly has joined the channel
+[22:00] alexiskander has joined the channel
+[22:00] sztanpet has joined the channel
+[22:00] zh has joined the channel
+[22:00] cmlenz has joined the channel
+[22:00] davidsklar has joined the channel
+[22:00] sudocarl has joined the channel
+[22:00] CIA-56 has joined the channel
+[22:00] teemow has joined the channel
+[22:00] binary42 has joined the channel
+[22:00] inimino has joined the channel
+[22:00] JimBastard has joined the channel
+[22:00] voodootikigod has joined the channel
+[22:00] nefD has joined the channel
+[22:00] ericflo has joined the channel
+[22:00] martyn_ has joined the channel
+[22:00] aurynn has joined the channel
+[22:00] scudco has joined the channel
+[22:00] sudoer has joined the channel
+[22:00] dnolen has joined the channel
+[22:00] cloudhead has joined the channel
+[22:00] chrisfarms has joined the channel
+[22:00] bentomas has joined the channel
+[22:00] malkomalko has joined the channel
+[22:00] jasondavies has joined the channel
+[22:00] Wes- has joined the channel
+[22:00] mahemoff has joined the channel
+[22:00] Micheil has joined the channel
+[22:00] mattly has joined the channel
+[22:00] RJ2 has joined the channel
+[22:00] kassandry has joined the channel
+[22:00] lmorchard has joined the channel
+[22:00] apgwoz has joined the channel
+[22:00] emyller has joined the channel
+[22:00] tmpvar_ has joined the channel
+[22:00] populuxe has joined the channel
+[22:00] tlrobinson has joined the channel
+[22:00] thenduks has joined the channel
+[22:00] elliottcable has joined the channel
+[22:00] noxa- has joined the channel
+[22:00] oleg has joined the channel
+[22:00] richardb has joined the channel
+[22:00] wattz has joined the channel
+[22:00] keeto has joined the channel
+[22:00] cadorn has joined the channel
+[22:00] rbranson__ has joined the channel
+[22:00] gwoo has joined the channel
+[22:00] frodenius has joined the channel
+[22:00] ryah_away has joined the channel
+[22:00] halorgium has joined the channel
+[22:00] beppu has joined the channel
+[22:00] mediacoder has joined the channel
+[22:00] jan____ has joined the channel
+[22:00] Sinjo has joined the channel
+[22:00] sr has joined the channel
+[22:00] careo has joined the channel
+[22:00] ashb has joined the channel
+[22:00] erikg has joined the channel
+[22:00] tlockney has joined the channel
+[22:00] skampler has joined the channel
+[22:01] PPilate has joined the channel
+[22:01] jspiros_ has joined the channel
+[22:01] Tautologistics has joined the channel
+[22:21] sudoer has joined the channel
+[22:34] rtomayko has joined the channel
+[22:35] rbranson__: note to anyone using libeio from their node extension: compile with -D_LARGEFILE_SOURCE and -D_FILE_OFFSET_BITS=64
+[22:38] jcrosby has joined the channel
+[22:40] soveran has joined the channel
+[22:50] Tautologistics has joined the channel
+[22:53] johan-s has joined the channel
+[22:53] Tautologistics has joined the channel
+[23:04] voodootikigod_ has joined the channel
+[23:11] elliottcable has joined the channel
+[23:12] elliottcable: odd. Why wasn’t I already in here?
+[23:12] elliottcable: okay peeps, problem.
+[23:12] elliottcable: http://github.com/elliottcable/node/commit/25f227942b0f8047108768da058250e2f2dfb231
+[23:12] jtaby has joined the channel
+[23:12] elliottcable: Think I caught everything there.
+[23:12] elliottcable: However, when installing Node.js with Homebrew (again, via a script I wrote; I have control of the entire process here, I just don’t know what I’m missing), `process.paths` looks like this:
+[23:13] elliottcable: ["/Users/elliottcable/.node_libraries","/usr/local/Cellar/node/HEAD/lib/node/libraries/libraries","/usr/local/Cellar/node/HEAD/lib/node/libraries/libraries/site","/usr/local/Cellar/node/HEAD/lib/node/libraries/libraries/vendor"]
+[23:14] elliottcable: I need to puzzle out a way to make sure that it looks in /usr/local/lib/node/libraries/{site,vendor} instead
+[23:17] elliottcable: Can I somehow add --site and --vendor options to the build process? I’m not familiar with the build tools ryah_away chose
+[23:21] jtaby: elliottcable: ping, long time no chat
+[23:22] elliottcable: jtaby: There’s a familiar name. You a Rubyist?
+[23:22] jtaby: elliottcable: i remember you from #macosx
+[23:22] jtaby: while back
+[23:22] elliottcable: hahah ahhah
+[23:22] elliottcable: yes, indeed
+[23:23] elliottcable: Clair de Lune
+[23:23] elliottcable: unfathomably beautiful peice!
+[23:23] elliottcable: ffff— engish.
+[23:24] elliottcable: No ryah, no indirect, not sure who to poke about this.
+[23:24] elliottcable: ACTION suposses he should poke at the build tools, ugh
+[23:25] bentomas has left the channel
+[23:33] isaacs: ryah_away: the LICENSE file is not quite correct.  JSMin isn't quite an MIT license.
+[23:34] isaacs: it's a "MIT minus evil" licence.
+[23:38] elliottcable: okay argh
+[23:38] elliottcable: These build tools are a clusterfuck o_o
+[23:40] ashb: isaacs: whats the evil part of MIT?
+[23:40] isaacs: well, the MIT isn't evil.  but it allows evil.
+[23:40] isaacs: JSMin doesn't
+[23:40] ashb: oh? got a link?
+[23:40] aurynn: evil is a loaded term
+[23:41] logicuce has joined the channel
+[23:41] deanlandolt_: i wouldn't worry too much about that -- it cannot be legally binding (obviously lawyers have never heard of it :) )
+[23:42] elliottcable: is anybody familiar with these build tools at *all*?
+[23:42] ashb: 'these' ones being?
+[23:42] elliottcable: I need to modify the process.paths based on --flags on ./configure
+[23:42] ashb: scons?
+[23:42] elliottcable: ashb: uh, Node’s?
+[23:42] isaacs: ashb: read the license: http://fmarcia.info/jsmin/fulljsmin.js
+[23:42] elliottcable: ashb: `waf`, I think. I could be wrong.
+[23:42] ashb: yeah v8 is scons (or was)
+[23:43] ashb: i think you are right tho
+[23:43] aurynn: isaacs, hehehe
+[23:43] gwoo_ has joined the channel
+[23:43] isaacs: i've started licensing my own stuff under the "Crockford MIT"
+[23:43] ashb: isaacs: haha
+[23:43] elliottcable: hahhahahaha
+[23:44] ashb: 'the 4 clause MIT'
+[23:44] isaacs: it has a way of filtering out people who say things like "evil is a loaded term" :P
+[23:45] elliottcable: aurynn: why a pure-js postrgres adapter?
+[23:45] elliottcable: aurynn: ryah_away himself wrote an addon for it, it seems redundant
+[23:45] aurynn: elliottcable, I didn't write it - I was working on making it better.
+[23:45] aurynn: I understand that node_postgres is finicky
+[23:46] rtomayko has joined the channel
+[23:46] elliottcable: hm
+[23:46] elliottcable: ACTION doesn’t use postgres, just seemed like an odd choice of project
+[23:46] elliottcable: adding flags to the waf thing seems easy enough
+[23:47] elliottcable: I just can’t figure out how to get the data you give them with those flags, and then apply it to Node’s source. Isn’t that sort of the point of build tools?
+[23:47] aurynn: elliottcable, it also gives me a chance to familiarize myself with the underlying postgres API
+[23:47] aurynn: and writing proper node code
+[23:48] aguynamedben1 has joined the channel
+[23:48] aurynn: and define the API for writing DBI drivers
+[23:48] aurynn: and suchly
+[23:48] elliottcable: ACTION hasn’t used an RDBMS in ages, so…
+[23:50] elliottcable: hahaha
+[23:50] elliottcable: I *fail* at Python.
+[23:50] elliottcable: ‘IndentationError: unexpected indent’
+[23:57] Tautologistics: Think tabbing is bad, try erlang
+[23:58] Tautologistics: Line termination is a nitch
+[23:58] Tautologistics: nitch == bitch

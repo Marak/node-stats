@@ -1,0 +1,608 @@
+[00:15] edspencer has joined the channel
+[00:16] quirkey has joined the channel
+[00:34] <orlandov> anyone familiar with why in JSGI responses the body member is an array and not a simple string?
+[00:35] Moon has joined the channel
+[00:35] webben has joined the channel
+[00:36] <inimino> orlandov: to handle data that comes in chunks, maybe?
+[00:36] <orlandov> inimino: i see, is the correct behaviour from a jsgi server point-of-view to cat the chunks together?
+[00:36] <Connorhd> perhaps to handle a mix of strings and binarys?
+[00:37] <tlrobinson> yeah you can stream chunks by returning an object that implements forEach
+[00:37] <orlandov> i see that wsgi does the same
+[00:37] <tlrobinson> (i "invented" JSGI)
+[00:37] <orlandov> ahh, so instead of an array you can duck-type something with a forEach method
+[00:38] <orlandov> that could be doing something magical
+[00:38] <tlrobinson> orlandov: correct
+[00:38] <orlandov> gotcha
+[00:38] <orlandov> smart :)
+[00:38] <tlrobinson> it's supposed to yield objects that have a toByteString method too, not just strings
+[00:38] <orlandov> i'm trying to whip up a JSGI interface to the scgi app server i've been hacking of for node
+[00:39] <tlrobinson> cool. the main problem with node and JSGI is that JSGI is a synchronous interface
+[00:40] <tlrobinson> but we're working on an async interface too which uses promises
+[00:40] jacobolus has joined the channel
+[00:40] <orlandov> yeah, it's been a fun excercise to make an asyc scgi server. luckily the protocol is very simple
+[00:41] <orlandov> not blocking is a bit of a mind bender for me ;)
+[00:41] <orlandov> like, what to do with jsgi.input and jsgi.errors
+[00:42] <tlrobinson> yeah
+[00:43] <tlrobinson> for now i think you'll need to buffer the input :-/
+[00:44] <orlandov> yeah, i'm just gonna do whatever is simplest for now :)
+[00:56] <elliottcable> /-:
+[01:06] <orlandov> tlrobinson: here's my stab at it http://github.com/orlandov/node-scgi/blob/master/scgi.js
+[01:09] <tlrobinson> orlandov: cool, i'll try it out
+[01:10] <orlandov> ah damn, i hate mistakes in my docs
+[01:11] <elliottcable> ryah_away: got some extensions to process.compile, but they’re in JS. Could we expose the native compile() to node.js somehow, and then let me add my extensions inside node.js?
+[01:11] <inimino> ACTION notes that ryah_away is on vacation
+[01:11] <elliottcable> fuck!
+[01:11] <elliottcable> I keep forgetting that.
+[01:11] <elliottcable> ACTION just puts it on acquire.compile and uses it there
+[01:12] gwoo_ has joined the channel
+[01:21] sixtus42 has joined the channel
+[01:27] <elliottcable> okay, peeps (especially inimino). Stylistic question.
+[01:28] <elliottcable> three options:
+[01:28] <elliottcable> a function that resolves an argument (a path) into a list of directories, and then executes all the files in that directory, is essentially the goal
+[01:28] <elliottcable> with a few twists
+[01:28] <elliottcable> but I have three obvious ways:
+[01:29] <elliottcable> I could have a second, private function, that actually executes the files in a directory; and then have the main function resolve the paths and then call that.
+[01:30] <elliottcable> I could, instead, have a second argument to the primary function (a list of files in an array), and then have the function recurse, passing the files it has resolved to that array, and then having it .pop on that array each run through
+[01:30] <elliottcable> or I could have the function resolve the paths in an if block, which also contains a recursing call and a return keyword, such that the function preforms two seperate functions.
+[01:31] <inimino> eh, one function per function, I say
+[01:31] <inimino> write a function that resolves a path
+[01:31] <inimino> write a function that returns a list of files in a directory
+[01:32] <inimino> write a function that runs a file from a file name
+[01:32] <inimino> map function 'resolve' over your arguments, map function 'listFiles' over that, concatenate the results, and map 'runFile' over that
+[01:33] <elliottcable> hrm
+[01:33] <elliottcable> I tend to avoid function mania
+[01:33] <elliottcable> I abstract out when I actually have two needs for a piece of code
+[01:33] <elliottcable> ACTION pokes at it
+[01:33] <inimino> it's the best kind of documentation
+[01:33] <inimino> I think you should write a function whenever having a named function would make the code clearer, whether you have another use for that function in mind already or not
+[01:34] <elliottcable> hm now that I can relate to
+[01:34] <elliottcable> better self-documenting code is always a good thing
+[01:34] <elliottcable> hrm
+[01:35] <inimino> bbiab
+[01:36] <elliottcable> aww
+[01:37] sixtus42 has joined the channel
+[01:39] <elliottcable> man, I really don’t use very many loops nowadays.
+[01:39] <elliottcable> Node means I’m always .pop() and recursing instead.
+[01:39] <elliottcable> I wonder what the performance is on each side.
+[01:39] <elliottcable> A loop has *got* to be faster in general… I wonder if that offsets the performance benefits of asyncronicity?
+[01:41] <inimino> elliottcable: don't worry about it, compilers are smart
+[01:41] <inimino> elliottcable: and JavaScript is going to be getting better compilers all the time
+[01:42] <inimino> (also, there's no reason in principle why a loop should be faster)
+[01:42] <inimino> (even though they are in todays implementations)
+[01:42] <inimino> ACTION really is away
+[01:50] <orlandov> why do you use more recursion than looping with node?
+[01:50] <orlandov> er.. elliottcable ^^
+[01:50] aguynamedben1 has left the channel
+[01:51] <elliottcable> orlandov: looping doesn’t work too well with asyncronicity?
+[01:51] <elliottcable> orlandov: so I generally have the recursing call inside the callback of the next iteration
+[01:52] <gwoo> elliottcable: im not a big fan of looping either
+[01:55] <orlandov> elliottcable: interesting, i've never come across that strategy, does that have a name?
+[01:55] <gwoo> elliottcable something like results = files('/path/').run();?
+[01:56] <elliottcable> orlandov: not that I know of, but about *half* of the functions in my code take that approach now.
+[01:57] <elliottcable> if they’re given a list of things as the last argument, then they operate on that list… if not, they somehow create a list of things to work on, usually somehow based on the other arguments, and then use that
+[01:57] <elliottcable> then they list.pop, make an asyncronous call using that item, and call themselves again (with the asme list as the last argument)
+[01:57] <orlandov> elliottcable: rad, this looks like it might be a good way of preventing JS from taking over the browser on a long loop
+[01:57] <elliottcable> thus popping one item off of the stack each time they’re called, and running again when the previous run callsback
+[01:58] <orlandov> elliottcable: doesn't that cause the program stack to grow kinda huge?
+[01:59] <elliottcable> ACTION shrugs
+[01:59] <elliottcable> almost certainly
+[01:59] <orlandov> for some value of huge i guess
+[01:59] <elliottcable> but I haven’t got a better way of doing it
+[02:03] <elliottcable> interesting. hm.
+[02:23] <frodenius> it's a functional programming pattern called reduce
+[02:23] <inimino> orlandov: in browsers you can use setTimeout(f,0) to clear the call stack on occasion
+[02:23] <frodenius> and fot the stack growth: tramolin is the word
+[02:23] <elliottcable> what?
+[02:23] <inimino> trampoline
+[02:24] <frodenius> man
+[02:24] <frodenius> i'm tired, my speling sucks
+[02:24] <frodenius> tramolin? i'm off to bed
+[02:24] <inimino> spelling :P
+[02:24] <elliottcable> so *thats* what reduce is!
+[02:24] <inimino> orlandov: it's actually a fairly common pattern in intense computational code when you can't lock up the browser
+[02:24] <elliottcable> goddamn, now everything they’ve been saying about Google makes snese.
+[02:24] <inimino> hehe
+[02:24] <elliottcable> Why the fuck couldn’t have somebody said that earlier?
+[02:25] <inimino> reduce doesn't imply the concept of using an asynchronous callback
+[02:25] <inimino> I don't know if that specifically has a name or not
+[02:25] <elliottcable> hm
+[02:25] <elliottcable> but just calling yourself and then popping a list
+[02:25] <elliottcable> yes?
+[02:26] <elliottcable> async reduce, duh d-:
+[02:26] <inimino> yes, I'd say that's standard structural recursion on lists
+[02:26] <elliottcable>   if (process.ARGV[1] === __filename) { teddy.run(process.ARGV.slice(0).splice(2, process.ARGV.length - 2)).wait() };
+[02:26] <elliottcable> d-:
+[02:26] <inimino> "async list recursion" :-)
+[02:27] <inimino> in functional programming languages, you usually have a list structure that has a head and a tail
+[02:27] <inimino> the head is an 'item' (of whatever the list stores) and the tail is a list (possibly empty)
+[02:28] <elliottcable> how is that any use?
+[02:28] <inimino> so you very commonly do something with the head and then recurse on the tail
+[02:28] <elliottcable> if you pull of the head, don’t you till have to access items in the list to get the new head?
+[02:28] n8o has joined the channel
+[02:28] <elliottcable> therefore, no reason to store it that way, same performance as pulling off the first item in the list.
+[02:29] <elliottcable> yeah car cdr etc
+[02:29] <elliottcable> I’m not *too* familiar with lisp, but I know a few basics
+[02:29] <elliottcable> have to, or 90% of programming jokes not involving ‘LAWL JAVA SUCKS’ would go over my head.
+[02:29] <inimino> yes, that
+[02:29] <inimino> ok
+[02:29] <inimino> so you have a list and you want to get the length...
+[02:29] <inimino> you can write
+[02:29] <inimino> (define (length items) (+ 1 (length (cdr items))))
+[02:30] <inimino> in that case we're not even doing anything with the head, just counting it
+[02:30] <inimino> and then recursing on the tail
+[02:30] <inimino> (you also need a base case for the empty list, which has length 0)
+[02:31] aguynamedben has joined the channel
+[02:31] <inimino> this is the same thing (though starting from the other end if you use pop() instead of unshift())
+[02:32] <elliottcable> yah
+[02:33] <inimino> oh, I think I see what you mean about performance
+[02:33] <inimino> yeah, the thing is that there is no other list structure, only pairs
+[02:33] <elliottcable> I don’t really care, I misunderstood. I thought the list structure was stored that way for some esoteric performance reason, and was confused.
+[02:34] <elliottcable> But I see, in a functional language, how that would be easier.
+[02:34] <elliottcable> oh, so the child isn’t (item, (item, item, item, item))
+[02:34] <elliottcable> see, that solves the problem
+[02:34] <inimino> right, it's just (item (item (item (item (item ())))))
+[02:35] <elliottcable> I was thinking pulling item1 off of (item1, (item2, item3, item4)) would be less efficient than pulling it off of (item1, item2, item3, item4)… because you’d subsequently have to pull item2 off of (item2, item3, item4) and then stuff it in the place of item1.
+[02:35] <inimino> yeah
+[02:35] <inimino> which you would, if this were JavaScript, and all we have are arrays :)
+[02:36] <inimino> you can build a linked list out of objects though
+[02:36] <inimino> {item: ..., next: {item:..., next: { ... }}}
+[02:37] <elliottcable> yes, and eww.
+[02:37] <inimino> with v8's shadow classes that might even be respectably fast :)
+[02:38] <elliottcable> I love my code.
+[02:39] <elliottcable> I wonder if there’s some backwoods country where I can marry it.
+[02:39] <elliottcable> You know, that’d be pretty cool.
+[02:39] <elliottcable> it’d put Crazy Dolphin Lady to shame.
+[02:39] <inimino> <arbitrary southern US state>?
+[02:39] <elliottcable> ACTION is in North Carolina right now
+[02:39] <elliottcable> and are you kidding? they’re all conservative down here.
+[02:40] <inimino> see, that's why it's good that didn't pick a specific one
+[02:40] <elliottcable> hahaha
+[02:41] <inimino> as long as you can argue the code is female and you're not, shouldn't be a problem
+[02:41] <inimino> anyway, bbl
+[02:43] <elliottcable> aww
+[02:45] lmorchard has joined the channel
+[02:48] <elliottcable> hahahaha
+[02:48] <elliottcable> this line ends with ` }) } })`
+[02:48] <elliottcable> awesome.
+[02:48] <elliottcable> and subsequently drops like six levels of indentation.
+[02:49] <elliottcable> I can foresee having to drop my personal 78-coulomb code rule.
+[02:49] <elliottcable> Yes, that’s right, my code is *charged*.
+[03:05] mravaux has joined the channel
+[03:15] kriskowal_ has joined the channel
+[03:24] [k2] has joined the channel
+[03:29] softdrink has joined the channel
+[03:40] [k2] has joined the channel
+[03:40] keeto has joined the channel
+[03:40] ryah_away has joined the channel
+[03:40] rektide has joined the channel
+[03:40] orlandov has joined the channel
+[03:40] richtaur has joined the channel
+[03:40] helgim_ has joined the channel
+[03:40] inimino has joined the channel
+[03:40] intellectronica has joined the channel
+[03:40] rudebwoy has joined the channel
+[03:40] m1631_ has joined the channel
+[04:04] <freenode-connect> VERSION
+[04:04] ear1grey has joined the channel
+[04:11] yml has joined the channel
+[04:12] cloudhead has joined the channel
+[04:14] mitchellh has joined the channel
+[04:39] quirkey has joined the channel
+[04:51] jtoy has joined the channel
+[04:52] okito has joined the channel
+[04:59] jtoy__ has joined the channel
+[05:16] bentomas has joined the channel
+[05:23] kriskowal has joined the channel
+[05:24] yml has left the channel
+[06:00] emyller has joined the channel
+[06:41] okito has joined the channel
+[07:25] edspencer has joined the channel
+[07:40] rakeshpai has joined the channel
+[07:44] richter has joined the channel
+[07:45] saikko has joined the channel
+[08:14] johan-s has joined the channel
+[10:06] malkomalko has joined the channel
+[10:11] sixtus42 has joined the channel
+[10:41] Micheil has joined the channel
+[10:42] <Micheil> hey, with exports, can I do something like: exports = {...} instead exports.X = ...
+[10:42] <Micheil> ?
+[10:50] Micheil has left the channel
+[11:54] dschn has joined the channel
+[12:24] cadorn has joined the channel
+[12:57] keeto has joined the channel
+[13:02] keeto_ has joined the channel
+[13:17] saikko has joined the channel
+[13:40] soveran has joined the channel
+[14:15] n8o has joined the channel
+[14:21] malkomalko_ has joined the channel
+[14:31] Biscuits has joined the channel
+[14:52] Connorhd has joined the channel
+[15:08] esser has joined the channel
+[15:09] <esser> i've really tried looking for this, but am i kind of coming up empty. can anyone by chance point me in the right direction for handling POST data with the http server module?
+[15:13] <frodenius> esser: you may be looking for http://debuggable.com/posts/parsing-a-form-in-node-js-1:4b0bff13-4244-4ebc-8455-4975cbdd56cb
+[15:13] <esser> frodenius: that is exactly what i am looking for :) thank you!
+[15:14] <frodenius> yw :)
+[15:14] crooter has joined the channel
+[15:15] <sixtus42> esser: be sure to read my comment to the article ;-)
+[15:15] crooter has left the channel
+[15:15] <sixtus42> the example code is not looking at the http method at all
+[15:15] <esser> sixtus42: heh. yeah, err, already wrote a routing skeleton.
+[15:16] <esser> i was interested in Go at first, but this looks much nicer
+[15:17] <esser> i suppose clicking on the 'multipart' link in the api documentation would have worked, too...
+[15:17] <esser> feel kind of stupid now.
+[15:21] <jan____> esser: I wasn't actually interested in Go that much, but node.js looks a lot like its gonna be what Go wants to be
+[15:26] <esser> also, total props on sys.inspect
+[15:26] <esser> every language should have something like that
+[15:30] malkomalko has joined the channel
+[16:53] saikko has joined the channel
+[17:05] <ashb> esser: sys.inspect is probably ~= uneval(x) in firefox
+[17:06] <sixtus42> esser: actually sys.inspect is written in javascript
+[17:07] <sixtus42> esser: the core is a call to JSON.stringify(value, undefined, 1);
+[17:07] <sixtus42> esser: see lib/sys.js lines 23-40
+[17:09] <ashb> can someone make a note that using this in a module instead of exports is not portable please
+[17:09] <ashb> 'To export an object, add to the special exports object. (Alternatively, one can use this instead of exports.)'
+[17:19] softdrink has joined the channel
+[17:43] <orlandov> is there a better node wiki than the one up on github?
+[17:46] <inimino> orlandov: probably not
+[17:47] <orlandov> inimino: i think it'd be cool to start documenting recipes/snippets of code, so that we're not reinventing the wheel for everything... and have something to point new people to
+[17:48] <inimino> sounds great!
+[17:48] <Biscuits> :/
+[17:48] <Biscuits> I could contribute a really crude and simple XML parser :p
+[17:49] <Biscuits> Prolly nowhere near RFC compliant, but it gets the job done
+[17:49] <orlandov> yeah, and i saw someone in the scrollback posted how to parse multipart formdata
+[17:49] <inimino> depending on the job ;)
+[17:49] <inimino> anyway, will the wiki work for that?
+[17:50] <Biscuits> I'm wondering what other people are building using Node.js though
+[17:50] <Biscuits> Seems to me that everyone's using it for HTTP stuff
+[17:50] <Biscuits> whereas I feel it's suited to all sorts of server/client purposes
+[17:50] <orlandov> inimino: i think so... do you have a different idea?
+[17:50] <Biscuits> Currently writing a Windows Live Messenger Client/Bot using it
+[17:51] <orlandov> i could see myself using it for anything i used twisted for in the past (modulo library support, ofcourse)
+[18:01] <ashb> anyone know if libev is re-enterant?
+[18:01] <ashb> i.e. you can call its loop method in a callback
+[18:01] ear1grey has joined the channel
+[18:01] <inimino> orlandov: I just wondered since you asked if there was something better if there was something wrong with the current one
+[18:03] <inimino> Biscuits: JavaScript is close to the Web already, so most JavaScript programmers are probably likely to be working on Web stuff, and node already has decent HTTP support
+[18:03] <inimino> Biscuits: but yeah, it's certainly well-suited to other client-server tasks
+[18:04] <Atmoz> Is it pointless to combine nodejs with PHP in some way?
+[18:05] <frodenius> no
+[18:05] <inimino> personally I'd avoid PHP at all costs
+[18:05] <orlandov> inimino: oh sorry, i didn't mean the current one was unsuitable, just that it could have more stuff in it :)
+[18:06] <inimino> orlandov: oh ok :)
+[18:06] <Atmoz> I'm just not convinced that JavaScript can take PHP's place
+[18:07] <orlandov> istm that php and javascript are fairly different
+[18:07] <inimino> (?)
+[18:07] <orlandov> depends how you combine them
+[18:07] <inimino> one's a nice little language, and the other's PHP ;)
+[18:07] <orlandov> heh
+[18:08] <orlandov> there's nothing that php can do that i wouldn't prefer to do in another language
+[18:08] <Atmoz> Arrays
+[18:08] <Atmoz> oh
+[18:09] <Atmoz> the other way around
+[18:09] <Atmoz> :)
+[18:10] <Atmoz> Nodejs is sweet, but as a PHP developer, I may want to continue to use PHP if I want to use NodeJS
+[18:10] <jan____> that makes no sense, JS is the awesomer language :)
+[18:10] <orlandov> Atmoz: Node.js at the moment is pretty specialized towards building very lightweight scalable servers
+[18:10] <orlandov> imo
+[18:11] <orlandov> so there's not a huge overlap with php stuff (unless you really go out of your way to make node do that)
+[18:12] <inimino> you could certainly use PHP over FastCGI with node, but ... why?
+[18:13] <mediacoder> there is actually nothing you can do in php which you couldnt do in node..but much, i guess, you cant do in php, you could do with node
+[18:13] <orlandov> mediacoder: what about synchronous io?
+[18:13] <orlandov> :D
+[18:13] <mediacoder> oh well ;-)
+[18:13] <inimino> you can do synchronous I/O in node, it's just better not to
+[18:14] <orlandov> ACTION jk
+[18:14] <Atmoz> Its just so manye good classes and frameworks out there to PHP, its a shame to start from zero and suddenly use JS on server-side, i guess
+[18:14] <Atmoz> many*
+[18:14] <orlandov> but semi related php has better library support (for now)
+[18:14] <mediacoder> node will turn one n like 3 months
+[18:14] <mediacoder> how old is php? ;-)
+[18:15] <frodenius> very old
+[18:16] <mediacoder> so awesome frameworks and stuff will defenitlely come.. but the fun stuff with node is, doing exactly all this yourself ;-)
+[18:16] <inimino> from the mid-90s
+[18:16] <inimino> younger than a lot of vastly superior languages, so it really has no excuse
+[18:17] <Atmoz> So the advantage PHP has is that it is established and got a lot of frameworks and nice stuff ready for use, nodejs noes not. But nodejs has a better starting poing (foundation)?
+[18:18] <Atmoz> more flexible
+[18:18] <orlandov> it's a gold rush to implement all the cool libraries for node ;)
+[18:18] <jan____> yeah, it's hard to find the good php stuff
+[18:18] <mediacoder> imo..forget php..it has its use, doing your baseball-teams website with a fancy guestbook..
+[18:18] <jan____> most is crap
+[18:19] quirkey has joined the channel
+[18:20] Connorhd has joined the channel
+[18:21] <Atmoz> Yeah, and I really want something to play with on my spare time. So I'm considering playing with nodejs and maybe making something usefull, like a MVC-framework or something
+[18:22] <inimino> Atmoz: yes, and JavaScript is a better language
+[18:23] <Atmoz> I have had my "good times" with javascript on the client side, so I'm not convinced just yet. But I will give it a chance
+[18:25] <Atmoz> But the browsers may have the blame for that
+[18:25] <inimino> DOM is not a good API
+[18:25] <inimino> anyway, learn the language itself and I think you'll see what I mean
+[18:26] <inimino> ACTION recommends http://eloquentjavascript.net/
+[18:27] <Atmoz> Nice
+[18:38] <Biscuits> hmmm.
+[18:47] olivvv_ has joined the channel
+[19:52] <gwoo> ryah_away: what part of cali?
+[19:56] <gwoo> orlandov: same as ruby ;)
+[19:56] <gwoo> orlandov: stay tuned for 100 mvc frameworks in a month
+[19:56] <inimino> heh
+[20:05] <orlandov> gwoo: i'll take some DB libraries instead kthx
+[20:05] <gwoo> orlandov: exactly
+[20:06] <orlandov> so... is the node wiki open to hacking?
+[20:06] <gwoo> i dont think so
+[20:06] <orlandov> hmm
+[20:07] <orlandov> cause it could use a few articles on writing unit tests, non-blocking tcp servers
+[20:09] <gwoo> maybe start by forking the project and posting to your wiki
+[20:09] <gwoo> ?
+[20:09] <gwoo> then ryah_away can link to it
+[20:09] <orlandov> that seems like a bit of overkill
+[20:10] <gwoo> whats the other option? write it out and email it?
+[20:12] <orlandov> letting people add stuff to the wiki?
+[20:12] <orlandov> i know it's a crazy idea :)
+[20:14] <inimino> people can't?
+[20:15] <inimino> ...where is the wiki, anyway?
+[20:16] <inimino> http://wiki.github.com/ry/node
+[20:16] <inimino> orlandov: I see an 'edit' link at the top there
+[20:16] <inimino> I haven't tested it
+[20:17] <orlandov> inimino: i saw that too, but wasn't sure what the policy was
+[20:18] <inimino> I would guess you can just edit it
+[20:26] softdrink has joined the channel
+[20:31] aguynamedben has joined the channel
+[20:58] rakeshpai has joined the channel
+[21:00] Nailor has joined the channel
+[21:05] the_undefined has joined the channel
+[21:05] <the_undefined> !log
+[21:05] <the_undefined> this guy has been running for 4 days now, not too bad : )
+[21:06] <Nailor> VERSION
+[21:07] <Nailor> Logger made with node? :)
+[21:07] <the_undefined> Nailor: y
+[21:07] <the_undefined> !src
+[21:07] <Nailor> kewl
+[21:07] <inimino> yes, by the_undefined I heard
+[21:07] <inimino> nice
+[21:08] <the_undefined> I don't know if you guys have been following the simultaneous connection porn on google groups, but I just got 10k connections :)
+[21:08] <the_undefined> http://bit.ly/89puBk
+[21:09] <inimino> ooh
+[21:09] <orlandov> the_undefined: what's your memory usage look like?
+[21:10] <orlandov> you should do a write up on what you did :)
+[21:10] <the_undefined> 5kb / connection
+[21:10] <gwoo> the_undefined: is a node master :P
+[21:10] <inimino> interesting
+[21:11] <the_undefined> gwoo: you say that until somebody who actually has experience 10.000 connections comes along and shows the flaws in my result
+[21:11] <the_undefined> :D
+[21:11] <gwoo> the_undefined: haha
+[21:11] <the_undefined> * experience with
+[21:11] <the_undefined> orlandov: the link above contains my write up
+[21:11] <the_undefined> I want to do a blog post on it at some point, but I don't have the time right now and I want to figure out the cause for the segfault first
+[21:12] <gwoo> a leak?
+[21:13] <orlandov> ab on my vps keeps crapping out with connection reset by peer (104)
+[21:13] <the_undefined> orlandov: I didn't use ab
+[21:13] <the_undefined> I don't trust it for -c > 1k
+[21:13] <orlandov> i suspect it has to do with max open fh but i'm not sure how change the ulimit
+[21:13] <orlandov> yeah
+[21:13] <inimino> I had trouble using ab because of some keepalive issue I don't fully remember
+[21:14] <orlandov> i've just been using it as a sanity test
+[21:14] <the_undefined> I used a node.js script as the client as well: http://gist.github.com/243632
+[21:14] <the_undefined> setting ulimit is as easy as: sudo ulimit -n 99999
+[21:15] <orlandov> i thought ulimit was a shell builtin
+[21:15] <orlandov> in any case, sudo on ubuntu won't have it
+[21:16] <Nailor> Yeah, it's a bash built-in
+[21:16] <orlandov> i changed /etc/security/limits.conf but nothing changed, perhaps i'll need to restart my vps
+[21:17] <gwoo> the_undefined: does siege work for something like that?
+[21:18] <the_undefined> well then do: sudo bash
+[21:18] <the_undefined> gwoo: I don't know
+[21:19] orlandov has joined the channel
+[21:27] soveran_ has joined the channel
+[21:38] <the_undefined> awesome, ryan's node talk video is up: http://jsconf.eu/2009/video_nodejs_by_ryan_dahl.html
+[21:41] <inimino> oh, cool
+[21:42] <mediacoder> kool
+[21:44] <elliottcable> now if I only had internet fast enough to watch it!
+[21:44] keeto has joined the channel
+[21:44] <elliottcable> inimino: You’ll be happy to know I’ve started writing up the stylistic stuff. Do you have any stylistic elements you’d particularily like to hear my thoughts on? I’m probably going to forget some of my elements when I write this…
+[21:44] <inimino> aww
+[21:45] sixtus42 has joined the channel
+[21:47] <inimino> elliottcable: oh, cool, nothing in particular but I'll be interested to read whatever you write
+[21:48] <inimino> maybe it'll nudge me to finally write up my own conventions too
+[21:48] JimBastard has joined the channel
+[21:49] <JimBastard> whats up party people
+[21:50] <JimBastard> new version of node_debug should be up later tonight
+[21:51] <JimBastard> polished it up a bit
+[21:57] <gwoo> sweeet
+[22:02] <the_undefined> I'm experimenting with hot code reloading right now
+[22:03] <the_undefined> got a PoC working where I hot-reload the handler for a http server without taking the http server down
+[22:04] <jan____> wootwootvidoboot!
+[22:05] <JimBastard> the_undefined i've been thinking of a really good plugin
+[22:05] <JimBastard> havent had time to start it yet....still debuggering
+[22:05] <JimBastard> node_drop
+[22:06] <JimBastard> pretty much a wrapper to require()
+[22:06] <JimBastard> with a commander pattern
+[22:07] <elliottcable> a commander patern?
+[22:07] <elliottcable> and consider holding off until I get acquire() done, I’d hate to see anything cool depend on that ‘securable modules’ crap /-:
+[22:08] <the_undefined> elliottcable: http://hi.zpok.hu/maxigas/blog/keen4title.gif
+[22:08] <the_undefined> time to brush up on your design patterns again, huh?
+[22:08] <the_undefined> :)
+[22:08] <elliottcable> eh?
+[22:08] <elliottcable> I never learned any.
+[22:08] <elliottcable> Everything I know aobut programming, I learned by reading source and writing crap.
+[22:08] <the_undefined> elliottcable: I don't know what your grieve with the current module system is
+[22:08] <elliottcable> I don’t know the words for *any* of the shit I do.
+[22:09] <elliottcable> the_undefined: uh, A) it sucks, B) it sucks, and C) it sucks
+[22:09] <the_undefined> ok, now I understand what you mean by not knowing any words :D
+[22:09] <elliottcable> the_undefined: seriously though, there’s a ton of problems… but my sbiggest single one, the one that makes it *literally* unusable, is that it doesn’t let me hand *it* an object.
+[22:09] <elliottcable> d-: hahaha
+[22:09] <inimino> hehe
+[22:09] <the_undefined> elliottcable: why does that make it unusuable?
+[22:09] <the_undefined> if you want to pass a function back you just have to specify the subkey you want
+[22:10] <JimBastard> debugging is painful
+[22:10] <elliottcable> uh, because I can’t decide what my library does?
+[22:10] <the_undefined> require('module').MyFunc
+[22:10] <elliottcable> I have one option: stuff a bunch of things in slots on their object, and let my library’s users use that as my API.
+[22:10] <elliottcable> I have *no* control, as a library author, over what happens.
+[22:10] <the_undefined> I never have found any practical issue with that
+[22:10] <elliottcable> the_undefined: I didn’t particularily mean a function, but that is actually one possibility. acquire itself is a function.
+[22:10] <the_undefined> as far as writing good libraries is concerned
+[22:10] <JimBastard> would you guys want to give me some feedback on this new design for node_debug?
+[22:10] <elliottcable> the_undefined: uh, there’s a huge practical issue. *I can’t write code the way I want to.*
+[22:11] <elliottcable> the_undefined: I write in a purely prototypal style.
+[22:11] <JimBastard> i'm almost ready to release, just need to reconnect some more UI events
+[22:11] <elliottcable> the_undefined: most objects in my library inherit from other objects.
+[22:11] <the_undefined> elliottcable: nothing stops you from doing that with the exports system
+[22:11] <JimBastard> (history and snippets aren't loading)
+[22:11] <elliottcable> the_undefined: If I can’t return the object I want, I can’t control the prototypal inheritance of the object that the securable modules crap returns.
+[22:11] <elliottcable> the_undefined: uh, yes it does. I am handed the exports object, and told I can’t `return` anything else.
+[22:12] <elliottcable> anyway, it’s not my dayjob to argue against the require() system; I’m simply going to build my own, use it, and people can suck it if they don’t like it.
+[22:12] <the_undefined> elliottcable: why can't you control the inheritance, give me a practical example 
+[22:12] <the_undefined> JimBastard: sure, link to it
+[22:12] <elliottcable> Hopefully, ryah_away will include it in addition to require() (I know he won’t get rid of require()), but… I don’t really care.
+[22:12] <elliottcable> richter: I *just did*. Are you deaf? Uh, e-deaf? Blind, whatever.
+[22:12] <elliottcable> oops, the_undefined*
+[22:12] <the_undefined> lol
+[22:12] <JimBastard> the_undefined , there are still many little glitches in the UI i'm sorting out
+[22:12] <JimBastard> http://maraksquires.com:8080/
+[22:12] <elliottcable> ACTION has a shitty EDGE tethering connection, and can’t actually see what he’s typing until he’s hit send
+[22:13] <the_undefined> JimBastard: spacy
+[22:13] <the_undefined> JimBastard: require('sys').exec('whoami').wait();
+[22:13] <the_undefined> JimBastard: hmmmmm :D
+[22:14] <JimBastard> sight
+[22:14] <JimBastard> sigh
+[22:14] <JimBastard> needs a password obviously
+[22:14] <JimBastard> gonna set it up to go in offline mode as well, so you can see without having root
+[22:14] <the_undefined> elliottcable: You made a claim, you didn't show me some code I could not write using the require system
+[22:14] <elliottcable> the_undefined: uhm.
+[22:14] <elliottcable> ACTION writes
+[22:14] <JimBastard> what you think the_undefined
+[22:14] <the_undefined> I think you are just obsessed with not having to point to a sub-key of the returned exports object
+[22:15] <JimBastard> huh
+[22:15] <the_undefined> JimBastard: (that was for elliottcable )
+[22:15] <the_undefined> JimBastard: I think its neat. Not sure what I'd use it for so
+[22:15] <JimBastard> got ya
+[22:15] <the_undefined> what's your goal with it?
+[22:15] <JimBastard> ill finish up examples
+[22:15] <JimBastard> and you'll see
+[22:16] <JimBastard> easy debugging
+[22:16] <JimBastard> and a place where i can start storing code snippets 
+[22:16] <the_undefined> hm. I write unit tests or pray
+[22:16] <elliottcable> the_undefined: hahahahah your suggestion is that I make *everybody who uses my library* do `require(mylib).mylib`? seriously?
+[22:16] <elliottcable> that is completely unsemantic.
+[22:16] <the_undefined> usually a combination of both works
+[22:16] <the_undefined> :)
+[22:16] <elliottcable> yeah, your solution is fucking amazing. we *totally* don’t need a better system!
+[22:16] aguynamedben has joined the channel
+[22:16] <JimBastard> what you think about the color scheme
+[22:16] <the_undefined> elliottcable: yes, I don't think its the end of the world
+[22:16] <elliottcable> anyway, I wrote this before you said that, so whatever: http://gist.github.com/243690
+[22:18] <JimBastard> yo elliotcable
+[22:18] <JimBastard> can you make a .module that will take in any possible location of a .JS file and load it into memory
+[22:18] <the_undefined> elliottcable: I totally see your point, I just don't think it makes the current system unusable
+[22:19] <elliottcable> Well, I do.
+[22:19] <elliottcable> You don’t write JS the way I do, which is extremely prototypally. The securable modules is … usable (fucking *horrible*, but actually usable) if you subscribe to the normal way of writing JS
+[22:20] <elliottcable> but I don’t like JS that way. If I were forced to write JS that way, I wouldn’t bother; I’d still be writing Ruby.
+[22:20] <elliottcable> But i Like it here, I like my Node.js, and I like my prototypal ECMAScript. And I’m going to write whatever infrastructure I need to (read: acquire()) to make that possible.
+[22:20] <the_undefined> well, I had to break this to you, but JS isn't exactly designed to be pretty :D
+[22:21] <elliottcable> Not pretty, semantic. If I was obsessed with specifically ‘pretty’ code, I’d certainly still be writing Ruby. d-:
+[22:22] <mediacoder> ACTION loves ryah_away visualizing the event-loop :-)
+[22:27] <elliottcable> hm
+[22:27] <JimBastard> k bbl
+[22:27] <elliottcable> I’m thinking of writing a sort of JS preprocessor to ease some of the more painful elements of JavaScript syntax.
+[22:27] <elliottcable> Specifically, at least, anonymous function definition.
+[22:27] <elliottcable> I was thinking of adopting the Ruby syntax (which nobody but me likes, apparently, within the Ruby community) of ->(){}
+[22:29] <elliottcable> for that matter, it’s pretty much as simple as s/->\s+(:?\((.*?)\))?\s+\{/function (\1) {/
+[22:29] the_undefined has joined the channel
+[22:29] <elliottcable> the_undefined: for your sake, lemme repeat what I just said:
+[22:29] <the_undefined> !logs
+[22:29] <elliottcable> I’m thinking of writing a sort of JS preprocessor to ease some of the more painful elements of JavaScript syntax.
+[22:29] <the_undefined> elliottcable: no need
+[22:29] <elliottcable> I was thinking of adopting the Ruby syntax (which nobody but me likes, apparently, within the Ruby community) of ->(){}
+[22:29] <elliottcable> ah.
+[22:29] <elliottcable> always bites me.
+[22:30] <elliottcable> I used to keep[ comprehensive logs of all of the channels I was in, but stopped that when it broke 10GBs /-:
+[22:30] <the_undefined> to me node has a few very promising use cases
+[22:31] <the_undefined> one of them is that you can interchange code between client and server
+[22:31] <the_undefined> which you can't if you use some weird pre-processor
+[22:31] <elliottcable> uhm, didn’t mean in front of the interpreter
+[22:31] <elliottcable> you’d process it into JS before executing it.
+[22:31] <elliottcable> think LESS, not C preprocessor.
+[22:32] <the_undefined> hm
+[22:32] <the_undefined> I don't dig
+[22:32] <elliottcable> ACTION tries to think of any other syntax elements it’d be easy to handle
+[22:32] <elliottcable> really, I don’t dislike any other elements of JS syntax.
+[22:33] <elliottcable> why not?
+[22:33] <the_undefined> I would love a pre-processor to expand variables from an object into the current scope
+[22:33] <saikko> the_undefined I don't think you'd interchange a lot of code between client and server, you do a lot of different things on both ends
+[22:33] <the_undefined> but ... not hard enough
+[22:33] <the_undefined> saikko: my business logic I would exchange
+[22:33] <elliottcable> expand variables from an object into the current scope?
+[22:33] <the_undefined> elliottcable: because you should not hack a language at that level
+[22:34] <the_undefined> its wrong
+[22:34] <elliottcable> so… .extend()?
+[22:34] <the_undefined> no
+[22:34] <the_undefined> lets say I have a var 'foo'
+[22:34] <the_undefined> foo = {a: 1, b: 2}
+[22:34] <elliottcable> yep?
+[22:34] <the_undefined> I would like to 'extract' foo into the current scope
+[22:34] <the_undefined> so a and b become local variables
+[22:34] <the_undefined> in my current scope
+[22:34] <elliottcable> ah.
+[22:34] <elliottcable> yeah, I wish we had more control over scope.
+[22:34] <elliottcable> ACTION misses io
+[22:35] <the_undefined> for (var k in foo) var {k} = foo[k]
+[22:35] <the_undefined> something like that
+[22:35] <the_undefined> even PHP can do that ;)
+[22:35] <saikko> no `let` in V8?
+[22:36] yurivish has joined the channel
+[22:36] <frodenius> not yet
+[22:36] <the_undefined> saikko: nope
+[22:36] <frodenius> the_undefined: with?
+[22:36] <frodenius> hrhr
+[22:36] <saikko> do { } while(0)
+[22:36] <the_undefined> frodenius: not the same thing
+[22:36] <the_undefined> saikko: ?
+[22:36] <frodenius> the_undefined: i know
+[22:36] <elliottcable> sorry I’m so angry at you, the_undefined.
+[22:37] kriskowal has joined the channel
+[22:37] <elliottcable> I just don’t take it well when people tell me my biggest project at time X is unnecessary.
+[22:37] <the_undefined> elliottcable: don't be, I come from PHP, I'm used to it
+[22:37] <the_undefined> :D
+[22:37] <elliottcable> oh gods. >_>
+[22:37] <elliottcable> well, that explains a lot; I come from a Ruby/Obj-C background. I was ‘born’ into very different points of view than you.
+[22:38] <the_undefined> I'm doing some Ruby and Obj-C right now
+[22:38] <the_undefined> I love ruby
+[22:38] <the_undefined> can't say the same about obj-c yet, its cool, but the iPhone SDK is a PITA
+[22:38] <elliottcable> `mkdir JESS; cd JESS; git init`
+[22:38] <elliottcable> woo
+[22:38] <the_undefined> it could be so much more approachable
+[22:38] <elliottcable> agreed, I don’t do iPhone development.
+[22:38] <elliottcable> Mac only ^_^
+[22:38] <the_undefined> my complaint is probably with xcode in general
+[22:38] <elliottcable> I am not a hgue fan, but it’s a necessary evil.
+[22:39] <the_undefined> if I have a button in something called the interface builder and I double click it, I expect it to write me a click handler
+[22:39] <elliottcable> Doing ObjC *outside* of Xcode is *way* more painful.
+[22:39] <the_undefined> fuck, even visual basic did that
+[22:39] <the_undefined> jumping between interface builder and xcode is pain
+[22:39] <elliottcable> It’s simply too well engineered *directly* to ObjC development; it may not be a very good IDE (well, it’s a good IDE, but that’s not saying a lot… IDEs suck in general, it’s a retarded idea), but it works fairlyw ell for ObjC
+[22:40] <the_undefined> yeah
+[22:40] <the_undefined> I'm just happy I found GHUnit
+[22:40] <the_undefined> that stuff is tight
+[22:40] <elliottcable> haven’t used it, but heard of it somewhere
+[22:41] <elliottcable> never really did any testing in ObjC.
+[22:41] <elliottcable> I’ve been testing-spoiled in Ruby, all the general testing libraries and things in other areas really, really disgust me.
+[22:41] <elliottcable> hence me writing my own for Node.
+[22:41] <elliottcable> Again.
+[22:41] <yurivish> hi, I've found what I'm pretty sure is a bug in Node, but I don't think I have the skills to track it down myself - what should I do?
+[22:42] <jan____> yurivish: tell us all about it :)
+[22:42] <yurivish> I'm writing a little chat server. Users connecting to it are paired up with other users, two to a conversation, and can talk to each other.
+[22:43] <elliottcable> haha I’ve used that app
+[22:43] <yurivish> the bug manifests itself as a segfault in the middle of printing something out
+[22:43] <elliottcable> <3 <3
+[22:43] <elliottcable> met a bunch of twits on it
+[22:43] <yurivish> yeah, it's like omegle.com
+[22:43] <yurivish> but I'm eventually going to try and make it possible to weed out the people who aren't interesting :P
+[22:43] <yurivish> but yeah, that's it -- I've noticed it happen a few times, haven't figured out exactly when it breaks just yet
+[22:44] rtomayko has joined the channel
+[22:44] <elliottcable> rtomayko!
+[22:44] <elliottcable> it’s always cool to see interesting Rubyists in here.
+[22:55] <elliottcable> fuck, I want to get my old-ass logo etched into the back of this MBP.
+[22:55] <elliottcable> http://img262.yfrog.com/img262/2038/60454258.jpg
+[22:55] <elliottcable> how bomb would that be?
+[23:12] mikekelly has joined the channel
+[23:13] kioopi has joined the channel
+[23:42] kioopi has left the channel
+[23:51] pdelgallego has joined the channel
+[23:59] aeosynth has joined the channel

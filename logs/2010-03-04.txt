@@ -1,0 +1,436 @@
+[00:01] JimBastard has joined the channel
+[00:03] JimBastard: javascript party!
+[00:04] orlandov: i want to write a module called beer.js so i can require('beer')
+[00:04] charlenopires has joined the channel
+[00:05] JimBastard: i already require beer
+[00:07] isaacs has joined the channel
+[00:18] Cainus has joined the channel
+[00:24] charlenopires_ has joined the channel
+[00:25] jed has joined the channel
+[00:27] JimBastard: sup jed
+[00:27] tlrobinson_ has joined the channel
+[00:27] jed: hey JimBastard. how's NYC?
+[00:28] JimBastard: kinda awesome 
+[00:28] JimBastard: lol
+[00:28] JimBastard: im working on this new startup right now using node
+[00:29] jed: ah, nice.
+[00:29] JimBastard: hopefully will open source the whole thing
+[00:29] jed: what kind of stuff?
+[00:29] JimBastard: the idea is a free web hook platform
+[00:29] JimBastard: for freeeeee
+[00:30] jed: nice. i hope you guys can make the idea take off finally.
+[00:31] jed: it's too good not to, esp now that everyone's getting more used to async.
+[00:31] JimBastard: hit me on pm if you wanna see
+[00:32] pdelgallego has joined the channel
+[00:34] Booster has joined the channel
+[00:34] Cainus has joined the channel
+[00:37] twitterplaces has joined the channel
+[00:39] mrscott has joined the channel
+[18:33] frigg: VERSION
+[18:33] nodelog has joined the channel
+[18:33] mikeal: it just horribly deoptimizes them
+[18:33] creationix: in ruby atleast
+[18:33] inimino: mikeal: it can if you use the indirect form
+[18:33] mikeal: the eval'd scope contains references to all parent scopes that could possibly contain closure data
+[18:33] inimino: I wonder if there are any cases where eval speeds up JavaScript
+[18:33] mikeal: basically, it makes it look like Python :P
+[18:33] isaacs: mikeal: you can do some basic AOP stuff with something like this: http://gist.github.com/321994
+[18:34] mikeal: inimino: maybe a long time ago
+[18:34] isaacs: but the problem with that is, as pretty as it is, every time you do it, it adds 2 function calls and one scope-correction to what was formerly just a single method
+[18:34] mikeal: but the optimizations in all the modern VMs basically opt out on eval
+[18:34] isaacs: all in all, it's slow
+[18:35] inimino: mikeal: yeah, I'm just wondering if there are exceptions
+[18:35] mikeal: basically, if you do an eval in javascript try to do it as close to the global scope as possible so that it doesn't keep around references to a bunch of dead scopes
+[18:35] creationix: the combo of function decompiling + with + eval makes a nice instanceEval for JS
+[18:35] creationix: but it sure breaks expected semantics and is a little slow
+[18:35] isaacs: creationix: s/nice/insane/
+[18:35] inimino: that is rather evil
+[18:36] isaacs: creationix: that's like 3 different kinds of crazy, all together
+[18:36] mikeal: i'm going to venture a guess and say that breaks the v8 inlining :)
+[18:36] creationix: I'm afraid to benchmark it
+[18:36] mikeal: or if it doesn't, the inline is so heavy that it's actually slower than a JIT :)
+[18:36] creationix: make for some nice ruby-esque dsl's though
+[18:37] mikeal: i hate DSLs
+[18:37] mikeal: everyone thinks they are a language designer 
+[18:37] isaacs: you know, JS can do a lot of "dsl" things just with it's native features
+[18:37] creationix: http://gist.github.com/199372 look around line 126 for usage
+[18:38] creationix: like I said, it works, but it's slow and breaks expected functinality, so I don't use it in real projects
+[18:38] mikeal: this is an interpreted DSL inside of javascript
+[18:38] mikeal: that is pretty nuts
+[18:39] isaacs: now THATs monkey-patching ;{
+[18:39] isaacs: ;P
+[18:39] mikeal: the only one of these I've seen that I thought was useful was processing.js
+[18:39] isaacs: creationix: why not just set a static variable to "this" when you start the function, then unset it afterwards?
+[18:40] mikeal: because canvas is really hard to work with raw and processing is language designed for graphics rendering
+[18:40] isaacs: creationix: js is single-threaded/coroutine
+[18:40] isaacs: creationix: as long as you aren't doing any setTimeout stuff, that'd be just as effective, and about 1000 times less evil.
+[18:41] mattly has joined the channel
+[18:41] creationix: agreed, but it bloats the dsl code a little, my goal was to get as close to the ruby example as possible, not to write good JS code
+[18:41] mikeal: these are pretty cool http://processingjs.org/exhibition
+[18:41] isaacs: creationix: well, just put those functions on global, then pull them off again afterwards
+[18:42] creationix: isaacs: maybe, but then it only works for sync code
+[18:42] isaacs: creationix: it still does.
+[18:42] isaacs: creationix: if you async it, then you're going to jump out of the with(){}
+[18:42] creationix: really, didn't know that
+[18:42] creationix: so with and exceptions both don't work with async code then?
+[18:42] isaacs: oh, actually, no, i guess not
+[18:43] inimino: with works
+[18:43] mikeal: if you want a full dsl you should just compile it in to javascript and eval it instead of interpreting it in this weird context
+[18:43] isaacs: because that other code is sitll inside the with() block
+[18:43] inimino: lexical scope :)
+[18:43] mikeal: more like coffeescript
+[18:43] creationix: mikeal: yes, that what I do for haml
+[18:43] mikeal: which i also don't like
+[18:43] mikeal: but whatever, people are all about it
+[18:43] mikeal: i think it's a little silly tho
+[18:43] isaacs: coffeescript is nice
+[18:44] mikeal: I'm actually not a fan of some of the syntax style
+[18:44] mikeal: but more importantly
+[18:44] mikeal: i don't want to write something that compiles in to javascript and makes my debugging more difficult
+[18:44] isaacs: yeah, losing line numbers in stack traces is a deal-breaker for me
+[18:44] mikeal: and while i commend them for doing one-to-one mapping to javascript
+[18:44] _ry: mikeal: i want to fix this GC problem - but i can't get a bench which shows it
+[18:44] mikeal: it also means that it doesn't add anything useful except syntax sugar
+[18:45] mikeal: ok
+[18:45] mikeal: let me reproduce it locally
+[18:47] isaacs: creationix: ohhh... ok, so when i said that it won't work for async code, what i meant was, it won't work for code that makes function calls
+[18:47] creationix: isaacs: since you loose the original lexical scoping right?
+[18:47] isaacs: creationix: bingo
+[18:47] creationix: that's why I mean by it breaks expected semantics
+[18:48] isaacs: right
+[18:48] creationix: of course ruby's instance eval does the same thing
+[18:48] mikeal: is there a way to trigger garbage collection by hand?
+[18:48] mikeal: i could swear I remembered a process.gc() or something like that, but i could be crazy
+[18:48] _ry: mikeal: no
+[18:48] mikeal: damn
+[18:49] _ry: mikeal: it does it when the process is ilde
+[18:49] creationix: mikeal: would a plain setTimeout do it as long as there was nothing else in the event loop
+[18:49] mikeal: there is always something in the event loop
+[18:49] creationix: I mean nothing actively running
+[18:49] creationix: basically make your app be idle for a second
+[18:50] mikeal: i can't really do that
+[18:50] mikeal: i'm sure there are points where it's only waiting on IO
+[18:50] _ry: mikeal: waiting = idle
+[18:50] mikeal: yeah, i know, i just don't have any way to enforce it
+[18:51] creationix: for a busy app, you'd have to throttle all processing somehow, it could get complicated
+[18:51] _ry: i just need something that outputs a number so that i can see it runs slower when the gc-on-idle code is enabled
+[18:55] mikeal: _ry: do you have the link to that diff handy ?
+[18:56] Cainus has joined the channel
+[18:57] _ry: mikeal: http://pastie.org/853995
+[18:58] tilgovi has joined the channel
+[19:00] rictic has joined the channel
+[19:03] dnolen has joined the channel
+[19:09] dnolen has joined the channel
+[19:17] brainss has joined the channel
+[19:17] JAAulde has joined the channel
+[19:18] _ry: mikeal: man, i totally can't see it
+[19:19] mikeal: yeah, give me a minute
+[19:19] mikeal: i'm having a hard time narrowing it down
+[19:19] mikeal: i think it may be gone
+[19:21] mikeal: there is this big ball of conditions that I see it under
+[19:23] _ry: i should probably go get on my old shitty computer
+[19:23] _ry: easier to see problems there
+[19:24] dnolen has joined the channel
+[19:24] mikeal: i'm on Mac
+[19:24] mikeal: which is half of the problem
+[19:26] teemow has joined the channel
+[19:35] kriskowal has joined the channel
+[19:40] mikeal: _ry: i figured it out, and it's not an issue with node
+[19:40] mikeal: node got a little better actually
+[19:40] mikeal: which is exposing other bugs that weren't visible before
+[19:40] mikeal: that's why it crept in
+[19:40] mikeal: turning off the gc stuff just made it less likely to expose the bugs, but they are still there
+[19:41] mikeal: stop making things faster! :P
+[19:41] _ry: um okay
+[19:41] _ry: :)
+[19:41] _ry: i guess that's good
+[19:42] mikeal: when i ran these like 3 weeks ago, node wouldn't slam the server as hard with requests
+[19:43] mikeal: so it would take a lot longer to expose this behavior
+[19:43] felixge: _ry: would you be open to expose the ev_ref / ev_unref mechanism?
+[19:43] _ry: well keep an eye open - i still consider this GC feature experiemental
+[19:43] _ry: felixge: why?
+[19:43] felixge: _ry: I sometimes want to spawn a command line tool which runs infinitely (doing IPC), but I'd like node to shut down if nothing else besides that script is running
+[19:44] _ry: felixge: oh
+[19:44] _ry: felixge: hmmm....
+[19:44] _ry: so you'd deref once?
+[19:45] felixge: well, actually I'd add a ref whenever something gets into the queue for being sent to the worker, and unref when the worker responds and there is nothing else in the queue
+[19:45] _ry: i guess that wouldn't do it since there are multiple watchers for a child process
+[19:45] felixge: hm, probably more tricky than I thought
+[19:46] _ry: felixge: can't you kill your process when the queue is empty?
+[19:46] felixge: then I guess I'd like to ref/unref a child process rather than a low level ref
+[19:46] felixge: _ry: I don't want to kill the process if node is still performing I/O that could lead to something new being added to the queue
+[19:47] _ry: felixge: but your workers could - like - notify node somehow when they're done
+[19:47] felixge: _ry: no I mean I/O unrelated to the worker
+[19:47] felixge: _ry: like a file upload that is just coming in that may trigger the file being send to the worker
+[19:47] felixge: _ry: I really only want to close the worker if node has nothing else to do but running the worker
+[19:49] felixge: _ry: node is not keeping me from achieving my goals right now, but I have to manually track if I'm done with everything before shutting down the worker
+[19:50] _ry: hm. yeah seems tricky, but i think exposing ev_ref/unref isn't the right solution
+[19:51] felixge: _ry: would it be possible to expose a list of all references?
+[19:51] felixge: possibly including what kind of references they are?
+[19:52] felixge: That's something else that'd be nice to evaluate the state of a running node process from within any module
+[19:52] maritz has joined the channel
+[19:58] alexiskander has joined the channel
+[20:01] felixge: _ry: anyway, did you get my comment on the stream methods / events?
+[20:02] _ry: felixge: list of watchers - would be cool - but no
+[20:02] _ry: there isn't a way to access that - it'd have to be built on top
+[20:02] felixge: ah, too bad ;)
+[20:02] felixge: anyway, lets talk about the file stream if you have a sec
+[20:02] felixge: I think the close/closeReader/closeWriter thingie could work nicely
+[20:02] felixge: did you get that comment?
+[20:03] maushu has joined the channel
+[20:03] _ry: hmm
+[20:03] _ry: so close sends eof when the buffer drains
+[20:03] felixge: http://github.com/felixge/node/commit/2262ef12341aefcd9412617efd23164acb86add4#comments
+[20:03] _ry: closeReader forces it closed
+[20:03] _ry: oh
+[20:04] felixge: I guess I don't know enough about the underlaying semantics of TCP streams
+[20:04] felixge: so I don't know if reader/writer makes for those
+[20:05] _ry: yeah - i'm not sure i follow
+[20:05] _ry: i mean - it's debatable if socket.close() should be named how it is
+[20:05] _ry: becase it doesn't close the socket
+[20:05] _ry: it sends a FIN packet when the buffer drains
+[20:05] _ry: (sending a FIN packet only applys to a stream which is writable)
+[20:06] _ry: maybe it should be called end()
+[20:06] _ry: to correspond to the 'end' event
+[20:06] felixge: you can still receive data after a FIN package, right?
+[20:06] _ry: no
+[20:06] _ry: err
+[20:06] _ry: you mean from the side that sends the FIN
+[20:06] _ry: yes
+[20:07] felixge: but not from the side you send the FIN to?
+[20:07] _ry: so you can do socket.close() but still get 'data' events
+[20:07] _ry: until the other end calls socket.close()
+[20:07] felixge: ok
+[20:07] felixge: end() makes more sense then
+[20:07] _ry: once you get an 'end' event you'll never have more 'data'
+[20:07] _ry: yeah
+[20:07] _ry: but then we have these tricky cases
+[20:07] felixge: the problem is that read streams can 'end' and 'close'
+[20:08] felixge: :(
+[20:08] felixge: hard to get right
+[20:08] _ry: right and they're different things
+[20:08] _ry: one is getting FIN - the other is having the fd close
+[20:08] _ry: the difference being that you can still write after 'end' (if you're still writable) but not after 'close'
+[20:09] felixge: yeah
+[20:09] _ry: btw - this is not how most people do this
+[20:09] _ry: they just close sockets
+[20:09] _ry: they don't send fin packets
+[20:09] felixge: but sending FIN packages is the nice thing to do?
+[20:09] _ry: well the kernel does the fin packet for them - but they ignore everything the other end sends
+[20:09] _ry: yeah
+[20:09] _ry: cause there could still be some data in transport
+[20:09] _ry: and you want to receive that cleanly
+[20:09] _ry: before completely closing your side
+[20:10] felixge: I see
+[20:10] maushu: _ry, easy to fix, just ignore 'data' events after socket.close() was used.
+[20:10] felixge: I think we should stay true to the semantics of TCP but make it as easy to use as possible
+[20:10] _ry: so i like renaming close to end
+[20:10] felixge: maushu: I think that's exactly what we would not want to do
+[20:10] maushu: wat
+[20:10] JimBastard has joined the channel
+[20:11] _ry: we have 'forceClose()' on TCP which just .. forces it closed
+[20:11] maushu: It makes more sense to use close.
+[20:11] _ry: that's where you just close the fd 
+[20:11] _ry: drop all the watchers
+[20:11] maushu: How about rename close() to end() and forceClose() to close()?
+[20:11] _ry: i'm trying to think how this translates to the file case
+[20:11] _ry: maushu: maybe
+[20:12] felixge: maushu: we are trying to come up with an abstraction that works for read/write and full duplex streams: http://wiki.github.com/ry/node/streams
+[20:12] felixge: end() and close() sound good
+[20:12] _ry: i think 'forceClose' should be a property of readable streams
+[20:12] _ry: because normally readable streams shouldn't close
+[20:12] _ry: they just wait for 'fin' (aka 'eof')
+[20:13] felixge: _ry: well, they should not close by themselves, but you should be able to end() / close() them prematurely 
+[20:14] _ry: writable streams need a method which is like forceClose() too - which is - 'forget about the write buffer, drop this fd now'
+[20:14] dnolen has joined the channel
+[20:14] felixge: yeah
+[20:14] felixge: _ry: well close() would be that
+[20:15] _ry: yeah i guess
+[20:15] felixge: _ry: and end() would close the write stream after the buffer drains
+[20:15] gwoo: ACTION is really excited about streams :)
+[20:15] felixge: _ry: I guess read streams should only have end(), but not close
+[20:16] _ry: felixge: i think they need close too - in order to ignore 'data'
+[20:16] felixge: _ry: I mean close() would either be closeSync() or end() and ignore further events
+[20:16] felixge: _ry: ok, so end() would end ASAP, but may still emit 'data', while close() would end ASAP, but not emit any more data (even if a callback still fires)
+[20:17] _ry: felixge: yeah
+[20:17] _ry: i think
+[20:17] felixge: sounds good to me
+[20:17] _ry: i like the name end()
+[20:17] _ry: it's unfortunate that it's currently named close()
+[20:17] _ry: because these are different things
+[20:18] felixge: use close() if you want no more data, use end() if you want to end asap, but may get further data until that happened
+[20:18] felixge: would be pretty much the same for readers and writers
+[20:18] felixge: close = NOW, end = ASAP
+[20:18] _ry: i think we ought to use forceClose() right now
+[20:18] felixge: _ry: I say let's break whatever we can now
+[20:18] felixge: if we like it that way
+[20:19] felixge: _ry: all pre-0.1.30 node code is broken like crazy anyway 
+[20:19] felixge: so now is the time to break more ;)
+[20:19] _ry: is there a name other than close() we could use?
+[20:19] felixge: hm
+[20:19] felixge: actually thinking more about it
+[20:20] felixge: I guess close() + forceClose() would work almost as well as 'close' and 'end'
+[20:20] felixge: except that the events wouldn't match
+[20:20] felixge: you'd have a 'end' and 'close' event
+[20:20] felixge: but an close() and forceClose() method
+[20:20] _ry: what does the 'close' event mean anyway
+[20:20] _ry: that confuses me
+[20:20] felixge: _ry: that the file pointer is closed for a write stream
+[20:20] _ry: i guess it means that the fd is closed and the stream will not emit anymore events
+[20:20] felixge: _ry: or the file pointer is closed for a read stream
+[20:21] felixge: right
+[20:21] felixge: I mean a file read stream can 'end' before it 'closes'
+[20:22] _ry: writable streams ought to emit 'close' too
+[20:22] _ry: oh you just said that
+[20:23] felixge: yeah, but writeable streams don't need 'end'
+[20:23] _ry: let's use forceClose now
+[20:23] _ry: change one thing at a time
+[20:23] felixge: _ry: https://gist.github.com/0387b73607a96e957b1b
+[20:23] felixge: that looks good to me
+[20:23] felixge: what do you think?
+[20:24] _ry: maybe the 'close' event could be changed to 'dead'
+[20:24] _ry: and forceClose() to 'kill' ? :)
+[20:24] felixge: lol
+[20:24] felixge: _ry: added a few other events: https://gist.github.com/0387b73607a96e957b1b
+[20:24] felixge: I think 'open' is a universal stream event as well
+[20:24] felixge: forgot 'data' for full duplex
+[20:25] felixge: fixced
+[20:25] felixge: * fixed
+[20:26] _ry: i think we ought to not specify opening symantics in streams
+[20:26] felixge: also added properties: https://gist.github.com/0387b73607a96e957b1b
+[20:26] _ry: or at least leave it open at the moment
+[20:26] gwoo: drain === flush?
+[20:26] felixge: gwoo: y
+[20:26] gwoo: ok
+[20:26] felixge: _ry: fine with me
+[20:26] dandean has joined the channel
+[20:26] felixge: _ry: I guess it's not required for stream interaction
+[20:27] felixge: _ry: since a write stream would buffer until it's open, but not drain
+[20:27] felixge: _ry: and a read stream simply would not emit data
+[20:27] felixge: _ry: anyway, I really like those semantics otherwise. what about you?
+[20:28] joshbuddy has joined the channel
+[20:29] felixge: one more update, added the 'error' event: https://gist.github.com/0387b73607a96e957b1b
+[20:30] felixge: I think that should be part of the stream interface
+[20:30] _ry: yeah i agree
+[20:30] _ry: what would forceClose() mean to a incoming http request
+[20:30] _ry: kill the connection?
+[20:31] _ry: i gues
+[20:31] felixge: _ry: yes, and ignore any 'data' events that may still be in the pipe
+[20:31] _ry: what about for multipart part
+[20:31] felixge: _ry: close() would try to gracefully disconnect, but any 'data' events still in the pipe will continue to fire until the connection is actually dead
+[20:31] _ry: readable streams don't have close()
+[20:32] felixge: _ry: they do
+[20:32] felixge: oh wait
+[20:32] felixge: well
+[20:32] felixge: yes, they do
+[20:32] _ry: no - i think by default they close after getting 'end'
+[20:32] felixge: you'd try to close the file descriptor ASAP
+[20:32] felixge: but if there are still events coming in until it's closed, those will fire
+[20:33] felixge: where 'forceClose' would ignore them
+[20:33] felixge: they also close by default, yes
+[20:33] _ry: no, i think readable streams shouldn't have a close() - just a forceClose()
+[20:34] felixge: ok, fine with me
+[20:34] felixge: _ry: would forceClose() fire 'end' ?
+[20:35] felixge: I think it would just fire close, but no 'end' event
+[20:35] felixge: so pump would now that the stream got aborted
+[20:35] _ry: felixge: no
+[20:36] _ry: yeah i think forceClose would fire 'close'
+[20:36] _ry: but not 'end'
+[20:36] felixge: sweet
+[20:37] felixge: _ry: I can go ahead and switch over the file streams to those semantics and let you know if I find any other leaks in the abstraction
+[20:37] felixge: what do you think?
+[20:41] _ry: felixge: what about the difference between 'error' and 'close' ?
+[20:41] _ry: if there is an error will 'close' be emitted?
+[20:41] felixge: _ry: are there any "recoverable" stream errors?
+[20:41] felixge: I guess it depends on the stream?
+[20:41] _ry: yeah i don't know
+[20:42] _ry: i can't think of any 
+[20:42] _ry: there are things like EINTR - but that can be handled by the C code
+[20:42] felixge: yeah lets say for now we'll assume any recoverable errors to be handled internally by the stream
+[20:43] felixge: so the consumers don't have to worry
+[20:43] felixge: and error means = stream broken
+[20:43] _ry: felixge: http://search.cpan.org/dist/AnyEvent/lib/AnyEvent/Handle.pm#READ_QUEUE
+[20:43] _ry: felixge: er, not read_queue in particular
+[20:44] _ry: just the whole api
+[20:44] felixge: _ry: I don't think we should emit the 'close' event or event try to close the stream automatically so
+[20:44] felixge: example: fs.write() gives us an error because the disk is full
+[20:44] felixge: but this does not mean that the file is closed, nor that we may event want to close it
+[20:44] felixge: it should be up to the consumer
+[20:45] felixge: * may even
+[20:45] brandon_beacher has joined the channel
+[20:46] _ry: $handle->destroy
+[20:46] _ry: ^-- forceClose
+[20:46] _ry: $handle->push_shutdown
+[20:46] _ry: ^-- close
+[20:46] felixge: yeah
+[20:47] felixge: _ry: did marc lehmann write this? (AnyEvent)
+[20:48] _ry: yes
+[20:49] felixge: _ry: it seems to define multiple error callbacks in favor of a single one
+[20:51] felixge: _ry: anyway, seems like our API is pretty much the same except we support less events so far
+[20:51] felixge: or at least we don't consider them relevant to all streams
+[20:52] joshbuddy_ has joined the channel
+[20:52] _ry: abstracting file streams like this is pretty crazy
+[20:52] _ry: but i think it's okay
+[20:53] felixge: _ry: me too, I think this is going the right way
+[20:53] _ry: i think maybe we shouldn't have a 'close' event for readable stream
+[20:54] _ry: when getting 'eof' it the fd should be closed
+[20:54] _ry: oh wait - file closing isn't sync
+[20:54] _ry: hm
+[20:54] felixge: _ry: I think we should have the event
+[20:56] _ry: ok
+[20:57] CIA-77: node: 03Ryan Dahl 07master * r1e710ca 10/ src/node.cc : Remove process.unloop()
+[20:57] felixge: _ry: what, why is unloop() gone?
+[20:58] felixge: there goes my backwards compatible promise port ;(
+[21:00] _ry: oh, you need that?
+[21:01] felixge: _ry: well, I think I have 1-2 wait() calls total
+[21:01] CIA-77: node: 03Ryan Dahl 07master * re6dbf8d 10/ src/node.cc : 
+[21:01] CIA-77: node: Revert "Remove process.unloop()"
+[21:01] CIA-77: node: People need this for backwards compatibility. Will be removed soon though!
+[21:01] CIA-77: node: This reverts commit 1e710cafa704cf451782e8c96e1b57418561600e. - http://bit.ly/ccYb8d
+[21:01] felixge: cool :)
+[21:01] felixge: what helps
+[21:02] felixge: my use case is that i have to read a config by executing a php script (config is shared with a php app) and I'd like to just get it via require('config')
+[21:02] _ry: so will your file streams be ready for 0.1.31?
+[21:02] felixge: _ry: if 0.1.31 has a few more minutes - yeah!
+[21:02] _ry: tomorrow, i'll do it
+[21:03] tlrobinson_ has joined the channel
+[21:03] _ry: ACTION bbl
+[21:07] felixge: _ry_away: http://github.com/felixge/node/commit/64cc295708df0bebd8788c0ac8c54033c7e38a9d should now conform.
+[21:08] felixge: _ry_away: I can squash the history for your convenience, just let me know
+[21:15] brainss has joined the channel
+[21:24] geoffreyd has joined the channel
+[21:39] Tim_Smart has joined the channel
+[21:40] unomi has joined the channel
+[21:42] maushu has joined the channel
+[21:44] maushu: gf3, I think your irc bot sends the JOIN command too soon.
+[21:44] brapse_ has joined the channel
+[21:46] markwubben has joined the channel
+[21:47] pdelgallego has joined the channel
+[21:49] rektide has joined the channel
+[21:58] brainss has left the channel
+[22:03] schmelzle has joined the channel
+[22:06] brandon_beacher has joined the channel
+[22:10] kriszyp: is there any or is anybody working on a berkelydb  connector for node?
+[22:12] MattJ has joined the channel
+[22:18] Cainus has joined the channel
+[22:21] micheil_mbp has joined the channel
+[22:23] tmpvar has joined the channel
+[22:24] tmpvar: hello
+[22:25] abustin has joined the channel
+[22:33] teemow has joined the channel
+[22:36] brian__ has joined the channel
+[22:39] pdelgallego has joined the channel
+[22:39] keeto has joined the channel
+[22:40] drostie has joined the channel
+[22:43] gwoo_ has joined the channel
+[23:02] Booster has joined the channel
+[23:39] Spot__: can you not pass 'localhost' to http.createServer ?
+[23:39] Spot__: as a host (obviously)?
+[23:39] geoffreyd has joined the channel
+[23:42] joshbuddy has joined the channel
+[23:42] joshbuddy has joined the channel
+[23:44] keeto has joined the channel
+[23:45] brian__ has left the channel
+[23:48] drostie has joined the channel
+[23:48] keeto_ has joined the channel
+[23:49] gf3 has joined the channel

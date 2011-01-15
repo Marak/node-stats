@@ -1,0 +1,1800 @@
+[00:00] inimino: oh, the promises proposal?
+[00:00] kriskowal: kriszyp's http://wiki.commonjs.org/wiki/Promises
+[00:00] pjb3: actually makes more sense to me
+[00:00] inimino: ACTION hasn't looked at it
+[00:00] pjb3: I mean, I get that they are the same thing, more or less
+[00:00] isaacs: pjb3: you could wrap something up like that pretty easily if you wanted.
+[00:00] kriskowal: the proposal itself is pretty immature
+[00:00] inimino: pjb3: they are essentially the same with a few minor differences
+[00:00] isaacs: function myStat (file, cb) { stat(file).addCallback(cb) }
+[00:01] LordMetroid: Then it is decided, tomorrow I will start coding the e-commerce toolset!
+[00:01] sudocarl: LordMetroid, lol that was so out of sync :D
+[00:01] LordMetroid: nginx seems to be a nice piece of code as well so I want worry about virtual hosting
+[00:01] inimino: heh
+[00:01] inimino: LordMetroid's reply was asynchronous :)
+[00:01] LordMetroid: sudocarl, think of it as the callback that has been executed from me being in I/O
+[00:02] sudocarl: LordMetroid, lulz!
+[00:02] sudocarl: LordMetroid, you are ready to begin your node development...  you have passed the exam
+[00:02] isaacs: LordMetroid's OS does I/O very slowly.
+[00:02] sudocarl: isaacs, its all relative
+[00:02] sudocarl: to the cpu so does the bus
+[00:02] inimino: don't assume it's the OS, could be hardware
+[00:02] isaacs: sudocarl: faster than clay tablets, i suppose.
+[00:02] sudocarl: hah
+[00:02] sudocarl: :)
+[00:02] isaacs: i didn't want to say disparaging things about LordMetroid's hardware.
+[00:03] isaacs: seemed rude.
+[00:03] LordMetroid: I actually watched the presentation by Ryan at http://jsconf.eu/2009/
+[00:03] sudocarl: and thats the other callback firing
+[00:03] LordMetroid: and read some tutorials on niginx configuration
+[00:03] inimino: isaacs: ah, but the hardware we can at least blame our genetic heritage for
+[00:04] cloudhead has joined the channel
+[00:04] LordMetroid: I would say it is only partly to the hardware, the latency of that presentation was mighty huge
+[00:04] isaacs: i see
+[00:04] isaacs: it's not the hardware or the software.  it's the network.
+[00:04] isaacs: isn't that always the case!
+[00:05] inimino: hehe
+[00:05] sudocarl: good call
+[00:05] sudocarl: :)
+[00:05] sudocarl: but your not async...  so you still have more training to go through
+[00:05] sudocarl: didn't hear any talk on here during your operation
+[00:06] LordMetroid: hehe
+[00:06] sudocarl: although I suppose that doesn't prove non-asyncness
+[00:06] sudocarl: unless the irc channel is the main code block
+[00:06] sudocarl: hmm
+[00:06] sudocarl: I should probably shutup
+[00:06] kriskowal: so, obligatory sale's pitch, some of the problem is chatty protocols, but when that's not it, it's the sender's tcp implementation's inability to distinguish loss from queuing from loss because of hardware errors
+[00:07] sudocarl: haha
+[00:08] inimino: .oO(sales pitch for...?)
+[00:08] kriskowal: i will be shutting up now
+[00:09] jan____: ACTION highfives kriskowal 
+[00:11] wil_: how would you go about deploying an active node application without dropping connections?
+[00:12] wil_: ie reloading the modules
+[00:12] LordMetroid: ACTION waves to jan____ , nice to see you
+[00:12] jan____: hi :)
+[00:12] orlandov: rewrite in erlang? :)
+[00:13] LordMetroid: orlandov, you think node.js should be rewritten in Erlang?
+[00:14] orlandov: LordMetroid: i'm just being an ass, but iirc erlang has pretty good support for code hotswapping on the fly
+[00:14] orlandov: iirc there were some people looking into reloading node code on the fly, but i'm not sure
+[00:15] LordMetroid: orlandov, yes and other things to increase reliability
+[00:15] LordMetroid: Ryan mentions it in the talk that he would like to load modified scripts on the fly
+[00:16] ashb: thats a potential problem
+[00:16] wil_: would be nice, if you could send node signal to reload modules
+[00:16] ashb: if it loads one version of X and a differnety version of Y
+[00:16] orlandov: can't say i've ever seen code reloading done well, at least in perl
+[00:16] kriskowal: jan___, thou art jan lehnardt?
+[00:16] LordMetroid: I suppose one could do it with a revision system and direct new connections to a newer revision
+[00:17] ashb: orlandov: i dont think i've evenb seen it attempted for production code
+[00:17] kriskowal: the solution with narwhal/jack is that we create a new sandbox for each request.  the sandboxes all share a single module loader, which provides a new module factory function only if the underlying file has changed.
+[00:17] ashb: catalyst has it for dev, but that just kills and restarts
+[00:18] orlandov: ashb: yeah exactly
+[00:18] ashb: kriskowal: still dont get why it needs a new sandbox for it
+[00:20] sudocarl: wil_, I think the only way is to restart node
+[00:20] sudocarl: wil_, is it for http connections or other?
+[00:20] wil_: yeah, i was thinking for http connections
+[00:20] sudocarl: ok
+[00:20] wil_: i'm just curious at the moment :)
+[00:21] sudocarl: I think that the only thing you can do is reboot node...
+[00:21] sudocarl: hmmm
+[00:21] kriskowal: creating a new system of module instances for each request prevents complicated version control problems.  it guarantees that for each request, all module instances are current and there are no hidden references in old modules to other modules that have been reloaded
+[00:21] jan____: kriskowal: yes
+[00:22] ashb: oh i guess i just do that by nuking referneces to all loaded moduels
+[00:22] kriskowal: ACTION highfives jan___
+[00:22] ashb: and re-require the app module
+[00:22] ashb: kriskowal: when you say sandbox do you mean new global + primordials or not?
+[00:22] sudocarl: what about opening a seperate port running the new version of your app, and then redirecting all requests to that...  once all the requests are redirected you just do a reboot cycle and remove the redirection?
+[00:22] kriskowal: that's sortof what creating a new sandbox accomplishes; it just performs better because most module factories are still in memory.
+[00:22] kriskowal: no.
+[00:22] wil_: ashb: wouldn't you drop connections doing that?
+[00:22] wil_: under load that is
+[00:23] kriskowal: ashb i mean it in the require("sandbox").Sandbox sense.
+[00:23] ashb: wil_: probably. this is just a debug/dev hack
+[00:23] ashb: kriskowal: so hippo doens't have a sandbox module
+[00:23] wil_: yeah
+[00:23] ashb: but i jsut do a bit of a hack to make it forget what moduels it has already laoded
+[00:23] wil_: i was curious for a prod env
+[00:23] ashb: so it will go re-load them from disk
+[00:23] kriskowal: might be worth looking into.  it's easy enough to make a sandbox with just your fs-base module.
+[00:24] ashb: what else does the sandbox moduel do?
+[00:24] kriskowal: it's an object that memoizes module factory functions and provides require, exports, and module objects to module factories
+[00:24] ashb: ACTION apologises for the typing tonight
+[00:24] ashb: hmmm - we dont have module factory fns yet
+[00:24] ashb: at least not exposed to the user
+[00:24] kriskowal: are you interested in the module loader proposal?
+[00:25] ashb: tho I do want the m for doing the .load({x: "x"}) stuff
+[00:25] ashb: i wasn't aware of any such proposal
+[00:25] kriskowal: ACTION hopes he didn't just imagine posting it
+[00:25] ashb: but i'm also interested is using spidermonkey's XDR to store precompiled versions
+[00:25] kriskowal: http://wiki.commonjs.org/wiki/Modules/Loaders/B
+[00:25] inimino: I guess this is part of why I use my own code loading for request handlers
+[00:26] ashb: kriskowal: dont recal seeing anything like that
+[00:26] ashb: only hit in my mailbox for that is a rely from ihab
+[00:26] ashb: kriskowal: oh no i do remember that now
+[00:27] kriskowal: i hear a rumor that node was going to implement sync fs routines for some obscure and shameful reason.  anyone know anything about that?
+[00:27] ashb: just wasn't a link directly to /B
+[00:27] kriskowal: huh.  i'm pretty sure i wrote it *for* you :P
+[00:27] ashb: kriskowal: to #commonjs
+[00:27] kriskowal: aye
+[00:27] inimino: I guess what I have could be really useful for this, since you can just unroute and reroute a chunk of URI space and new requests will go to the newly reloaded handler
+[00:28] inimino: ACTION should add an atomic 'reload' command
+[00:28] kriskowal: inimino, you catch any of that stuff about module systems ^ ?
+[00:28] inimino: kriskowal: not most of it
+[00:29] inimino: sandboxes eh?
+[00:29] kriskowal: at some point, i need to codify my proposal for require.async
+[00:29] inimino: what is a sandbox, like a new global object?
+[00:29] kriskowal: i use the term sandbox loosely
+[00:30] kriskowal: a new global object is usually called a context in javascriptland
+[00:30] kriskowal: it's a system of module instances
+[00:30] inimino: /execution environment
+[00:30] inimino: ok
+[00:31] ashb: sandbox is usally secure sandbox to me
+[00:31] kriskowal: in the caja/narwhal designs, a Sandbox object gets a Loader object and manages the singletons for a system of module instances
+[00:31] path[l]_ has joined the channel
+[00:31] kriskowal: the intent is that if you give a sandbox a secure loader, it'll be a secure sandbox
+[00:31] inimino: hm, yeah my system has some functional characteristics that I think would make that unnecessary
+[00:31] inimino: ACTION should think more on this issue of hot reloading
+[00:31] ashb: true.
+[00:32] kriskowal: well, we have hot reloading in narwhal/jack.  i'm not proposing at this point that we use the same code, but it would be neat to share the api.
+[00:32] kriskowal: but for an async loader api, we need commonjs to ratify a promise api
+[00:33] ashb: the major think probably stopping that is getting an API that node is also happy with
+[00:33] ashb: s/k/g/
+[00:34] tlrobinson: fyi here's all the code that was required for reloading: http://github.com/tlrobinson/jack/blob/master/lib/jack/reloader.js
+[00:41] quirkey has joined the channel
+[00:48] bentomas: !log
+[00:50] isaacs has joined the channel
+[00:59] erikcorry: posix.stat("foo.bar").addCallback(function (stats) { sys.puts("Got callback");
+[00:59] erikcorry: });
+[00:59] erikcorry: If there is no file called "foo.bar" then the callback is never called.
+[00:59] erikcorry: Am I missing something?
+[00:59] isaacs: erikcorry: that's correct.
+[00:59] kriskowal: prolly need an errback
+[00:59] isaacs: stat() emits error in that case.
+[01:00] erikcorry: How do I catch that?
+[01:00] kriskowal: a broken promise
+[01:00] isaacs: posix.stat("blargh").addErrback(function (err) { sys.puts("no blargh!") })
+[01:00] erikcorry: In the doc it says "On error no parameters
+[01:00] isaacs: erikcorry: ok, then in my example, "err" would not be set to anything
+[01:00] isaacs: just showing the pattern.
+[01:00] erikcorry: Ah.
+[01:01] isaacs: i guess if stat() fails, you pretty much know what the problem is ^_^
+[01:01] erikcorry: So not only is there no parameter, it's also a different callback.
+[01:01] isaacs: erikcorry: it's assigned using addErrback rather than addCallback
+[01:01] isaacs: like an onerror handler rather than an oncomplete handler
+[01:03] erikcorry: Thanks!
+[01:03] jed has joined the channel
+[01:20] mravaux has joined the channel
+[01:20] JimBastard has joined the channel
+[01:21] pjb3_ has joined the channel
+[01:34] LordMetroid: How would one go about sending back whole html pages?
+[01:34] LordMetroid: Preferably dynamically assembled
+[01:34] sudocarl: ?
+[01:34] sudocarl: what do you mean about whole?
+[01:35] JimBastard: LordMetroid, if you want to read a file as binary and output it, try using posix.cat()
+[01:35] JimBastard: debug.log(posix);
+[01:35] LordMetroid: hm
+[01:35] sudocarl: hey bastard :D
+[01:35] JimBastard: if you want to do templating, try mustache.js
+[01:35] JimBastard: if you want to write output to the http request, use .sendBody()
+[01:35] JimBastard: sup sudocarl, working on node_debug a bit
+[01:36] LordMetroid: yes I know of sendBody, I want to add pieces of html together like modules
+[01:36] JimBastard: i think ive got a project that we are going to use node.js on
+[01:36] sudocarl: JimBastard, cool :) going well?
+[01:36] JimBastard: raphael.js is being a real bitch
+[01:36] JimBastard: ive got to open up a few issues with dmitri
+[01:36] sudocarl: LordMetroid, you can call sendBody as many times as you like if you wish
+[01:36] sudocarl: each part will be streamed to the client until you call res.finish();
+[01:37] sudocarl: also for a faster version of mustache use mojo: http://github.com/visionmedia/mojo
+[01:37] sudocarl: its compiled mustache
+[01:38] LordMetroid: ahh so I would do something alike for all objects { http.sendBody(posix.cat(htmlfile)) }
+[01:38] LordMetroid: *res.sendBody
+[01:38] sudocarl: uhhh...
+[01:38] sudocarl: posix library returns promises
+[01:39] LordMetroid: right, forgot about that...
+[01:39] sudocarl: so you would have to call posix.cat(blah).addCallback(function (data) { res.sendBody(data) });
+[01:39] LordMetroid: That could end up in any order
+[01:39] sudocarl: ?
+[01:39] sudocarl: no that will execute in the proper order
+[01:39] LordMetroid: So no race conditions?
+[01:39] sudocarl: cat will be executed and then the callback will be run once cat has data
+[01:39] sudocarl: uhh I don't think so
+[01:40] LordMetroid: If I do many posix.cat()s
+[01:40] sudocarl: on the same file?
+[01:40] sudocarl: you should be fine cause your not writing to them
+[01:40] LordMetroid: Not necessarily
+[01:40] LordMetroid: But they may be assembled into the response in the wrong order
+[01:40] sudocarl: JimBastard, whats raphael again?
+[01:40] sudocarl: ahh I see
+[01:40] LordMetroid: sudocarl, template
+[01:41] sudocarl: umm what you can do is call wait on the promise
+[01:41] LordMetroid: ok
+[01:41] sudocarl: its not good practice but it will work
+[01:41] sudocarl: ohh right
+[01:41] sudocarl: thanks LordMetroid 
+[01:41] sudocarl: oops I was thinking out of sync
+[01:41] sudocarl: ~_~
+[01:41] LordMetroid: Maybe I can just retrieve the htmlfile once and buffer it and then insert it wherever I need it
+[01:42] sudocarl: that would work too
+[01:42] sudocarl: I am using that method
+[01:42] LordMetroid: That would be less I/O and more asynchronous
+[01:42] sudocarl: I wrote a render class which uses an inmemory cache to reduce I/O
+[01:43] LordMetroid: I love how writing asynchronous is as easy or easier than writing synchronous solutions
+[01:43] sudocarl: yea lol
+[01:43] LordMetroid: The next decade of programming is going to be really interesting
+[01:54] jed has left the channel
+[01:56] mtotheikle has joined the channel
+[01:57] dnolen_ has joined the channel
+[01:59] dnolen_: newb question about node.js. Is the current way to take advantage of multi-core machines to simply fire up multiple node.js instances? or is multi-core support something planned for the future?
+[02:01] sudocarl: I think that since node.js runs on a thread pool for all of its async stuff it should just take advantage of a multi-core processor with 1 node instance
+[02:01] inimino: dnolen_: node will eventually have workers, which could use more than one CPU
+[02:02] inimino: and that, for managing I/O and asynchronous tasks
+[02:02] dnolen_: sudocarl: inimino: thx, informative.
+[02:03] dnolen_: so what are people's experience of debugging code that's callback heavy? That can be somewhat painful even in browser. are there tips from the community for attacking this problem?
+[02:04] fictorial has joined the channel
+[02:04] sudocarl: dnolen_, I havn't had too many problems with it...
+[02:04] sudocarl: but I use some pretty intense tracing
+[02:04] dnolen_: sudocarl: what are you using? d8? or manual logging?
+[02:04] sudocarl: JimBastard is developing a debugger for node
+[02:04] sudocarl: manual
+[02:04] sudocarl: cause I am sadistic
+[02:05] sudocarl: I find that manual works fine for small projects
+[02:05] dnolen_: sudocarl: heh you are :D Yeah I put put with that myself back in 2004 developing AJAX apps before there even any developed frameworks. (alert, alert, alert)
+[02:05] dnolen_: put up
+[02:05] sudocarl: fair enough
+[02:05] dnolen_: sudocarl: of course, curious about debugging something intermediate.
+[02:05] kriskowal: dnolen_: there is work elsewhere for producing graphviz dots of promise graphs to give you a post-mortem analysis of the causes and effects when promises get broken
+[02:06] kriskowal: i'm looking for a reference…
+[02:06] sudocarl: that sounds so deep
+[02:06] sudocarl: and soulfull
+[02:06] dnolen_: kriskowal: thx!
+[02:06] kriskowal: ah, it's called Causeway, http://wiki.erights.org/wiki/Causeway
+[02:06] dnolen: anybody doing couchdb + node.js in here?
+[02:08] dnolen: kriskowal: bookmarked.
+[02:08] kriskowal: integrating with Causeway would involve training node's promise system to emit the JSON that Causeway uses.
+[02:09] dnolen: kriskowal: looks reasonable.
+[02:10] dnolen has joined the channel
+[02:12] jed has joined the channel
+[02:15] JimBastard: dnolen, you want to know debugging>
+[02:16] JimBastard: check out my screencast http://maraksquires.com/node_debug/
+[02:16] JimBastard: im working on the node_debugger
+[02:19] dnolen: JimBastard: so is the debugger running in the browser connecting to the node.js instance via comet or something?
+[02:19] sudocarl: node.js is like comet on steroids
+[02:19] sudocarl: his debugger is actually running in the node instance and simply listening on a different port
+[02:19] sudocarl: it uses long polling in node to achieve the realtime responses
+[02:20] sudocarl: well I suppose its running in the browser
+[02:20] sudocarl: actually...  I guess your 100% correct cause comet is more of a idea than a system
+[02:20] sudocarl: ~_~
+[02:20] sudocarl: sorry :D
+[02:22] malkomalko_ has joined the channel
+[02:22] dnolen: sudocarl: heh, it's very cool that's for sure.
+[02:22] dnolen: so what are people mostly using for datastore?
+[02:22] inimino: node is a great system to build comet apps on :)
+[02:22] inimino: ACTION uses the filesystem
+[02:24] dnolen: inimino: definitely that's why I'm interested in it. Being written in JS also very cool. I have an app that's 25K LOC JavaScript + 2000 LOC Python. Datastore is CouchDB. Would be cool if we just supported one language - JS.
+[02:24] JimBastard: sorry back and forth
+[02:24] JimBastard: yeah its async debugging
+[02:25] JimBastard: node.js supports comet concepts really well
+[02:25] JimBastard: whats up with the session code inimino
+[02:25] inimino: dnolen: yes, there are people using CouchDB too
+[02:26] JimBastard: i think im ready to try and publish that tonight, u have some front-end templating going and i need to get sessions working
+[02:26] JimBastard: i have*
+[02:26] dnolen: inimino: yeah I know, was curious to hear some experience stories. There' s some unique things about CouchDB that make Node.js a good fit.
+[02:26] JimBastard: did you push your stuff to github inimino ?
+[02:27] fictorial: dnolen: how are you finding couch's performance?
+[02:27] inimino: JimBastard: not yet, no
+[02:27] shfx has joined the channel
+[02:28] JimBastard: ive got a local copy here still
+[02:28] shfx has left the channel
+[02:28] JimBastard: i think we thought out most of the conventions already, did you work on it at all?
+[02:28] inimino: I think I fixed a bug since what you have
+[02:29] JimBastard: any ideas on what we can do for unit testing
+[02:29] dnolen: fictorial: for our application I have no issues. Haven't don't much benchmarking of our app, but I know that CouchDB loses on the serial write benchmark. However when reading a lot of document or serving many clients CouchDB shines. This is also why I think Node.js + CouchDB = maybe match made in heaven.
+[02:30] fictorial: so it's better for read-heavy apps - k
+[02:30] fictorial: that was my take on it too
+[02:30] inimino: JimBastard: here's the current HEAD: http://boshi.inimino.org/3box/session/sessions.js probably the best to use
+[02:30] inimino: JimBastard: no ideas, anything that works is fine with me
+[02:31] shfx has joined the channel
+[02:31] inimino: JimBastard: I had some HTTP testing code written in Java, something like that would probably be best
+[02:31] inimino: JimBastard: send a request, get a response, make some assertions about the response, that sort of thing
+[02:32] inimino: would be nice if someone will write something like that to run on node :-)
+[02:33] JimBastard: got ya
+[02:34] JimBastard: whats up with getting amfq implemented in node.js - http://jira.amqp.org/confluence/display/AMQP/AMQP+Specification
+[02:34] JimBastard: anyone know?
+[02:34] inimino: JimBastard: will publish a git repo later tonight
+[02:35] inimino: bbl
+[02:35] JimBastard: whats your git name?
+[02:35] JimBastard: k
+[02:42] binary42 has joined the channel
+[02:50] shfx has left the channel
+[02:51] shfx has joined the channel
+[02:52] JimBastard: anyone see anything wonky with this MD5 code? http://pastebin.com/m5653ca52
+[02:52] JimBastard: sup binary42
+[02:53] binary42: hey JimBastard
+[02:53] soveran has joined the channel
+[02:53] sudocarl: JimBastard, is there something wonky?
+[02:53] JimBastard: whats going on man, im working on some node.js for the past few days
+[02:53] sudocarl: ie. does it not work?
+[02:53] JimBastard: naaah its working i think
+[02:53] sudocarl: lol :)
+[02:53] JimBastard: i just have never implemented MD5 before, so all those magic numbers scare me
+[02:53] sudocarl: compare it to another md5 implementation
+[02:54] sudocarl: http://gtools.org/tool/md5-hash-generator/
+[02:54] JimBastard: i guess thats a good call
+[02:55] sudocarl: I don't think anyone can just "look" at a md5 implementation and check to see if it works
+[02:55] sudocarl: its way to much of a brainfuck
+[02:55] JimBastard: lol
+[02:55] sudocarl: I am sure that there is a md5 test suite somewhere
+[02:55] JimBastard: i got my friend looking at it now, laptop party
+[02:56] JimBastard: i might start this project that will use node.js as a nice little ajax messaging queue
+[02:56] sudocarl: or just use this one: http://pajhome.org.uk/crypt/md5/ :D
+[02:56] sudocarl: if you want to be sure it works
+[02:56] JimBastard: im using that
+[02:56] sudocarl: oh
+[02:56] sudocarl: lulz
+[02:56] JimBastard: indeed
+[02:56] JimBastard: back to the coding
+[02:56] JimBastard: ^_^ !
+[02:57] jed has joined the channel
+[03:19] bentomas: anyone have advice on unit testing using the new assert module?  I can see how to include it, and use it but now how to run it.  There doesn't appear to be a Test module as per the spec: http://wiki.commonjs.org/wiki/Unit_Testing/1.0#Test ...
+[03:20] bentomas: do we use python to run the tests?
+[03:21] nefariousD has joined the channel
+[03:21] nefariousD: hrm.. anyone ever experience a 'thread.error: can't start new thread' error when attempting to run configure from a fresh git clone of node?
+[03:21] RayMorgan has joined the channel
+[03:22] nefariousD: trying to run this on a vps, and I suspect that might be related
+[03:24] RayMorgan has joined the channel
+[03:26] path[l]_ has joined the channel
+[03:27] sixtus42_ has joined the channel
+[03:35] nefariousD: heh.. got around it by running configure on my local machine with a similar config & distro and tar'ing the results, then scp'ing and make'ing from the hosting machine.. i wonder if this will *actually* work all the way
+[03:36] nefariousD: wow.. it worked
+[03:38] dnolen_ has joined the channel
+[03:40] path[l] has joined the channel
+[03:51] sixtus42 has joined the channel
+[03:53] ryah: ACTION back
+[03:53] nefariousD: allo
+[03:57] binary42: ryah: Working on some code for binaries. I'm trying to figure out the best type to use that works well with IO. 
+[03:57] binary42: I see you've mostly worked with character streams up to this point.
+[03:57] binary42: Do you have any thoughts or bias for lifting the types out of that code a little so I can push more appropriate binary buffers through?
+[03:58] binary42: Also, is there a specific reason why a large number of these methods are capitalized? (keyword collisions?)
+[04:00] ryah: binary42: capitalized? like what?
+[04:00] fictorial: bentomas: what new assert module? must have missed it
+[04:00] binary42: Stdio::Initialize etc...
+[04:00] binary42: vs. Stdio::initialize
+[04:00] ryah: binary42:oh using google's c++ style guide
+[04:01] ryah: (which is what v8 uses)
+[04:01] binary42: Ah. Is there a quick link?
+[04:01] ryah: http://google-styleguide.googlecode.com/svn/trunk/cppguide.xml
+[04:01] binary42: ACTION thinks it's funky... or at least hates overzealous capitalization and type encoding but that works if it's already there.
+[04:01] binary42: Thanks.
+[04:02] bentomas: fictorial: the_undefined_ was working on it http://github.com/felixge/node/commit/a7f5f51c45e7358c545afec052da845f9ba52ed0
+[04:03] ryah: so i was talking with the v8 guys and they think it would be good to do binary with a little object wrapping an External with a single method: toString()
+[04:03] fictorial: bentomas: thanks
+[04:03] ryah: then set the object's prototype to String.prototype
+[04:03] binary42: I hesitate that indirection. I'd say it'd be better the other way around.
+[04:03] ryah: then you could do binary.indexOf("\r\n")
+[04:04] binary42: Well, you could have Binary.prototype and toBinary()
+[04:04] ryah: indexOf() would call toString() - 
+[04:04] ryah: (my internet is really slow... )
+[04:04] binary42: The problem is that strings are still character based and with that, also encoded... which V8 fucks up on using wide chars rather than real unicode.
+[04:05] binary42: Ah.
+[04:05] binary42: Hmm.
+[04:05] binary42: So delegated.
+[04:05] binary42: I could consider that as sugar I guess but I don't really see the point of creating hidden trash for the GC.
+[04:05] binary42: I'd rather the programmer be able to hold on to the string rather than recreate it or ask the VM to guess.
+[04:06] ryah: that's better but v8 has all this cool string handling stuff
+[04:06] ryah: i do't want to rewrite it
+[04:06] binary42: Hmm. I'll look into it then.
+[04:06] ryah: indexOf() for example is really fast
+[04:07] ryah: i can barely type. we'll have to continue this discussion later
+[04:07] binary42: Well, for binaries it would more often be more about parallel structure packs and unpacks than single ops.
+[04:08] binary42: Right now the big part of the API I want to work on is how to integrate with IO though since that is what keeps things efficient and fast.
+[04:08] binary42: The more objects you avoid the better.
+[04:10] binary42: Anyway... I'll try to sketch out something. I'll have more time to hack this weekend.
+[04:28] isaacs has joined the channel
+[04:42] fictorial: isaacs: http://gist.github.com/246061 http://gist.github.com/246060
+[04:44] voodootikigod__ has joined the channel
+[04:44] isaacs: fictorial: reading...
+[04:45] isaacs: ACTION prefers named functions, the better to trace the stack with
+[04:45] isaacs: at least, in code that doesn't have to run in IE
+[04:46] isaacs: also, Function.prototype.apply can take an arguments object
+[04:46] isaacs: no need to Array-ify unless you want to do shift and pop and whatnot
+[04:46] fictorial: good to know
+[04:46] fictorial: thanks
+[04:48] fictorial: ah, I don't run in IE - just server side. the stack traces I get with node are fine (line:col) but I can see why named functions could be desired.  I like short, concise code.
+[04:48] isaacs: fictorial: it's just as concise, or more even
+[04:48] isaacs: unless it's a prototype method, of course.
+[04:49] isaacs: exports.PromiseChain = PromiseChain;  function PromiseChain () {...
+[04:49] isaacs: er, i guess it's a bit more bytes...
+[04:50] fictorial: oh you are referring to this?
+[04:50] fictorial: var PromiseChain = exports.PromiseChain = function () { 
+[04:50] fictorial: I see, OK.
+[04:51] tlrobinson_ has joined the channel
+[04:51] fictorial: yeah so I've seen a couple of ways of specifying this in other people's JS code
+[04:51] fictorial: what's the common idiom?
+[04:51] fictorial: what you have there?
+[04:52] fictorial: updated the gist
+[04:53] sudocarl: does anyone know why a date object in node-repl is outputting ISO-8601 when you just type the object name and hit enter?
+[04:53] sudocarl: rather its outputting the date formatted to ISO-8601
+[04:54] sudocarl: nvm I got it :)
+[04:56] ryah_away: now my http parser is on reddit and hackernews...
+[04:56] sudocarl: lol nicely done :)
+[04:56] ryah_away: my poor server
+[04:57] sudocarl: on livejournal?
+[04:57] ryah_away: (oh i guess that's github, nm)
+[04:57] sudocarl: :D
+[04:57] sudocarl: and gh
+[04:59] sudocarl: holy crap ryah nice job :)
+[05:00] tlrobinson has joined the channel
+[05:02] keeto has joined the channel
+[05:09] rakeshpai: would you consider that doing frequent addListener and removeListener is an overhead?
+[05:15] ryah_away: sure
+[05:15] rakeshpai: hmm... cool... will need to work around that then
+[05:18] ryah_away: well, not a lot of overhead, of course :)
+[05:21] fynn has joined the channel
+[05:25] JoePeck has joined the channel
+[05:35] jchris has joined the channel
+[05:39] fynn has left the channel
+[05:43] harryv has joined the channel
+[05:43] harryv: hey. anybody been doing any SIP work w/ node?
+[05:58] malkomalko has joined the channel
+[06:15] emyller has joined the channel
+[06:24] JimBastard: inimino can you link me to the code where you modify session.data and have that data get saved into memory
+[06:25] inimino: JimBastard: ah, in the demo?
+[06:25] inimino: ACTION looks
+[06:26] inimino: JimBastard: http://boshi.inimino.org/3box/session/demo.js
+[06:26] inimino: if(!session.data.history) session.data.history = []
+[06:27] JimBastard: i think i figured it out, was just being silly
+[06:27] inimino: basically once you have the session, you can do anything you want to .data, and any subsequent request that gets that session will have the same JavaScript object
+[06:27] inimino: ok
+[06:28] JimBastard: ive got it working with real minimal code
+[06:28] JimBastard: whats up with setting the client side data, is that all complete or do you still need to work anything out?
+[06:29] inimino: JimBastard: it's pretty complete, though Ryan was talking about some API changes on the mailing list that would make it nicer
+[06:30] JimBastard: ill check that out
+[06:30] inimino: if it becomes possible to set response headers in more than one place
+[06:30] JimBastard: whats up with the git hub
+[06:31] inimino: I'm going to put the session code in my git repo a little later
+[06:32] inimino: I introduced a data corrupting bug in my revisioun store last night and now I'm reconstructing the manifest file as it should have been since that time ;)
+[06:32] inimino: but after that...
+[06:32] JimBastard: aight
+[06:39] JimBastard: i dont see anything on the mailing list about session stuff
+[06:43] JimBastard: yo inimino, whats up with not using semicolons
+[06:43] inimino: JimBastard: the message on the mailing list was about setting request headers
+[06:43] JimBastard: k
+[06:44] JimBastard: it seems you dont use semi colons in your JS
+[06:45] kriskowal_ has joined the channel
+[06:46] inimino: JimBastard: indeed, I use them only when required (which is seldom)
+[06:47] JimBastard: thats a little hectic
+[06:47] cmlenz has joined the channel
+[06:47] JimBastard: :p
+[06:48] inimino: (hectic?)
+[06:51] JimBastard: ;;
+[06:51] rakeshpai has joined the channel
+[06:51] JimBastard: i guess you can just wrap everything in ()
+[06:52] JimBastard: kinda lispy
+[06:56] inimino: in most cases, you can omit semicolons at the end of lines
+[06:56] inimino: if you write more than one statement on a line, they are required
+[06:56] inimino: (and in a few other cases where the grammar would otherwise be ambiguous)
+[06:57] JoePeck: and for loops ;)
+[06:58] inimino: yes, and for loops :)
+[07:02] jed has joined the channel
+[07:08] JimBastard: inimino your session code is acting a bit wonky, seems to regenerate new session. i finally got all the plumbing hooked up a bit better
+[07:08] JimBastard: ill play with it some more
+[07:14] inimino: JimBastard: I'll take a look in a minute, hopefully I didn't send you an old version...
+[07:18] JimBastard: yeah i dunno your server seems down now
+[07:18] JimBastard: the session code doesnt seem to be working for me though
+[07:19] inimino: yeah I just took it down
+[07:19] inimino: should be back up
+[07:20] inimino: let me finish applying this fix and I'll take a look
+[07:22] inimino: ok
+[07:29] Micheil_away: hmm.. that's odd, I didn't actually realise someone in here was called JimBastard
+[07:32] JimBastard: lolwut
+[07:32] Micheil_away: hey.. inimino, with the sessions "addon", could you provide a bit of feedback on an idea.. 
+[07:32] JimBastard: code is still acting wonky here, do you have that online demo still working
+[07:32] inimino: alright, finally, bug squashed and damage undone...
+[07:32] inimino: I'll restart the demo with the current code
+[07:32] Micheil_away: JimBastard: someone mentioned somewhere the other day "But what if say JimBastard whated to do XYZ", and I thought they were meaning something like "Joe Blow"
+[07:33] JimBastard: lol 
+[07:33] JimBastard: they were, there are multiple jimbastards
+[07:33] JimBastard: its like robin hood
+[07:33] Micheil_away: does something have to be a method to be able to emit some data?
+[07:33] JimBastard: not sure what you mean
+[07:33] JimBastard: probaly
+[07:34] Micheil_away: eg, can I have: XYZ = {myMethod: function(){}}; sys.inherits(XYZ, process.EventEmitter); ?
+[07:34] JimBastard: uhhhh
+[07:34] path[l] has joined the channel
+[07:34] JimBastard: you could use the even listeners?
+[07:35] JimBastard: i havent had too much time to focus on implementing design patterns in node yet
+[07:35] inimino: JimBastard: yeah, I'm seeing some bug there
+[07:35] inimino: ACTION looks into it
+[07:35] avi4 has joined the channel
+[07:35] JimBastard: damn ive been trying to sort this out for a bit
+[07:35] JimBastard: i see what you are doing though
+[07:35] JimBastard: i might be able to fix
+[07:35] JimBastard: let me know
+[07:36] JimBastard: if this project comes through im gonna have to build a bunch of crap
+[07:36] JimBastard: real quick
+[07:36] JimBastard: should be fun
+[07:36] Micheil: it'd be good to see how others are using node in a bigger context
+[07:36] mtotheikle has left the channel
+[07:36] Micheil: eg, are they placing load balancers in front of it
+[07:36] Micheil: or rather caching mechanisms
+[07:36] JimBastard: i'll be using it for real-time data
+[07:36] JimBastard: via ajax
+[07:37] JimBastard: and an outside source
+[07:37] JimBastard: put everything in memory and see how clients can have concurrent connections
+[07:38] Micheil: eg, placing Varnish in front of it for better performance
+[07:38] Micheil: (ref: http://varnish.projects.linpro.no/wiki/Introduction )
+[07:39] JimBastard: yeah varnish is cool
+[07:40] path[l] has joined the channel
+[07:40] JimBastard: yo inimino the lack of semicolons is really hard to read for me
+[07:40] JimBastard: i keep bugging out from years of using them
+[07:41] inimino: heh
+[07:41] inimino: I've got used to not having them
+[07:44] JimBastard: it looks like setCookieHeaders() isn't setting anything
+[07:44] inimino: JimBastard: I can see the bug, it's creating two different sessions and alternating between them on subsequent requests
+[07:44] inimino: I don't know why yet
+[07:45] JimBastard: it might be worse then that, im not really able to track any sessions at all using your code
+[07:45] avi4: does anyone use the remote debugger?
+[07:45] JimBastard: im getting unique ids every time and not seeing the cookie set in any of my requests
+[07:45] JimBastard: node_debug ?
+[07:45] avi4: node --debug
+[07:45] JimBastard: ahhh not really
+[07:45] JimBastard: there is a web console for debugging though
+[07:45] inimino: JimBastard: I'm seeing two alternating cookie values in Wireshark
+[07:45] JimBastard: it had async output
+[07:46] JimBastard: ill have to look a diffirent way then
+[07:46] JimBastard: has*
+[07:46] avi4: is the web console for debugging documented anywhere?
+[07:48] JimBastard: http://maraksquires.com/node_debug/
+[07:48] JimBastard: its still real beta
+[07:48] JimBastard: barely works
+[07:48] kriskowal has joined the channel
+[07:48] JimBastard: not sure where --debug docs are
+[07:48] JimBastard: could be the v8 docs you are looking for
+[07:49] avi4: yeah it's not so much how to use the v8 debugger,
+[07:50] avi4: I'm pretty comfortable with that
+[07:50] emyller_ has joined the channel
+[07:50] avi4: but for example, whatever script you pass to node
+[07:50] Micheil: you can't do resp.sendHeader twice, can you?
+[07:50] avi4: all of its functions will be wrapped
+[07:50] avi4: in a way that you can't get at them from the debugger to set breakpoints etc
+[07:50] avi4: var __wrap__ = function (exports, require, module, __filename) {
+[07:50] avi4: that stuff.
+[07:51] Micheil: because with the sessions functions, it'd be useful to be able to do something like: Session.create(req, resp); and have it automatically set the Set-Cookie header
+[07:51] JimBastard: thats what we are doing
+[07:52] JimBastard: at least trying
+[07:52] JimBastard: inimino firefox and firebug arent seeing any cookie info at all in the response
+[07:52] JimBastard: it should appear in there right?
+[07:53] inimino: yeah
+[07:53] inimino: JimBastard: how are you setting the setCookie header?
+[07:53] JimBastard: resp.sendHeader(200,{'Content-Type':'text/html','Set-Cookie':session.setCookieHeader()});
+[07:54] JimBastard: is that wrong?
+[07:54] inimino: no, that's right
+[07:54] inimino: so for sure the Set-Cookie header will exist in the response...
+[07:54] inimino: it's odd that Firebug isn't seeing it at all
+[07:54] JimBastard: do you see it in yours?
+[07:55] JimBastard: more importantly, i cant retrieve it as its never defined in my post
+[07:55] JimBastard: or GET
+[07:55] JimBastard: HTTP request
+[07:55] JimBastard: req.headers.cookie
+[07:55] johan-s has joined the channel
+[07:55] inimino: I'm using Wireshark, not Firebug
+[07:55] JimBastard: cant see that
+[07:55] JimBastard: well, that should be in the debug.log(req)
+[07:56] JimBastard: req.headers.cookie
+[07:56] JimBastard: if its been set
+[07:56] inimino: maybe it's being sent with a bad expiration date and so Firefox isn't sending it back
+[07:56] Micheil: hmm..
+[07:56] JimBastard: checking
+[07:56] Micheil: I wish the HTTP moduel was more low level
+[07:57] Micheil: I mean, I'm sure other systems allow the setting of headers without the need of setting the status code
+[07:58] inimino: Micheil: yeah, that's what ryah_away was discussing on the mailing list... I should probably reply to that thread
+[07:59] halorgium: hmm, i didn't click that status was set with headers
+[08:00] halorgium: i agree
+[08:00] Micheil: eg, like this: https://developer.mozilla.org/en/XMLHttpRequest#setRequestHeader%28%29
+[08:00] the_undefined has joined the channel
+[08:00] halorgium: Micheil: the state machine should be (can set status) -> (can set header -> ...) -> (can write body -> ...) -> (finish)
+[08:00] JimBastard: is Max-Age required?
+[08:00] Micheil: Max-Age is for caching
+[08:00] inimino: halorgium: yes
+[08:01] halorgium: inimino: each should be separate
+[08:01] JimBastard: December 8th 2009
+[08:01] JimBastard: hrmm
+[08:01] halorgium: (perhaps with a high level API for tackling the simple case
+[08:01] Micheil: halorgium: or have the resp as an object or soemthing
+[08:01] inimino: I think having a resp.headers object, which can be modified at will anytime before the first sendBody() call, would be nice
+[08:01] inimino: JimBastard: max-age isn't required
+[08:01] JimBastard: didnt think so
+[08:02] inimino: December 8th looks like the default, one week
+[08:02] inimino: (default cookie expiration in the code, that is)
+[08:03] Micheil: I mean, the reason why I'm interested in a standalone resp.setHeader() method is for the Sessions module
+[08:03] JimBastard: i just keep getting new sessions, im still trying to debug
+[08:03] inimino: me too
+[08:03] inimino: but there are other cases where it would be very convenient to separately set headers I think
+[08:04] halorgium: Micheil: well, that is a given
+[08:04] Micheil: inimino: I'm currently reworking what I've got so that it's more evented
+[08:04] halorgium: those state changes are callbacks on the resp object
+[08:05] inimino: halorgium: callbacks?
+[08:08] halorgium: inimino: sorry, i'm coming from a diff background
+[08:08] halorgium: functions? methods?
+[08:08] JimBastard: sooo strange inimino
+[08:09] JimBastard: my page is erroring out in the browser a bit and saying its not connecting
+[08:09] JimBastard: but debugging still firing
+[08:09] cmlenz has joined the channel
+[08:09] inimino: halorgium: ah, I thought you were saying that there would be an event for each of those or something, but I see what you mean now
+[08:09] shfx has joined the channel
+[08:09] inimino: JimBastard: weird, can I see your test page?
+[08:10] Micheil: is there currenlty any sort of feature in Node that does the mixing in of two objects?
+[08:10] inimino: JimBastard: I'm still trying to track down the alternating cookie thing
+[08:10] Micheil: ala, jQuery's $.extend, or dojo's dojo.mixin(target, src...)
+[08:11] inimino: JimBastard: I'm wondering if it has something to do with the cookie expiration date, it was working much more reliably before I added that
+[08:11] inimino: Micheil: process.mixin
+[08:12] Micheil: oh, it is actually jquery's extend :D
+[08:17] malkomalko has joined the channel
+[08:19] Micheil: inimino: because I'm moving towards having a single session manager, do you think it's a good idea to have it auto instantiate, and only allow one session manager?
+[08:19] shfx has joined the channel
+[08:19] Micheil: inimino: like, could you think of any reason why you might need two sessions open?
+[08:20] inimino: Micheil: actually, I thought one of the benefits of having that session object is that you can have two if you want... granted I can't think of a reason for it
+[08:20] inimino: erm
+[08:20] inimino: session manager object, I mean
+[08:21] Micheil: I'm probably coming at this from a crappy angle..
+[08:22] Micheil: http://github.com/Miksago/Node.js-Sessions/blob/0.0.3/Sessions.js
+[08:22] Micheil: something like that
+[08:22] inimino: ACTION is knee-deep in some weird cookie crap at the moment but will look soon
+[08:22] Micheil: or would it be better to do SessionManager.domain = ... instead of having some options object floating about?
+[08:25] Micheil: I have no idea what I'm doing with it right now.. I know I need something like that.. but as to how like that, I have no idea
+[08:28] inimino: ACTION looks
+[08:28] JimBastard: Micheil there is already something more developed in the works
+[08:28] JimBastard: if inimino ever checks it into the github
+[08:28] Micheil: that's a branch
+[08:28] Micheil: have a look at the master copy.
+[08:28] Micheil: that's my take on inimino's work.
+[08:29] Micheil: I'm trying to rethink it from ground up.
+[08:29] Micheil: brb
+[08:30] inimino: I'm trying to fix this alternating session bug at the moment, then I'll push to git
+[08:34] Micheil has joined the channel
+[08:35] inimino: :/
+[08:35] inimino: well...
+[08:38] sixtus42 has joined the channel
+[08:41] shfx has joined the channel
+[08:41] inimino: I'm seeing Cookie headers on the server that look like this: Cookie: SID=9tRE3vns91S, SID=LIDF0/gQveO
+[08:41] inimino: but Wireshark isn't showing me those
+[08:56] inimino: ACTION will upgrade to the latest node tomorrow and see if the problem persists
+[09:04] shfx has joined the channel
+[09:06] jspiros has joined the channel
+[09:23] cmlenz: ah, asciidoc is well known as a nightmare dependency :P
+[09:24] shfx has joined the channel
+[09:47] jed: hey guys, i just put up a first shot at an app builder for node. would love some feedback.
+[09:47] jed: http://github.com/jed/fab/#readme
+[10:12] inimino: ryah_away: on persistent connections, node seems to be mixing in cookie headers from previous requests: http://www.pastie.org/721508
+[10:18] inimino: (to test that, run the test program and click 'again' repeatedly and you should be able to reproduce)
+[10:26] kriskowal has joined the channel
+[11:09] pdelgallego has joined the channel
+[11:20] pdelgallego: Hi, What open source projects can I read to see good code of node.js?  I completely new to Javascript on the server side. 
+[11:20] harryv has left the channel
+[11:39] frodenius: !log
+[11:42] shfxpl has joined the channel
+[11:42] path[l] has joined the channel
+[11:49] Connorhd_ has joined the channel
+[11:58] soveran has joined the channel
+[12:14] sixtus42_ has joined the channel
+[12:15] path[l] has joined the channel
+[12:15] cmlenz has joined the channel
+[12:43] webben has joined the channel
+[12:50] voodootikigod__ has joined the channel
+[12:51] emyller has joined the channel
+[13:00] Micheil_away: anyone seen lawnchair?
+[13:05] sztanpet has joined the channel
+[13:12] jan____: Micheil_away: yea
+[13:13] Micheil_away: think it has an applicatiuon in node?
+[13:14] Micheil_away: maybe 100,000 was a too large a test suite
+[13:17] jan____: Micheil_away: lawnchair is the fourth iteration of the same thing (since browsercouch, jscouch, JSONDB and likely others). I think they are a good API demo that needs to be implemented natively (which is being worked on), but not projects that are generally useful to build other apps upon.
+[13:19] Micheil_away: it'd be interesting to see what databases / datastores could exist within node.
+[13:21] jan____: we (a group of couhcdb devs, mozilla folks and independents) have thought about that long and hard. we need something like JSONDB: http://github.com/jchris/WebWorkerStorage/blob/master/JSONDB.md built into the runtime(s) to build any sort of data store.
+[13:22] jan____: though forking for concurrency in node can be an issue
+[13:22] Micheil_away: jan____: what about relational data?
+[13:23] jan____: that can be built on top of that
+[13:23] jan____: JSONDB implements what is equivalent to the storage engines in say MySQL.
+[13:24] jan____: no problem in adding a DSL to make querying indexes more akin to SQL or even use SQL
+[13:24] jan____: I don't think anybody would want to build it, but it'd be possible
+[13:41] fictorial has joined the channel
+[13:54] Biscuits has joined the channel
+[14:03] rakeshpai has joined the channel
+[14:16] olivvv has joined the channel
+[14:34] malkomalko has joined the channel
+[14:53] harryv has joined the channel
+[14:53] fictorial: I don't see a way to inspect a Promise object to determine if it's already fired an event.  Is there a way?  This is for a sanity check for a Promise util I'm writing this morning
+[14:55] fictorial: that is, if my util is given a Promise object erroneously after it's already fired its event and then waits around for it to fire the event, it'll wait forever.  yes, a user-error but if I can avoid it, great
+[14:55] ryah_away: inimino: i think you need multiple set-cookie headers
+[14:56] jan____: ryah_away: gotcha! :) did you get my msgs?
+[14:57] ryah_away: jan____: yeah - talked to jchris
+[14:58] jan____: aright!
+[14:58] ryah_away: fictorial: there is such a member (has_fired) but it's only internal
+[14:58] ryah_away: it would need to be exposed
+[14:58] fictorial: gotcha
+[14:59] ryah: man the internet sucks here
+[15:02] Biscuits: Whathappened ?
+[15:03] cloudhead has joined the channel
+[15:18] sprsquish has joined the channel
+[15:27] quirkey has joined the channel
+[15:28] shfx has joined the channel
+[15:33] apgwoz has joined the channel
+[15:34] cmlenz: ryah: did you see my list post about the issue with HEAD requests in http.Client?
+[15:38] inimino: ryah: if the browser sends "Cookie: key=bar", and no other cookie header with that request, and "debug('got cookie: '+req.headers.cookie)
+[15:38] inimino: erm.
+[15:39] inimino: ... and debug('got cookie: '+req.headers.cookie) prints DEBUG: got cookie: key=bar, key=bar
+[15:39] inimino: or "DEBUG: got cookie: key=foo, key=bar"
+[15:40] inimino: then that is a bug, right?
+[15:48] ryah: cmlenz: oh yhea, i think i forgot about it
+[15:49] ryah: inimino: i don't think it's a bug - node doesn't really do anything with these cookie headers. i haven't looked at your example in very detail though
+[15:49] ryah: cmlenz: i had starred it :)
+[15:49] cmlenz: cool :)
+[15:50] ryah: cmlenz: yes, i like your api suggestion
+[15:50] ryah: i think it should be done
+[15:50] ryah: oh wait, is that right right email? that says nothing about HEAD
+[15:50] cmlenz: that was a different one
+[15:50] cmlenz: hold on
+[15:51] cmlenz: http://groups.google.com/group/nodejs/browse_frm/thread/169869154d559c6c
+[15:56] ryah: cmlenz: okay - probably looks good - if you could add a test it would help me push that up faster: http://github.com/ry/http-parser/blob/master/test.c
+[15:57] fictorial: PromiseChain: http://gist.github.com/246060 PromiseGroup: http://gist.github.com/246384 let me know your feedback... tests on gists page: http://gist.github.com/fictorial
+[15:58] cmlenz: hum, I'll try to figure that out
+[15:58] ryah: fictorial: i cna't look at it now, gtg
+[15:58] fictorial: np
+[16:02] inimino: ryah: here's a simpler test case: http://www.pastie.org/721883
+[16:04] voodootikigod__ has joined the channel
+[16:06] ryah: inimino: can you email me it?
+[16:06] inimino: k
+[16:11] malkomalko has joined the channel
+[16:17] sudoer has joined the channel
+[16:19] frodenius: fictorial: did you see my .depend and .group? http://github.com/fwg/node/blob/master/doc/api.txt#L353-364
+[16:20] frodenius: .chain would have been next but idk if node will switch do deferred
+[16:22] fictorial: heh no I didn't see that - did you post to the mailing list with this?  I wouldn't have created mine if it was done already.  oh well
+[16:23] frodenius: ryah posted for me about this as i could'nt at the time due to google groups spam blockage
+[16:23] fictorial: dang I must have missed that
+[16:23] fictorial: I hate wasted effort!
+[16:23] fictorial: is there an impl. too or just the doc?
+[16:24] frodenius: its in my git fork
+[16:24] frodenius: http://github.com/fwg/node/blob/master/src/node.js#L320
+[16:25] fictorial: is this going into mainline?
+[16:26] frodenius: ryan has not commented on this
+[16:26] fictorial: alright - thanks for the heads up on your version!
+[16:26] frodenius: your group impl is also subtly different
+[16:27] frodenius: emitting sort of "progress" events
+[16:27] fictorial: yeah
+[16:27] fictorial: "one_done" then when all are done, "all_done"
+[16:28] fictorial: I needed this for using multiple chained calls to redis
+[16:28] fictorial: I mean the chain idea in general, not one_done, etc.
+[16:29] frodenius: i did that in a seperate object too, http://github.com/fwg/nodejs.irc/blob/master/util/progress.js
+[16:29] binary42 has joined the channel
+[16:30] fictorial: e.g. generate id via INCR, store with MSET, then store id to "all" set via SADD, etc.
+[16:30] fictorial: I see.. Ok
+[16:30] fictorial: I will follow you on GitHub since we're overlapping a fair amount!
+[16:30] frodenius: :)
+[16:30] frodenius: seems so
+[16:31] frodenius: your approach with the named stuff is interesting
+[16:32] jan____: fictorial: these commands look similar, have you seen Awesome? http://github.com/janl/awesome
+[16:32] fictorial: jan____: yes
+[16:32] fictorial: I have redis-node-client 
+[16:32] jan____: ah cool :)
+[16:33] fictorial: Awesome is a reimplementation of Redis in Javascript
+[16:33] fictorial: no client needed :)
+[16:34] fictorial: there are better ways of implementing various things in Awesome but that's not the point of that project... it is a learning exercise.
+[16:35] fictorial: I have a half-done experimental DB inspired by Redis called NOSE (someone here named it for me) that I cannot determine is worth my time to play with since Redis is getting "virtual memory" and will become distributed shortly
+[16:36] fictorial: so instead I think I'll focus on just using Redis and by the time I have to worry about it taking too much memory, it'll have some form of sharding/distribution built-in :)
+[16:36] johan-s has joined the channel
+[16:36] fictorial: so I'm working on an Ohm-like persistence layer for Javascript objects 
+[16:36] fictorial: called Nohm ("gnome")
+[16:36] fictorial: should have first commit later this week
+[16:37] sixtus42 has joined the channel
+[16:38] jan____: fictorial: I knkow, I wrote it :)
+[16:38] the_undefined has joined the channel
+[16:38] fictorial: thought your name looked familiar!
+[16:39] fictorial: actually, aren't you involved in CouchDB too?
+[16:39] fictorial: yeah ok
+[16:39] fictorial: so, uh, hi, nice to meet you! :)
+[16:40] jan____: heh, hi :)
+[16:40] jan____: nice meeting you.
+[16:40] fictorial: another Berliner!  seems the capital of the JS world is Germany!
+[16:41] fictorial: I'm in New York
+[16:41] ashb: fictorial: looked at persevre?
+[16:41] ashb: (kris zyp's project)
+[16:42] fictorial: ashb: Yes, I have... Frankly it seems hard to grok and rather huge.  I got turned off at first blush but it *is* interesting.
+[16:42] ashb: ditto :)
+[16:42] ashb: just wasn't sure if you are aware of it
+[16:42] jan____: fictorial: I did JSConf.eu, too :)
+[16:43] fictorial: thanks, yeah.  if nothing I suffer from analysis paralysis ... read about other people's projects too much! 
+[16:43] fictorial: jan____: nice yeah that looked like a blast.  wish I could have attended.
+[16:43] jan____: fictorial: totally, you gotta go to .us in DC in april
+[16:43] fictorial: hmmm that sounds good!
+[16:44] fictorial: there's a couple of datastores that have been created yet that are just under the surface... 2nd generation "nosql" things
+[16:44] jan____: fictorial: the ticket sales are open (the entire site navigation is hidden in firebug), I suggest getting a ticket asap
+[16:44] jan____: http://jsconf.us/2010/
+[16:44] fictorial: cool let me check it out
+[16:46] shfx has joined the channel
+[16:46] fictorial: love the ascii art lol
+[16:53] RayMorgan has joined the channel
+[17:00] Judofyr has joined the channel
+[17:01] Judofyr has joined the channel
+[17:04] Judofyr: what should you do if an error occurs *after* you've sent a 200-status?
+[17:06] Wes-: Judofyr: curse?
+[17:06] Wes-: it's about all you CAN do
+[17:06] bentomas has joined the channel
+[17:07] Judofyr: what can I do? :-)
+[17:09] Judofyr: FYI, I don't really have a node.js-app, I was just wondering and thought maybe you already have solved that issue
+[17:09] malkomalko has joined the channel
+[17:09] ashb: Judofyr: scream loudly (i.e. send the error, and use JS to tidy things up, etc.)
+[17:11] Judofyr: :-(
+[17:12] ashb: the browser's seen a 200 response and some content. there no other options
+[17:15] Judofyr: so how do you currently handle errors in node.js? 
+[17:15] jan____: write correct code.
+[17:16] inimino: jan____: close the connection
+[17:16] joemccann has joined the channel
+[17:16] joemccann: yo voodoo
+[17:16] joemccann: i need schooling on setting up a narwhal instance
+[17:16] joemccann: any pointers?
+[17:17] inimino: er, sorry jan____, I meant Judofyr
+[17:17] Judofyr: inimino: yeah, but that's not so friendly to the user :/
+[17:19] inimino: Judofyr: it's better than leaving the connection open, as far as being user-friendly, you should make sure you are highly likely to succeed before ever sending 200
+[17:19] aguynamedben has joined the channel
+[17:19] malkomalko: fictorial: where in NY you at?
+[17:19] fictorial: North of Manhattan
+[17:20] sixtus42_ has joined the channel
+[17:20] malkomalko: the Bronx? :)
+[17:20] malkomalko: I'm in Brooklyn
+[17:21] fictorial: I have some friends in Dumbo
+[17:21] malkomalko: we should try to get a small crew together to do some Node hacking
+[17:21] fictorial: that'd be great
+[17:21] binary42: I need some more people to come to NYC.js and talk about node.js (hint)
+[17:22] malkomalko: oh snap.. perhaps I should join :)
+[17:22] Judofyr: inimino: I guess so, but it would be cool to send out data you know needs to be sent anyway. (beginning of the template)
+[17:22] malkomalko: binary42: do you work at Pivotal Labs?
+[17:23] binary42: malkomalko: I'd try to get ryah to come but I don't have the spare cash to fly him out right now.
+[17:23] binary42: malkomalko: nope.
+[17:23] malkomalko: is NYC.js on meetup? 
+[17:23] inimino: Judofyr: sure, but only if you truly know that's what needs to be sent (and not a 404 or 500 or something else)
+[17:24] fictorial: binary42: joined the google group - I'll try and come down for one of these meetings.  It sounds great.
+[17:24] fictorial: How many people do you have?
+[17:25] binary42: Short of 20 come. It depends on how much work I do on promotion the days before.
+[17:26] binary42: Still looking at possible talks for the next meeting (2nd Thurs)
+[17:26] fictorial: 2nd thu of every month?
+[17:26] binary42: We always have open floor for lightning talks though. Not strictly 5 mins either.
+[17:26] binary42: Yup.
+[17:26] malkomalko: I'm trying to figure out a way to write a proper mongodb node implementation
+[17:26] fictorial: binary42: awesome, I'll def. show up
+[17:27] malkomalko: yah I'll show up too, is the google group the place to hit binary42 or is there another link?
+[17:27] binary42: malkomalko: I've tried to get the mongo guys to put up a better JavaScript accessible API but with sockets it would be easier. binary IO still sucks on node though. I'm working on that part.
+[17:27] fictorial: looks like there's nycjs on twitter too
+[17:27] binary42: goog group, yes.
+[17:27] binary42: That's me too.
+[17:27] binary42: twitter is nice for people who use twitter but I always post to the ML.
+[17:28] malkomalko: yah, I know the binary IO sucks, which was what was holding me back
+[17:28] malkomalko: I tried to get creative by accessing the js shell, and I realized it was a pure hack, but I've been improving upon it and it's actually working out quite nicely
+[17:28] binary42: :-) I will likely start code for that this weekend. I have the core sketched out.
+[17:29] malkomalko: weren't you showing the channel some JS Bson type conversion libraries on github to use with mongo's wire protocol? is that the route your going to take?
+[17:29] dnolen has joined the channel
+[17:30] binary42: me? No. I have no plan on specializing anything for BSON.
+[17:30] binary42: Not actually a fan of BSON at all.
+[17:30] binary42: I'd rather stick with things like BERT.
+[17:31] binary42: Anyway... I'm going to focus on some code here at the office but ping me if you guys want to meet up sometime (this week is hard though).
+[17:31] binary42: Also, if anyone wants to give a node.js talk... :-) I'd be very happy.
+[17:31] malkomalko: sure, if you want to maybe hack away on it together this weekend, might be fun... I think a proper mongo driver would be huge
+[17:32] malkomalko: I'd be willing to give an intro talk
+[17:32] binary42: malkomalko: Could you do 30 mins?
+[17:32] malkomalko: I can talk forever about anything
+[17:32] binary42: On the 10th at 19:00 EST?
+[17:32] malkomalko: maybe I can do a "Landscape" talk showing off some of the github projects people are doing
+[17:32] binary42: =D I'll put you on that slot if you want since node.js is a hot topic.
+[17:33] paulsmith has joined the channel
+[17:33] malkomalko: sure, I'm working from home now 
+[17:33] malkomalko: let's talk more about it later
+[17:33] binary42: malkomalko: code is good too though ryah_away's talk might also be a good starting point.
+[17:33] malkomalko: I'll start throwing an idea together
+[17:33] binary42: malkomalko: Cool. Let me know in the next few days if you want to and I'll make it official.
+[17:33] fictorial: jan____: I don't have anything to speak about at jsconf us - am I still allowed to go? :)
+[17:34] malkomalko: sounds good 
+[17:34] malkomalko: anyway, hit me up later binary42 I got some work to do as well
+[17:35] jan____: fictorial: you can attend :)
+[17:37] fictorial: :)
+[17:37] voodootikigod_: binary42: i still have to make it up there
+[17:38] fictorial: jan____: what's the different ticket types for? I scoured firebug but didn't see them explained
+[17:38] jan____: voodootikigod: your customer ^ 
+[17:38] joemccann: voodoo: nice rebuttal on ars
+[17:38] joemccann: fuckn sweet
+[17:38] binary42: voodootikigod_: Right. Well, lets just say you have a good window for the 10th to shoot for. Otherwise we can give 2010 a try.
+[17:38] voodootikigod_: binary42: wait is your next nyc.js NEXT thursday
+[17:38] voodootikigod_: i thought it was THIS thursday
+[17:38] binary42: 2nd thurs of each month. Yes.
+[17:38] binary42: Oh. I hope not. I have nothing organized. 
+[17:38] voodootikigod_: dude
+[17:39] voodootikigod_: i can do next thursday if you have a hole
+[17:39] binary42: In fact there is a Gilt Groupe tech event.
+[17:39] voodootikigod_: jan____: whats up
+[17:39] binary42: Well, malkomalko has some thoughts on some content. Maybe you guys can both talk. One more specific than the other on node.js.
+[17:39] voodootikigod_: fictorial: there is nothing different
+[17:39] voodootikigod_: fictorial: pirate will just be taken away 
+[17:39] voodootikigod_: think of it as early bird
+[17:39] voodootikigod_: helping out a new event site
+[17:39] binary42: voodootikigod_: Unless there is something else you have in mind to talk/pimp on.
+[17:40] voodootikigod_: i can do the dark arts
+[17:40] voodootikigod_: and i do mean black
+[17:40] malkomalko: lol
+[17:40] voodootikigod_: hows about we hack ars technica
+[17:40] voodootikigod_: :)
+[17:40] joemccann: lol
+[17:40] joemccann: el yeah
+[17:40] malkomalko: how about you mock my node.js talk?  you can be the heckler sitting in the audience
+[17:41] malkomalko: then I'll throw in some comedy
+[17:41] voodootikigod_: deal
+[17:41] voodootikigod_: btw
+[17:41] voodootikigod_: can i bring beer to nyc.js
+[17:41] voodootikigod_: ?
+[17:41] binary42: Yeah.
+[17:41] voodootikigod_: I don't present unless I can drink
+[17:41] binary42: Of course.
+[17:41] voodootikigod_: which is why TAE sucked
+[17:41] binary42: I only pick good venues.
+[17:41] fictorial: voodootikigod_: jan____: thanks, got a ticket ... look forward to it!
+[17:41] voodootikigod_: fictorial: rockin!!! be sure to bring your parrot
+[17:41] fictorial: heh
+[17:41] voodootikigod_: and get yer shoots for the scurvy
+[17:42] fictorial: ACTION is not sure he understands the connection to pirates but likes it anyway
+[17:42] joemccann: LOL at TAE
+[17:42] jan____: voodootikigod_: you owe me :D
+[17:43] voodootikigod_: for?
+[17:43] binary42: voodootikigod_: Anyway, I'll let you and malkomalko do back to back talks if you want but please coordinate on topics so you don't repeat yourselves.
+[17:44] voodootikigod_: works
+[17:44] ashb: who's running jsconf.us?
+[17:44] voodootikigod_: I was going to present how to hack any modern site with simple javascript
+[17:44] malkomalko: you'll have to speak with my agent voodootikigod 
+[17:44] voodootikigod_: some nutjob
+[17:44] ashb: i thought it was voodootikigod_ 
+[17:44] voodootikigod_: that guy is an asshole
+[17:44] ashb: yeah, i wouldn't trust him
+[17:45] voodootikigod_: yea i am the runner
+[17:45] voodootikigod_: whats up
+[17:45] binary42: The only reason to go to JSConf.us is to heckle the organizer.
+[17:45] voodootikigod_: hahahahah
+[17:45] malkomalko: hah
+[17:45] ashb: oh just wondering how long i've got to submit a talk
+[17:46] binary42: Well, eating bacon and drinking beer fills in the cracks.
+[17:46] malkomalko: is it in your house voodootikigod ?
+[17:46] voodootikigod_: begining in jan
+[17:46] voodootikigod_: my mom's house
+[17:46] voodootikigod_: get it right
+[17:46] voodootikigod_: !
+[17:46] malkomalko: will she be attending?
+[17:47] malkomalko: is there a textmate bundle for node yet?
+[17:48] joemccann: lol
+[17:48] ashb: there's a commonJS one
+[17:48] jan____: binary42: well said
+[17:50] joemccann: bbl hoes
+[17:53] voodootikigod_: malkomalko: i like your style
+[17:54] sprsquish has joined the channel
+[17:55] malkomalko: you know it
+[17:56] mtotheikle has joined the channel
+[17:56] seanmccullough has joined the channel
+[17:58] seanmccullough has left the channel
+[17:59] saikko has joined the channel
+[17:59] curious_ has joined the channel
+[18:00] fictorial: I'm not familiar with Dojo's Deferreds -- what's the difference between them and Promises in Node.js?
+[18:00] fictorial: the_undefined: that's for you I suppose
+[18:01] the_undefined: fictorial: yo, that's some serious twitter procrastination right there :D
+[18:01] the_undefined: fictorial: http://api.dojotoolkit.org/jsdoc/1.2/dojo.Deferred
+[18:01] the_undefined: fictorial: Deferred are essentially Promises where the callbacks are chained in a meaningful way
+[18:01] fictorial: lol -- yeah Tweetie pops up a Growl notification :)
+[18:01] the_undefined: they make it very very easy to build complex async logic flows
+[18:01] mtotheikle has left the channel
+[18:02] the_undefined: let me give you an example
+[18:02] fictorial: oh good ... I was just playing around with the same ideas last night (PromiseChain, PromiseGroup, etc.)
+[18:02] fictorial: I'm glad there's something extant
+[18:02] the_undefined: fictorial: lets say you got this: http://gist.github.com/246490
+[18:02] richardb has joined the channel
+[18:03] the_undefined: (check out this great article where the sample is coming from: http://benjaminthomas.org/2009-11-29/bomber-actions.html )
+[18:03] rtomayko has joined the channel
+[18:03] the_undefined: it's quite common to run into this when working with node
+[18:03] curious_: hi can someone point to an example of sending an "Content-Type": "image/jpeg"
+[18:03] the_undefined: using deferred you could rewrite it like this: (...  code coming)
+[18:03] ashb: whats up with the odd over on that site?
+[18:03] curious_: *point me
+[18:03] fictorial: the_undefined: yeah I hit it immediately when doing multiple things with redis in one request handler for my app
+[18:04] curious_: i tried posix.cat("stars.jpg", "binary").addCallback(function (content){...
+[18:04] curious_: to no avail
+[18:05] curious_: i can't find any example of sending something other then text or json
+[18:05] curious_: no images...
+[18:05] inimino: curious_: if you send the data using the binary encoding that should work just fine
+[18:06] curious_: it looks the browser and nothing comes through
+[18:06] LordMetroid has joined the channel
+[18:06] mediacoder: curious_: show us the full code
+[18:07] frodenius: maybe try .cat('./stars.jpg',..
+[18:07] curious_: i tried adding "Content-Type": "image/jpeg" to the header 
+[18:07] LordMetroid: When i write my script, using var it doesn't create a global object?
+[18:07] curious_: do you have a pastebin
+[18:07] curious_: ?
+[18:07] frodenius: http://pastie.org
+[18:07] curious_: ok
+[18:07] aguynamedben1 has joined the channel
+[18:07] inimino: curious_: you call request.finish() too right?
+[18:07] frodenius: LordMetroid: yes
+[18:07] LordMetroid: yes?
+[18:08] frodenius: yes
+[18:08] frodenius: what?
+[18:08] curious_: mediacoder: please look at this: http://pastie.org/722089
+[18:08] fictorial: the_undefined: seems like my idea of a PromiseChain is quite similar to the Action from Bomber and Deferred from Dojo
+[18:09] the_undefined: fictorial: http://gist.github.com/246490
+[18:09] LordMetroid: I assumed I was working in the global namespace so I tried to do http://pastebin.com/df21491d but executing that gives:
+[18:09] LordMetroid: var __wrap__ = function (exports, require, module, __filename) { function () {
+[18:09] fictorial: the_undefined: sure, I get it... it's just a chain of callbacks instead of nesting them
+[18:09] fictorial: thanks
+[18:09] LordMetroid: as an error, node seemingly doesn't like me encapsulating my runtime in a self destructive function literal
+[18:09] the_undefined: fictorial: well, there are a few things that are awesome about deferred
+[18:10] the_undefined: it will wrap each callback into a try..catch
+[18:10] fictorial: the_undefined: http://gist.github.com/246060 and http://gist.github.com/246061 but I like that the API is integrated in your example (cf. PromiseGroup objects)
+[18:10] fictorial: oh, ok
+[18:10] the_undefined: so if at any point there is a problem, only errbacks in the chain will fire from that point on (until one of them changes their return value to something that is not instanceof error)
+[18:11] curious_: inimino, mediacoder: did you spot my errors?
+[18:11] fictorial: oh, yeah I just stop the whole chain one first error
+[18:11] fictorial: s/one/on/
+[18:11] the_undefined: fictorial: What I like about this is that it really makes it easy to compose complex asynchronus actions
+[18:11] the_undefined: and handle errors at all levels they may occur transparently
+[18:11] the_undefined: if node was always emitting Deferreds, you could build on those
+[18:12] the_undefined: without actually having to create your own deferred objects
+[18:12] fictorial: indeed, chaining would be built-in.
+[18:12] the_undefined: it would just be a nice chain of callbacks
+[18:12] the_undefined: yes
+[18:12] fictorial: cool, I dig it.
+[18:12] the_undefined: (still thinking the query example could be done more elegant, wondering how
+[18:12] inimino: curious_: I don't see anything
+[18:13] curious_: inimino: did you see my pastie?
+[18:13] the_undefined: fictorial: I really like that whatever I do I can just add a "addErrback" add the end of the chain to cover all possible cases
+[18:13] curious_: http://pastie.org/722089
+[18:13] inimino: curious_: yes
+[18:13] curious_: this code just doesn't work
+[18:14] frodenius: the issue remains that the chain is obligatory
+[18:14] fictorial: yep... in my example PromiseChain you can do that with chain.promise.addErrback - it's a good idea.
+[18:14] mediacoder: curious_: sendBody(content,"binary");
+[18:14] curious_: i also looked at the frameworks being built and although most have all the mime types none is working for images
+[18:14] frodenius: you can't simply add multiple callbacks that get the same success/error
+[18:14] fictorial: the_undefined: ok well I'm not going to continue on my path of PromiseXYZ then - good stuff, thanks.
+[18:15] curious_: ok i'm trying mediacoder
+[18:16] the_undefined: fictorial: there is no guarantee Ryan will accept the patch I'm working on :)
+[18:16] the_undefined: fictorial: so lets see
+[18:16] curious_: mediacoder: you're a genious :)
+[18:16] curious_: it worked!!!
+[18:16] the_undefined: for now I'm making it a standalone module for people to play with
+[18:16] curious_: thanks guys
+[18:16] fictorial: the_undefined: ditto... the name 'Deferred' resonates better IMHO :)
+[18:16] inimino: (guess I should have been more explicit about "sending it with the binary encoding" ;-))
+[18:17] mediacoder: curious_: great :-)
+[18:17] the_undefined: fictorial: I don't know, I find it easy to mistype :)
+[18:17] the_undefined: fictorial: I like Promise :)
+[18:17] fictorial: :)
+[18:18] the_undefined: but it is sort of a standard in some of the other evented frameworks out there
+[18:18] fictorial: is benjamin thomas in here? I'm reading about Bomber and wanted to say thank you for this quote: "I don’t like David Heinemeier Hansson. Frankly, I think he is a jerk."
+[18:18] orlandov: lulz
+[18:18] inimino: a common sentiment
+[18:19] emyller has joined the channel
+[18:19] voodootikigod___ has joined the channel
+[18:19] voodootikigod_ has joined the channel
+[18:23] Judofyr has left the channel
+[18:26] curious_: i wanted to suggest that picard at http://github.com/dantebronto/picard deserves to be added to the wiki
+[18:26] curious_: i tried it today and it's pretty complete
+[18:26] fictorial: nice ascii art
+[18:26] jan____: it's a wiki, no?
+[18:26] LordMetroid: If I don't want all the code in one file for maintainability sake, how can I include another JavaScript file?
+[18:26] curious_: and easy to extend
+[18:27] curious_: it's a sinatra clone
+[18:27] malkomalko: this is perfect
+[18:27] malkomalko: there's quite a selection of projects I'm going to cover for my talk
+[18:27] curious_: with working haml and routes + static
+[18:28] malkomalko: !logs
+[18:28] JimBastard: hey inimino have you tested the session code at all if cookies are completely disabled?
+[18:29] inimino: ...
+[18:29] JimBastard has joined the channel
+[18:29] JimBastard: hey inimino have you tried the session code when cookies are completely disabled
+[18:29] inimino: stay awhile, JimBastard
+[18:29] inimino: JimBastard: it just won't work at all in that case
+[18:30] isaacs has joined the channel
+[18:30] JimBastard: hey hey
+[18:30] JimBastard: i was up late last night trying to get the session stuff working, finally working. was being stupid and sending response header more then once
+[18:30] inimino: JimBastard: there could probably be a feature to detect that, in case someone wants to put up a 'please enable cookies to log into this website' or whatever
+[18:30] JimBastard: well
+[18:31] JimBastard: there are a few work arounds
+[18:31] JimBastard: 1. you could keep a server-side cookie based on a complex fingerPrint (not perfect solution)
+[18:31] JimBastard: 2. you could append the token id to every post and get as a url or post variable
+[18:32] curious_: JimBastard: do you have a framework in the works?
+[18:32] inimino: JimBastard: 1 is probably something I'd consider, it could be an option to lookupOrCreate
+[18:32] JimBastard: curious_ not really, i'd like to but there are too many things that need to be built first. lots of people are doing frameworks right now
+[18:33] JimBastard: i'm working on http://maraksquires.com/node_debug/ the debugger
+[18:33] JimBastard: and session code with a few other people
+[18:33] curious_: wow great :)
+[18:33] curious_: tried it yesterday
+[18:33] inimino: JimBastard: 2 is hideously ugly and has poor security implications, I don't want to encourage it
+[18:33] inimino: JimBastard: btw, remember that insane problem I was having with alternating sessions last night?
+[18:33] curious_: can i take a look at your session code somewhere
+[18:33] JimBastard: yes inimino
+[18:34] JimBastard: also solution #2 is very secure
+[18:34] JimBastard: you just throw away the token after the session expires?
+[18:34] JimBastard: which would be when the browser tab closes
+[18:34] JimBastard: since no cookies are in play
+[18:34] JimBastard: if you ever worked with ColdFusion and J2EE sessions they handle this really well
+[18:34] inimino: JimBastard: it's horribly insecure
+[18:34] JimBastard: how?
+[18:35] JimBastard: you are already setting the ID inside the cookie, so the client has access to it
+[18:35] bentomas: ashb: was this "whats up with the odd over on that site?" in reference to http://benjaminthomas.org ?
+[18:35] ashb: bentomas: yeah -on safari i get a hover effect on each block element
+[18:35] inimino: (how would you know when the browser tab closes?  you don't)
+[18:35] inimino: JimBastard: it's insecure because URLs leak
+[18:35] inimino: JimBastard: they show up in referer headers, bookmarks, people send them in emails, etc
+[18:36] JimBastard: its a server-side cookie
+[18:36] ashb: bentomas: that wast meant to be 'odd hover'
+[18:36] JimBastard: if(client_cant_set_cookie) {create throw away token to append to all urls}
+[18:36] inimino: a cookie is by definition client-side state
+[18:37] JimBastard: i guess
+[18:37] fictorial: oh hey bentomas ... bomber looks cool so far.
+[18:37] inimino: right, which means that anybody who sees that url can (intentionally or not) take over that session
+[18:37] bentomas: ashb: yeah, that's my website, I wanted to allow people to link to specific parts of my posts.  if you click on the hover effect (the gray bar to the left) you get a specific link for that block element.  
+[18:37] ashb: bentomas: ah.
+[18:37] bentomas: ashb: I like it but think it does have some draw backs.  Do you have any suggestions for a way to do it that is unobtrusive yet still easy?  I'm open to ideas!
+[18:37] inimino: and then the URLs are all different, ugh
+[18:38] JimBastard: fair enough
+[18:38] JimBastard: its ugly
+[18:38] ashb: bentomas: wans't obvious to me - i normally only expect that on headers
+[18:38] inimino: I don't see anything wrong with just requiring cookies
+[18:38] JimBastard: i guess so
+[18:38] ashb: bentomas: put a # cahracter near it?
+[18:38] JimBastard: well imagine this scenario
+[18:38] jed has joined the channel
+[18:38] inimino: if people are so desparate for state and won't enable cookies, the server can just create new resources and do things correctly
+[18:38] JimBastard: you have a login box and you want to limit the amount of login attempts to 3 tries. you are saying the person cant even attempt to login if cookies are disabled?
+[18:39] bentomas: ashb: yeah, that's what I originally had.  I thought it looked ugly (but that is definitely a lot more intuitive)  maybe I'll play around with it this weekend.  thanks for the feedback!
+[18:39] inimino: JimBastard: yes, if you're using cookies for authentication
+[18:39] ashb: bentomas: glad i coudl be of help :D
+[18:40] JimBastard: okay i guess thats fine to make it a requirement
+[18:40] JimBastard: :-)
+[18:40] kriskowal has joined the channel
+[18:40] inimino: :)
+[18:41] inimino: JimBastard: so that weird bug turned out to be a node.js issue
+[18:41] bentomas: fictorial: thanks!  yeah, the next step I want is to get a testing system set up so that way I can be sure it is doing what I want.  But if you have any ideas/suggestions feel free to send them along.  I'm just sort of brainstorming at the moment
+[18:41] JimBastard: tracker link?
+[18:42] JimBastard: what are you trying to build bentomas?
+[18:42] mcarter has joined the channel
+[18:42] bentomas: a web framework
+[18:42] inimino: JimBastard: http://www.pastie.org/721883
+[18:42] inimino: JimBastard: I just emailed a bug report to Ryan
+[18:42] JimBastard: kk
+[18:43] bentomas: I am following your and iminio's work on sessions 
+[18:43] JimBastard: bentomas - i would suggest trying to build components / modules that you'll need but arent available yet
+[18:43] JimBastard: bentomas - i would also suggest checking out the routing market right now, lots of people have created node.js routing frameworks
+[18:44] JimBastard: if you are into package management systems and dependecies and things like that, you should start thinking about managing multiple modules on a production machine
+[18:44] bentomas: yeah, I have looked at those.  A lot of good stuff out there.  Here is a post about the routing I am going with: http://benjaminthomas.org/2009-11-24/bomber-routing.html
+[18:44] JimBastard: templating, mustache.js is working pretty well for me
+[18:44] JimBastard: i've seen bomber
+[18:44] JimBastard: there are like 4x viable ones out there now
+[18:44] JimBastard: i even have a client-side one
+[18:45] JimBastard: if you are doing routing you should look into integrating with bbq
+[18:45] bentomas: bbq?
+[18:45] JimBastard: http://benalman.com/projects/jquery-bbq-plugin/
+[18:46] inimino: I should get my routing stuff written up and read about some of these others
+[18:46] JimBastard: i also have a JS plugin that does this but it doesnt require jQuery - http://maraksquires.com/route.js/#/Why
+[18:46] dnolen has joined the channel
+[18:46] JimBastard: no one has gotten routing working client-side and server-side together yet
+[18:46] JimBastard: you gotta do location.hash routing like bbq or route.js
+[18:46] JimBastard: and have them working together
+[18:46] mediacoder: JimBastard: what would be a usecase for clientside routing..sorry if thats a dumb q :-)
+[18:47] JimBastard: mediacoder click on the those links, bbq has an example page and route.js website is a route.js so click on links
+[18:47] JimBastard: http://maraksquires.com/articles/2009/10/22/route.js-JavaScript-Event-Pooling-on-location.hash-changes/
+[18:48] JimBastard: ben_alman's plugin is pretty good, linking that to session.js would be great since its already storing browing history
+[18:56] webben1 has joined the channel
+[19:03] JimBastard: so inimino i think im going to create a small session tracking front-end that lets you see all the current sessions as well as your own info
+[19:03] JimBastard: i think i want the ability to track sessions in the debugger as well
+[19:03] inimino: JimBastard: ok, I added something to exports so you can do that
+[19:04] JimBastard: ive got your code working
+[19:04] richtaur has joined the channel
+[19:04] mediacoder: inimino: can you repaste your repo? too lazy to scroll :-X
+[19:04] inimino: JimBastard: the correct solution long term is to let the debugger see variables that are still in scope, whether they are accessible from global scope or not, though
+[19:04] JimBastard: is there anyway to enumerate those values?
+[19:04] JimBastard: i think we need to explicity set them somewhere
+[19:04] JimBastard: maybe debug.log(this);
+[19:05] inimino: I meant in general, but that would have to come from v8
+[19:06] JimBastard: well in the debug sessions are a special entity
+[19:06] JimBastard: if i have 10,000 concurrent connections i want to be able to determine who is doing what, espically if i dont have logins required
+[19:07] inimino: mediacoder: http://boshi.inimino.org/3box/sessions/
+[19:07] mediacoder: inimino: thanks
+[19:07] inimino: mediacoder: I added some debugging statements last night, trying to debug some crazy behavior which I think is a bug in node, you'll probably want to delete those debug lines
+[19:08] cmlenz has joined the channel
+[19:08] inimino: I'll put up a proper git repo Real Soon Now™
+[19:08] mediacoder: inimino: sure.. just lost the link and wanted to keep progress (wish you were on gh tho to watch :-))
+[19:09] mediacoder: was playing a bit with your first draft (if it was yours) and wanted to see what changed recently :-)
+[19:09] inimino: probably not too much, just a couple bugfixes, and maybe nicer API
+[19:11] JimBastard: im gonna maintain a fork of it as well
+[19:12] JimBastard: pretty much the same, but with semi colons and diffirent docs / usage
+[19:12] JimBastard: should be interchangable
+[19:15] inimino: ok
+[19:15] JimBastard: mustache is pretty bad ass
+[19:16] mediacoder: yea, im using it, too :-)
+[19:16] rakeshpai has joined the channel
+[19:17] voodootikigod___: mustache ftw
+[19:24] the_undefined_ has joined the channel
+[19:29] kriskowal has joined the channel
+[19:33] jed has joined the channel
+[19:35] JimBastard: yo inimino how do i access all sessions
+[19:36] inimino: there's something on exports for it, sessionStore IIRC
+[19:37] JimBastard: i dont think i have that code yet
+[19:37] JimBastard: sessionRoot
+[19:37] JimBastard: ahh
+[19:38] voodootikigod___: JimBastard: wait are you building a web app framework
+[19:38] JimBastard: no
+[19:38] inimino: ah, yeah
+[19:39] voodootikigod___: what are you building
+[19:39] JimBastard: debugger
+[19:39] voodootikigod___: ahh gotcha
+[19:39] voodootikigod___: cool
+[19:39] voodootikigod___: still using the livecd?
+[19:39] JimBastard: also i might have to build a production application soon so im checking out what i'll need
+[19:39] JimBastard: never actually used it
+[19:39] JimBastard: rackspace is still working
+[19:39] voodootikigod___: ahh nice
+[19:40] JimBastard: sessionRoot works
+[19:40] JimBastard: thanks inimino
+[19:41] inimino: cool
+[19:43] jonahfox has joined the channel
+[19:43] jonahfox: hiya
+[19:44] JimBastard: why hello there mr fox!~
+[19:44] jonahfox: hi jim
+[19:44] jonahfox: has anyone used the addListener("close", fn) on the connection ?
+[19:45] JimBastard: not yet
+[19:46] JimBastard: does anyone know what the easiest way to pass along links is? i want to setup /* to posix.cat() any files that get requested
+[19:46] JimBastard: looking at some of the routing frameworks but would rather just have the code
+[19:47] jonahfox: what do u mean jim ?
+[19:51] inimino: (pass along links?)
+[19:52] inimino: JimBastard: you mean serve static files from disk?
+[19:52] mediacoder: JimBastard: use request.uri.path as parameter for posix.cat?
+[19:53] JimBastard: that sounds good
+[19:53] JimBastard: ill see if i get it to serve system files
+[19:53] JimBastard: lol
+[19:54] inimino: I have some slightly more advanced stuff if you need it
+[19:54] inimino: (you probably don't though)
+[19:55] JimBastard: i just gotta rip out some of this wierd fu.js stuff
+[19:55] JimBastard: i dont want a staticHandler for every single file
+[19:55] JimBastard: thats insane
+[19:55] JimBastard: (old node_debug code)
+[19:55] inimino: ah, that's how mine works too :)
+[19:56] inimino: they are generated when they are needed though
+[20:02] brandon_beacher has joined the channel
+[20:10] fictorial: OT - For my redis client, the length of string values to be SET is determined using the .length property.  This doesn't seem to work correctly when the string has characters/codepoints that require multiple bytes when encoded as UTF-8.  Is there a way to get the length as encoded in UTF-8?  unescape('%f6').length === 1 
+[20:11] fictorial: The redis command spec for SET resembles: SET KEY LENGTH CRLF VALUE CRLF so LENGTH should be the length of the string UTF-8 encoded
+[20:12] ashb: fictorial: theres a byteLength somewhere or other i think
+[20:12] JimBastard: request.uri 
+[20:13] JimBastard: request.uri.path => posix cat works nicely except for some leading front slashes >.<
+[20:14] fictorial: ashb: process._byteLength(unescape('%f6')) === 2 
+[20:14] fictorial: thanks
+[20:14] frodenius: jonahfox: yes, i have
+[20:14] malkomalko has joined the channel
+[20:14] inimino: JimBastard: you could prepend cwd
+[20:15] ashb: make sure you protecte against ../../../../../../etc/passwd
+[20:15] inimino: _byteLength is nice to know about
+[20:23] zimbatm has joined the channel
+[20:24] the_undefined_: inimino: its a hack :)
+[20:25] the_undefined_: but when it gets replaced with something proper you'll get the same functionality
+[20:25] the_undefined_: so its safe to build upon
+[20:26] the_undefined_: I can't believe there is 70+ people in here
+[20:26] the_undefined_: :)
+[20:28] inimino: ^.^
+[20:29] erikg: we lurk
+[20:30] the_undefined_: I kinda expect parties to go on while I'm gone
+[20:30] malkomalko: crazy right?
+[20:30] malkomalko: I remember when there was like 18 people
+[20:30] hassox has joined the channel
+[20:30] the_undefined_: and everybody turning silent when I show up
+[20:30] the_undefined_: malkomalko: yeah
+[20:31] malkomalko: it's a lot less boring now :)
+[20:32] gwoo: the_undefined_: you gonna make it to jsconf.us?
+[20:32] the_undefined_: anybody in here doing a production app with node yet?
+[20:32] the_undefined_: gwoo: no, it seems like you have to run some "firebug" to get in
+[20:32] gwoo: yup
+[20:33] the_undefined_: gwoo: nah, actually I'd love to go. jsconf.eu was kick-ass
+[20:33] gwoo: jsconf.about() in the console
+[20:33] gwoo: the_undefined_: well, maybe things will change before April ;)
+[20:33] the_undefined_: gwoo: I want to propose a talk but I'm not sure abut what yet
+[20:33] the_undefined_: * about
+[20:33] the_undefined_: maybe node-channel
+[20:34] gwoo: the_undefined_: you are usually not lost for things to talk about
+[20:34] the_undefined_: I'm just somwhat concerned they won't accept 2 node talks
+[20:34] the_undefined_: gwoo: yeah, but I mean some people expect serious & good stuff. not plans for world domination :D
+[20:34] gwoo: haha
+[20:34] gwoo: unit/functional testing?
+[20:35] Wes-: the_undefined_: pick something done with node, instead of making node the subject
+[20:35] malkomalko: I don't have a production app up yet, but hopefully I will soon
+[20:35] the_undefined_: maybe, tough subject. It seems in JS you can either go XUnit-style or do really nasty stuff to build DSLs
+[20:35] the_undefined_: malkomalko: cool. what's the app?
+[20:36] Wes-: the_undefined_: looked at jresig's test stuff? ships with jquery I think?
+[20:36] malkomalko: well, to learn cappuccino + node, I'm building a desktop like GTD application following the pomodoro technique
+[20:36] the_undefined_: Wes-: qunit
+[20:36] Wes-: yeah! that's it!
+[20:36] the_undefined_: Wes-: yeah, I wouldn't talk about "general" purpose node
+[20:36] gwoo: the_undefined_: thats why people need to "know" about it :)
+[20:36] frodenius: malkomalko: pomodoro technique?
+[20:36] the_undefined_: malkomalko: sign me up, very interested
+[20:36] the_undefined_: frodenius: http://www.pomodorotechnique.com/
+[20:37] malkomalko: I don't like any of the online todo/gtd applications
+[20:37] malkomalko: and I know there isn't one for the pomodoro technique yet, so I figure what the hell
+[20:37] frodenius: ahh
+[20:37] malkomalko: it's really helping me stay productive frodenius 
+[20:37] the_undefined_: I would like a gmail-esque day planner that just tries to help you organize your day
+[20:37] malkomalko: 25 minute work spurts
+[20:37] malkomalko: yah, I'm going to try to implement it in a smart way
+[20:37] the_undefined_: malkomalko: there aren't any good pomodoro apps, I've looked
+[20:38] malkomalko: same here
+[20:38] the_undefined_: I kind of like a physical clock so
+[20:38] malkomalko: I'm hoping to have something alpha up by end of next week
+[20:38] the_undefined_: maybe something based on arduino that has wifi
+[20:38] the_undefined_: so you can sync you current task with the site when online
+[20:39] the_undefined_: ACTION really thinks there is a market
+[20:39] malkomalko: hmm, that sounds pretty cool
+[20:39] the_undefined_: for physical productivity devices
+[20:39] malkomalko: want me to loop you in when I have something up and running?
+[20:39] the_undefined_: combined with a service
+[20:39] the_undefined_: malkomalko: sure, I am actively looking for excuses to play more with my arduino
+[20:39] malkomalko: haven't really hit up any arduino stuff yet, too busy with my musical apps and max/msp
+[20:40] the_undefined_: malkomalko: it's really simple stuff
+[20:40] orlandov: arduino++
+[20:40] orlandov: specially if/when you ditch the IDE and straight up use Makefiles :)
+[20:40] the_undefined_: orlandov: hehe, haven't gotten there yet
+[20:40] the_undefined_: but y, the IDE sucks
+[20:40] the_undefined_: :)
+[20:40] malkomalko: I'd probably use some ruby stuff for it
+[20:41] jchris has joined the channel
+[20:42] the_undefined_: My 2-yearish goal is to build a flying drone that is operated by node.js
+[20:42] the_undefined_: actually shit, that would be a topic for the talk
+[20:43] malkomalko: did you see the rubyconf talk with the flying drone?
+[20:43] the_undefined_: I'll just propose it, and if it gets accepted I'll have to actually do it
+[20:43] the_undefined_: malkomalko: that was a baloon
+[20:43] the_undefined_: very lame
+[20:43] the_undefined_: http://www.youtube.com/watch?v=myK516Dieu4
+[20:43] the_undefined_: this is what I'm into
+[20:44] the_undefined_: http://www.youtube.com/watch?v=QO5yU8zNtR0&feature=player_embedded
+[20:44] the_undefined_: this one rocks
+[20:44] malkomalko: make a flying penis
+[20:44] the_undefined_: malkomalko: I'm unsure about the aerodynamics you have in mind?
+[20:45] malkomalko: lol
+[20:45] mediacoder: would node run on an embedded device? :-) sounds awesome
+[20:46] the_undefined_: mediacoder: no, not on most stuff. but this is what I have in mind: http://beagleboard.org/
+[20:46] the_undefined_: that's actually a PC of the size of a microcontroller
+[20:46] mediacoder: ah, yea...read about it
+[20:46] the_undefined_: you can run ubuntu with desktop on it
+[20:46] mediacoder: you shoudl check out IXM you can cluster them and stuff.. and they run on ARM
+[20:46] malkomalko: that's pretty awesome
+[20:47] mediacoder: yea, defenitely
+[20:47] LordMetroid: j #linux
+[20:47] sudoer has joined the channel
+[20:48] the_undefined_: mediacoder: IXM -> link?
+[20:49] malkomalko: gonna try to get together with some peeps here and finally make a mongo driver for node that doesn't suck
+[20:49] orlandov: malkomalko++
+[20:49] mediacoder: http://www.liquidware.com/shop/show/IXM/Illuminato+X+Machina
+[20:49] mediacoder: ^ the_undefined_ 
+[20:50] orlandov: malkomalko: pure js or some sort of c++ extension?
+[20:50] mediacoder: THAT would eb node on nodes :-)
+[20:50] mediacoder: *be
+[20:51] frodenius: awesome stuff
+[20:51] malkomalko: orlandov: I think it'd have to be pure js
+[20:52] malkomalko: unless something's changed I remember the way mongo was built, wouldn't really jive with the node v8 architecture
+[20:52] the_undefined_: mediacoder: kinda pricy
+[20:52] the_undefined_: :)
+[20:52] mediacoder: the_undefined_: yea ..its self-funden and open-source.. pretty small company
+[20:53] mediacoder: *funded
+[20:53] the_undefined_: malkomalko: I don't think that makes any sense, why would you not be able to write a mongo driver in C++?
+[20:53] the_undefined_: mediacoder: oh wait, I was looking at 9 cells
+[20:53] mediacoder: hehe
+[20:53] the_undefined_: mediacoder: 1 for $65 is good
+[20:53] mediacoder: well, that would be a nice cluster
+[20:54] the_undefined_: mediacoder: not sure I'd need a cluster so :)
+[20:54] malkomalko: http://groups.google.com/group/nodejs/browse_thread/thread/75a3d67b75ba5714/9c0854c88bd0bdbd?lnk=gst&q=mongo#9c0854c88bd0bdbd
+[20:54] mediacoder: hehe, yea.. im just kinda buzzed by the idea running node n clustered environments, like the name implies :-)
+[20:54] malkomalko: I mean, I'm sure it could be done :)
+[20:54] malkomalko: nothing is impossible
+[20:56] orlandov: definately possible, but maybe more work and steeper learning curve
+[20:59] the_undefined_: malkomalko: well I'm no C++ expert, but I think the problem is that the mongo C++ lib is not async and if you'd want to use it you'd have to run it in its own thread and have that communicate to nodes event loop
+[21:00] malkomalko: exactly
+[21:00] orlandov: the_undefined_: or reimplement the mongo wire protocol yourself, non blockingly
+[21:01] the_undefined_: orlandov: maybe the smartest thing, using the V8 sockets from node which are non-blocking
+[21:01] orlandov: you could probably reuse the BSON c++ code though
+[21:01] orlandov: ya
+[21:01] malkomalko: hmmm
+[21:01] orlandov: i was thinking about something like inheriting from node_net.h node::Connection
+[21:02] orlandov: i think thats it
+[21:03] the_undefined_: orlandov: yeah, sounds good
+[21:05] dnolen: so I notice that if I have a bug in my node app code the server will get killed on the exception
+[21:05] dnolen: is this a desirable behavior?
+[21:06] the_undefined_: dnolen: yeah
+[21:06] dnolen: the_undefined: why?
+[21:06] the_undefined_: that's how uncaught exceptions are meant to work
+[21:06] dnolen: why not report the exception and continue?
+[21:06] dnolen: kill a webserver for any reason is not desirable.
+[21:06] inimino: dnolen: if you don't want that, catch the exception
+[21:06] frodenius: you can do that yourself
+[21:06] inimino: because that's not safe or desirable
+[21:06] dnolen: it's the request that failed.
+[21:06] dnolen: not the server
+[21:06] inimino: no, it is the programmer
+[21:07] the_undefined_: dnolen: http://nodejs.org/api.html#_the_tt_process_tt_object
+[21:07] the_undefined_: dnolen: check the uncaughtException event
+[21:07] the_undefined_: inimino: he has a valid point, that's why the uncaughtException listener was added
+[21:07] the_undefined_: in a lot of apps you probably just want to log uncaught exceptions but keep the server running
+[21:08] dnolen: the_undefined: absolutely
+[21:08] the_undefined_: dnolen: does that help?
+[21:08] dnolen: the behavior makes sense for tcp server MAYBE
+[21:08] dnolen: for http server NO WAY
+[21:08] inimino: the_undefined_: I consider it sloppy programming, but YMMV
+[21:09] dnolen: your web app shouldn't not crash just because you missed a try/catch
+[21:09] the_undefined_: dnolen: btw. please let me know if you find any bugs with that listener, I can track down the idiot who is to blame :)
+[21:10] the_undefined_: inimino: I'd agree with you if it wasn't for the fact that javascripts try..catch block is not very agressive
+[21:10] dnolen: the_undefined: again I'm glad it's handled, but my question is simply about user friendliness
+[21:10] ACSpike[Work] has joined the channel
+[21:10] dnolen: not about some abstract "correctness"
+[21:10] inimino: continue-on-fail leads to data corruption, the Unix approach is far superior
+[21:11] mediacoder: dnolen: imo node defenitely isnt just webapps, so the way its handled now, is best for all cases
+[21:11] rtomayko has joined the channel
+[21:11] the_undefined_: inimino: https://gist.github.com/b225a07dcf13e92510ca
+[21:11] dnolen: inimino: data corruption where? it's a failed http request
+[21:11] the_undefined_: inimino: you simply will not be able to catch an error in an async library that you have not written
+[21:11] inimino: dnolen: why did it fail?  that could mean anything
+[21:11] inimino: the_undefined_: sure
+[21:12] dnolen: inimino: because I put an undefined var there, common mistake
+[21:12] inimino: the_undefined_: that's why error callbacks exist
+[21:12] dphiffer has joined the channel
+[21:12] the_undefined_: inimino: again, if you are using 3rd party code that you have no interest in maintaining a fork of
+[21:12] inimino: dnolen: then the server should come down and you can fix it
+[21:12] the_undefined_: inimino: then you are fucked if they didn't do a good job
+[21:13] the_undefined_: inimino: let me guess, you also like XHTML?
+[21:13] inimino: the_undefined_: that's the case generally when code you use fails
+[21:13] the_undefined_: Hey, wouldn't it be cool to stop rendering if the markup is invalid? WTF
+[21:13] dnolen: the_undefined: exactly
+[21:13] the_undefined_: XHTML was written by people who don't understand the internet
+[21:13] the_undefined_: ;)
+[21:13] inimino: the_undefined_: the difference is that in the case of a server crash you at least know about it
+[21:14] the_undefined_: dnolen: I have post on the topic: "XHTML died alone, the semantic web is next" http://debuggable.com/posts/xhtml-died-alone-the-semantic-web-is-next:4a4f221d-07e8-4deb-9586-2eee4834cda3
+[21:14] the_undefined_: inimino: I agree with you, in development I want my server to crash on every exception.
+[21:14] the_undefined_: But not in production
+[21:14] the_undefined_: in production I only want to fail hard when I decide so, not when something random happened
+[21:15] dnolen: the_undefined: again I beg to differ.
+[21:15] dnolen: say I have a suite of unit tests
+[21:15] dnolen: why should my server crash on one borked test?
+[21:15] dphiffer: Sorry, I'm late to the discussion -- does Node.js stop execution even if an exception is caught in try/catch?
+[21:15] dnolen: i want to see all the ones that pass and the one that's broken.
+[21:15] inimino: the_undefined_: the solution to HA is monitoring and redundancy, not sloppy "well, something failed, who knows what, but's let's trudge on and hope for the best" programming
+[21:15] inimino: dphiffer: no
+[21:16] the_undefined_: dphiffer: no, if your try..catch block works it doesn't. but its easy for it to not work, see: https://gist.github.com/b225a07dcf13e92510ca
+[21:16] dphiffer: FWIW I think this makes the comparison to XHTML a bit unfair
+[21:16] the_undefined_: inimino: it totally depends what kind of app you are writing
+[21:16] dphiffer: Unless using the incorrect Content-type header can be thought of as a "try"
+[21:16] jarib has joined the channel
+[21:17] dnolen: dphiffer: no, you have to manually catch it, I'm only arguing for a friendlier behavior, global try/catch for requests handled by http.createServer, or at least make that configurable
+[21:17] the_undefined_: dnolen: My tests always launch the server so it isn't an issue
+[21:18] inimino: the_undefined_: it's just a difference of approach, I don't think the application matters terribly much
+[21:18] ACSpike[Work]: I have a question about the description on the website. "Almost no function in Node directly performs I/O, so the process never blocks. Because nothing blocks, less-than-expert programmers are able to develop fast systems." If a function does some sort of processing or long running calculation will it still effectively block the server?
+[21:19] dnolen: the_undefined: and you kill the server after each test?
+[21:19] the_undefined_: inimino: Let me make an example. We over at transload.it do file uploading, big files. So if our server crashes that means we might kill of an upload that has been running for over 1h just because another upload caused an issue
+[21:19] inimino: ACSpike[Work]: yes
+[21:20] inimino: ACSpike[Work]: however there will be workers eventually which can handle some of that computational load asynchronously
+[21:20] the_undefined_: inimino: at this point we tolerate that as we care more about getting this thing right than being 100% available, we are alpha
+[21:20] the_undefined_: but later on I'll use a global exception catcher and make sure it sends out email reports
+[21:21] ACSpike[Work]: inimino: makes good sense. thanks.
+[21:21] the_undefined_: I think its a good approach
+[21:21] inimino: the_undefined_: again, why would you assume that, in the presence of an unknown error, carrying on and hoping for the best is safer and more appropriate?
+[21:21] the_undefined_: ACSpike[Work]: plus v8 is wicked fast, you'll not run into issues for most stuff
+[21:21] inimino: the_undefined_: anyway, it's good that node supports both :-)
+[21:22] the_undefined_: inimino: what could go wrong in the worst case?
+[21:22] the_undefined_: PLUS, any exception would usually just lead to aborting of a single internal flow
+[21:22] the_undefined_: yeah it could cause some files not getting deleted
+[21:22] the_undefined_: or memory to be hogged up
+[21:22] the_undefined_: and all kinds of stuff
+[21:23] the_undefined_: but at least it gives me some time to fix it :)
+[21:23] the_undefined_: no sudden-death
+[21:23] dnolen: it's the sudden-death thing that's far worse inimino
+[21:23] the_undefined_: health monitoring being a great strategy here
+[21:23] ACSpike[Work]: the_undefined_: you underestimate my "less-than-expertise" :-)
+[21:23] the_undefined_: and all the things you'd normally do
+[21:23] mediacoder: hehe, i dont understand the discussion :-) its great how it is..either you catch manually, have a global eventlistener or let it die..perfekt :-)
+[21:24] dnolen: miediacoder: I'm not arguing about the behavior generally for processes, it is perfect. I'm simply making an argument for a friendly behavior for http
+[21:24] the_undefined_: mediacoder: you are right, I should stop ranting
+[21:24] inimino: the_undefined_: in the worst case you could lose or silently corrupt some data
+[21:24] mediacoder: yea, i understand that.. but imo it would make stuff more inconsistent and unfriendly, having the http lib behave differently
+[21:25] the_undefined_: I just have a strong opinion that a global try..catch will do more good than bad :)
+[21:25] Biscuits: Hmm, I agree with undefined :p
+[21:25] Biscuits: Let's say there's soething the HTTP lib fires off
+[21:25] Biscuits: and it crashes, and the exception gets caught
+[21:25] inimino: the_undefined_: for example, I wrote a bug a few days ago which mixed up file descriptors and caused data corruption
+[21:25] Biscuits: now there's a Promise object floating around that's not going to do anything useful :/
+[21:25] the_undefined_: inimino: yeah, the worst case is one of the video corrupts. So be it, better than 10 people loosing 10h of collective waiting
+[21:26] inimino: the_undefined_: now I have an assertion and if anything else like that happens again I want things to come to a crashing halt
+[21:26] the_undefined_: inimino: in node.js?
+[21:26] ACSpike[Work] has left the channel
+[21:26] inimino: the_undefined_: in JavaScript code written on top of it, yeah
+[21:27] the_undefined_: inimino: well ... what happened before you had your assertations and what would happen now if you added a global try..catch?
+[21:27] the_undefined_: nobody will keep you from shooting in the foot, I usually have more issues of my code misbehaving than exceptions being thrown
+[21:27] inimino: the_undefined_: before I added my assertions, silent data corruption
+[21:28] dnolen: inimino: silent data corruption and a misplaced variable. Honestly chances are I'll have real try ... catch for errors. But I just don't want a misplaced var to take down my server.
+[21:28] dnolen: it even more nefarious because I can start the server with bad code
+[21:28] inimino: the_undefined_: now, if I make another programming error that results in that same bug, the server will crash when it happens, as it should
+[21:28] the_undefined_: inimino: what would happen if you added a global try..catch ?
+[21:29] dnolen: and the takedown happens only when the script servers the request
+[21:29] the_undefined_: inimino: my guess is, the same thing, except the server won't crash from it
+[21:29] inimino: the_undefined_: if there was a global try/catch, then that request would die and the server would carry on serving other requests, which could be fine
+[21:29] the_undefined_: inimino: yip
+[21:29] inimino: the_undefined_: but if that's what I wanted, I could just catch the exception or report it, instead of throwing
+[21:30] inimino: the_undefined_: the only reason it's going to go down is because I specifically wrote a throwing assertion there
+[21:31] the_undefined_: inimino: If you wanted your server to go down explicitely you could still process.exit()
+[21:31] the_undefined_: IMHO much better than things you may not have expected (like dnolen describes) taking your server down
+[21:31] inimino: the_undefined_: well, that's what I expect throw new Error() to do, only with a stack trace, etc
+[21:33] the_undefined_: inimino: I'd rather have the chance to look at the error before deciding to take down the server
+[21:33] bentomas: Maybe we can agree that it depends on the situation?  For example a banking website would be better to fail the accidentally start putting money in the wrong accounts…  But for other website that aren't as critical or where uptime and access is more important a global catchall would do the right thing
+[21:33] the_undefined_: bentomas: hey there
+[21:33] the_undefined_: bentomas: did you get my github message?
+[21:34] bentomas: I did!  I'm supposed to be working right now, so was going to respond this evening :)
+[21:34] rtomayko has joined the channel
+[21:34] inimino: bentomas: perhaps :)
+[21:35] the_undefined_: bentomas: finally somebody else who is working LOLCatsXIIV :)
+[21:36] inimino: ACTION should be working too
+[21:36] inimino: but, but... someone is wrong! on the Internet!
+[21:36] the_undefined_: ACTION too
+[21:36] the_undefined_: inimino: haha
+[21:37] dnolen: :)
+[21:37] the_undefined_: inimino: xkcd !
+[21:37] inimino: bingo :)
+[21:37] the_undefined_: shit this is #procrastinator :)
+[21:37] the_undefined_: we are lost
+[21:37] the_undefined_: :)
+[21:37] inimino: ACTION gets back to work for real
+[21:39] mediacoder: i have a clear concience.. its 22.40 here.. i either play with node, or watch tv :-)
+[21:39] mediacoder: 10.40 pm :-D
+[21:40] Wes-: mediacoder: I don't know about you, but I find node more interesting than transvestites
+[21:41] frodenius: i try to watch dr. who episodes but macports is building boost, fsck
+[21:41] orlandov: you're doing it wrong?
+[21:41] mediacoder: lol, well,..thats why im in front of my pc :-)
+[21:41] Wes-: wait, you have an irl tv?
+[21:41] Wes-: ACTION has only seen them on teh interwebs
+[21:42] mediacoder: no, im messing with node, and NOT watching tv...or *should* be working for my income :-)
+[21:42] mediacoder: thats what i wanted to say actually :-P
+[21:44] Bbrriiaann has joined the channel
+[21:45] Biscuits: Hmmm, what's the correct method to upgrade Node ?
+[21:49] the_undefined_: Biscuits: depends, the safest is to run a make distclean and then ./configure, ...
+[21:50] the_undefined_: Biscuits: often it is enough to just do another make && sudo make install
+[21:50] the_undefined_: Biscuits: but that won't work if ryan upgraded the v8 version
+[21:51] Biscuits: Shouldn't you like clean up the old files installed?
+[21:51] Biscuits: like uninstall first ?
+[21:52] Biscuits: Hmm, oh well, recompiled and reinstalled
+[21:52] Biscuits: on a different note, I seem to remember an OpenSSL module a while back
+[21:52] the_undefined_: Biscuits: jo
+[21:53] Biscuits: Don't suppose anyone remembers that one? can't find it on the projects page
+[21:53] the_undefined_: Biscuits: well SSL support has been added to the node core
+[21:54] Biscuits: Don't need specific SSL support, I need some hashing stuff
+[21:54] Biscuits: currently doing some of that in an external PHP script, and would like to move that to JS too
+[21:55] Biscuits: need HMAC-SHA1 and Triple-DES
+[21:55] mediacoder: Biscuits: check out node-crypto (not mine :-))
+[21:55] mediacoder: there is a c wrapper around openssl
+[21:56] the_undefined_: Biscuits: I'm doing HMAC-SHA256 in pure JS
+[21:56] mediacoder: mine is some stolen js cryptography
+[21:56] the_undefined_: Biscuits: http://point-at-infinity.org/jssha256/
+[21:56] the_undefined_: but there is also a node-crypto
+[21:56] the_undefined_: http://github.com/waveto/node-crypto
+[21:56] Biscuits: Ah, why isn't that on here: http://wiki.github.com/ry/node ?
+[21:56] mediacoder: http://github.com/waveto/node-crypto
+[21:56] mediacoder: ups :-)
+[21:56] the_undefined_: Biscuits: in the wiki? don't know, add it :)
+[21:57] webben has joined the channel
+[21:58] Biscuits: meh, don
+[21:58] Biscuits: don't have a GitHub account
+[21:58] the_undefined_: awesome :)
+[21:58] the_undefined_: oh
+[21:58] the_undefined_: ok let me add it
+[22:00] the_undefined_: added it
+[22:00] jed: the_undefined_: hey, can you add my framework while you're at it?
+[22:00] jed: http://github.com/jed/fab
+[22:00] the_undefined_: jed: why? you have a github account?
+[22:00] the_undefined_: :)
+[22:00] the_undefined_: anybody can edit the wiki
+[22:00] jed: ha ha, okay i'll add it!
+[22:01] the_undefined_: jed: that chaining you are using is really cool
+[22:02] jed: the_undefined_: yeah, i tried to minimize noise that way.
+[22:02] the_undefined_: you've done any lisp ?
+[22:02] the_undefined_: :)
+[22:02] jed: the_undefined_: so that valid code looks almost like markup.
+[22:03] Biscuits: Hmmm
+[22:03] jed: the_undefined_: i haven't, but have always wanted to try.
+[22:03] Biscuits: Any idea what the proper Ubuntu package is for the OpenSSL libs ?
+[22:03] the_undefined_: jed: do you have to return responses or can you do that async?
+[22:03] inimino: jed: I liked the look of that, too
+[22:03] jed: the_undefined_: the return is just a shortcut.
+[22:04] the_undefined_: jed: man I totally dig this
+[22:04] jed: the_undefined_: you can do anything you want, since i keep your original req/res args intact.
+[22:04] jed: the_undefined_: ha, glad you like it!
+[22:04] the_undefined_: this is one of the cooler node.js frameworks I've seen
+[22:04] jed: the_undefined_: yeah, i wanted to make it take advantage of javascript's flexibility.
+[22:04] the_undefined_: jed: can you filter the http method you want to accept?
+[22:04] jed: the_undefined_: and not just clone sinatra.
+[22:05] the_undefined_: THUMBS UP
+[22:05] jed: the_undefined_: that's the next step.
+[22:05] the_undefined_: If I have to look at yet another eval+with framework I'll got crazy
+[22:05] mediacoder: hehe
+[22:05] jed: the_undefined_: as you can see at the bottom.
+[22:05] jed: the_undefined_: instead of passing one function, you'll be able to pass many.
+[22:05] jed: the_undefined_: and chain them.
+[22:06] jed: the_undefined_: i'm thinking that the http method filtering would just be passing two functions, like this:
+[22:06] jed: the_undefined_: fab( "/", fab.GET, myFunction ).deploy()
+[22:07] jed: the_undefined_: so where fab.GET only let's the chain continue if the fab.GET function returns true, or something..
+[22:07] frodenius: jed: wow, that is nice
+[22:07] the_undefined_: THIS ROCKS
+[22:07] the_undefined_: playing with this right now
+[22:07] jed: hawman! glad you all like it.
+[22:07] the_undefined_: this is awesome, awesome, awesome
+[22:07] jed: please let me know if you find bugs.
+[22:07] frodenius: really nice way to use js
+[22:07] the_undefined_: finally somebody who isn't trying to make our past look like our future
+[22:07] the_undefined_: :)
+[22:08] the_undefined_: some code comments:
+[22:08] the_undefined_: ;( function() {
+[22:08] jed: yeah, i got a little sick of that too. sinatra is awesome, but js can do better in some ways.
+[22:08] the_undefined_: why do you nest fab in a closure?
+[22:08] jed: the_undefined_: i'm thinking of making it a browser lib too.
+[22:08] bentomas: jed: Or you could do fab(fab.GET("/"), myFunction).deploy() and have the "router" see if the path is a string or a special method object
+[22:08] jed: the_undefined_: and that's common practice.
+[22:09] the_undefined_: jed: ok, it is in the browser. It's just not needed in node, thats why I'm asking
+[22:09] jed: well, it's only node now.
+[22:09] jed: ideally, if you use fab methods and nothing implementation-specific, you'd be able to deploy it anywhere.
+[22:09] jed: that was the original idea.
+[22:09] frodenius: with a browser impl of commonjs modules, it is also not needed in there
+[22:10] Biscuits: Hmmm
+[22:10] Biscuits: why is everything in node-crypto derived from EventEmitter :S ?
+[22:10] the_undefined_: frodenius: do you know of any browser implementation of commonJS?
+[22:10] the_undefined_: I would love one
+[22:10] the_undefined_: Biscuits: async encryption? :)
+[22:10] jed: anyway, i'll probably remove the closure for now.
+[22:10] Biscuits: the_undefined_: That's what I thought, but it doesn't look like that :S
+[22:10] frodenius: i tried one myself, didnt get that far, maybe ill restart
+[22:12] fictorial: is there a less hacky way of scheduling a function to be called on the next loop iteration other than setTimeout(..., 0)?
+[22:12] the_undefined_: jed:     if ( !server )server = 0xFAB;
+[22:12] the_undefined_: lol
+[22:12] the_undefined_: clever
+[22:12] the_undefined_: :D
+[22:12] jed: the_undefined_: nice catch!
+[22:13] jed: the_undefined_: i was gonna use that for the background of the docs page when i launch it for real.
+[22:13] the_undefined_: fictorial: no, I don't think its hacky
+[22:13] jed: the_undefined_: but it's pink.....
+[22:13] the_undefined_: :P
+[22:13] the_undefined_: so what
+[22:13] the_undefined_: add a unicorn
+[22:13] the_undefined_: or a pony
+[22:13] the_undefined_: and people will dig
+[22:13] fictorial: the_undefined_: perhaps not, but it _looks_ hacky.  schedule(function ...) might be nicer to read but I don't care that much if this is the idiom. thanks
+[22:13] jed: maybe a jelly bean.
+[22:16] the_undefined_: jed: Can I have my path available as both '/path' and '/path/' ?
+[22:17] jed: the_undefined_: you mean, have them go to the same place?
+[22:17] the_undefined_: jed: yip
+[22:17] jed: the_undefined_: i need to fix the routing a little bit. it short-circuits on substrings right now.
+[22:17] jed: so, you can, but you have to put the latter first.
+[22:18] jed: they would have to point to the same function, is all.
+[22:18] jed: i guess it'd make sense to bake something like this in?
+[22:19] the_undefined_: jed: actually regex work great
+[22:19] the_undefined_: jed: I think ti would
+[22:19] jed: if you don't mind ugly paths, regex is much better. and it allows you to capture.
+[22:20] jed: the_undefined_: regex is another place i didn't want to reinvent the wheel with ":var" and other patterns.
+[22:22] the_undefined_: jed: how do I access the original req / res
+[22:23] jed: the_undefined_: unless is screwed up, they should be available as the original arguments.
+[22:23] blakemizerany has joined the channel
+[22:23] jed: the_undefined_: fab( "/", function( req, res ){ ... } )
+[22:23] jed: so you can just drop in you're existing node.js handlers.
+[22:24] the_undefined_: so sweet
+[22:26] the_undefined_: jed: seems like I'm not being passed req/res so
+[22:26] jed: blarg, lemme take a look.
+[22:28] the_undefined_: jed: how long have you been working on this?
+[22:28] jed: a week or so.
+[22:29] jed: wanted something a little less low-level for my next project.
+[22:29] jed: figgered this was the best way to get there.
+[22:29] the_undefined_: jed: nice
+[22:30] the_undefined_: I think I might use this in transload.it
+[22:30] the_undefined_: we don't have a lot of routing, but it kicks the ass out of what I'm using for it
+[22:30] the_undefined_: :)
+[22:30] jed: the_undefined_: ha, great. that'll definitely help motivate me to clean it up.
+[22:31] jed: the_undefined_: i need to get a little deeper to fix that req/res availability.
+[22:31] the_undefined_: jed: ok
+[22:31] the_undefined_: I can't really find the handler function
+[22:32] the_undefined_: from fab.fn.deploy
+[22:32] the_undefined_: oh wait its below
+[22:32] the_undefined_: nvm
+[22:32] jed: the_undefined_: for now, i think you should be able to use this._request.original and this._response.original
+[22:32] jed: the_undefined_: the function chaining makes the code a little difficult to grok.
+[22:33] jed: the_undefined_: because it's one giant overloaded function.
+[22:33] jed: the_undefined_: i think i can clean it up by making a overloaded function maker. it gets meta pretty quickly.
+[22:33] the_undefined_: hehe
+[22:33] the_undefined_: yeah
+[22:34] jed: the_undefined_: i'm also not sure what the performance hit is of calling extra functions everywhere.
+[22:34] jed: the_undefined_: i really like the style, but recursive function calls have got to be expensive.
+[22:34] jed: the_undefined_: (over a simple switch statement)
+[22:34] the_undefined_: jed: well, it gets more expensive the deeper your chain, right?
+[22:34] malkomalko: jed: badass :)
+[22:35] the_undefined_: jed: yeah, it might be expensive. But probably much less so than any routing system used by major frameworks today - so who cares?
+[22:35] jed: the_undefined_: true that. and it would simplify the code a lot.
+[22:36] the_undefined_: what would simplify it?
+[22:36] jed: creating a function that makes overloaded functions.
+[22:36] jed: based on signature.
+[22:36] jed: myFn = overloader();
+[22:36] the_undefined_: was that my idea? I'm still trying to figure out your code
+[22:36] the_undefined_: :D
+[22:37] jed: myFn.add( function1, [ String, Function] )
+[22:37] jed: etc. something like that.
+[22:37] jed: haw, no that was my idea. to make the code easier to understand.
+[22:37] jed: so that you wouldn't have to wade thru my spaghetti code.
+[22:38] the_undefined_: jed: I find some of it really good, other parts are either an aquired taste or bad - haven't decided yet
+[22:38] the_undefined_: :D
+[22:39] jed: the_undefined_: well, would love to hear your feedback. the overloading thing adds a lot of complexity to the code but makes the DSL more elegant.
+[22:40] jed: the_undefined_: there are some gotchas, like the fact that functions can't inherit from prototypes. so some mixin hackery is needed to get around it.
+[22:41] jed: the_undefined_: i'm also using crockford's prototypal style a lot for defaults, etc.
+[22:41] the_undefined_: the code use some comments I think :)
+[22:42] the_undefined_: its one of the more advanced pieces of JS code I've studied lately
+[22:42] the_undefined_: :)
+[22:43] jed: the_undefined_: where advanced == obfuscated, ha ha.
+[22:45] the_undefined_: jed: yeah, you looked too much at jQuery. That can be pretty obfuscated by itself :)
+[22:46] jed: the_undefined_: yeah, i aped jquery left and right. guilty.
+[22:47] jed: okay, time for lunch, and to get some paying work done. let's chat later, the_undefined_...
+[22:47] the_undefined_: jed: would this syntax be possible? http://gist.github.com/gists
+[22:48] jed_away: the_undefined_: it would, but i'm not sure i'm a fan yet.
+[22:48] the_undefined_: jed_away: not as the main syntax, just as an addon
+[22:48] blakemiz_ has joined the channel
+[22:48] jed_away: the_undefined_: mmmm, well, you'd need to put a method on the fab prototype.
+[22:48] rtomayko_ has joined the channel
+[22:49] jed_away: the_undefined_: so, you totally could.
+[22:49] jed_away: but i like this style better:
+[22:49] jed_away: fab( "/myPath/" )[ "GET" ]( function(){...} )[ "POST" ]( function(){...} )
+[22:50] jed_away: brackets make the DSL look more readable than dot accessing.
+[22:50] jed_away: ( like the way that the 404 and other status handlers work)
+[22:50] the_undefined_: ok, fine with me
+[22:51] the_undefined_: just want to have the http verb in front of the path to mirror the semantics of http itself
+[22:51] jed_away: but yeah, adding the method is easy. figuring out what is the most intuitive is a little harder. i'll take a look later.
+[22:51] the_undefined_: alright, have some lunch :)
+[22:51] jed_away: ah, i see.
+[22:51] the_undefined_: I'll be playing with jed more, we should keep talking
+[22:51] isaacs: jed_away: fab's syntax is making me giggle
+[22:51] isaacs: it's so bubbly!
+[22:51] jed_away: isaacs: yeah, it's a little silly. but it works!
+[22:51] isaacs: srsly
+[22:52] isaacs: i'm a fan of functions that return functions just so you can do that kind of ()()()() chaining
+[22:52] isaacs: remove the .method().otherMethod() cruft
+[22:52] jed_away: isaacs: yeah, i'm surprised that style isn't more popular.
+[22:52] jed_away: the library is called fab because it originally had two methods: find and bind
+[22:53] the_undefined_: I was wondering about the name :)
+[22:53] jed_away: but the methods got really ugly really fast.
+[22:53] jed_away: which is why i think people don't like chained jquery.
+[22:53] jed_away: (i love it, but i can see why people think it's noisy)
+[22:53] isaacs: method names make sense when there's a reasonable set of sibling-level choices.
+[22:53] isaacs: like $("#foo").click(fn).mouseover(fn2), etc
+[22:53] jed_away: true true. and i'll be adding a lot more of those.
+[22:54] jed_away: one thing i'm excited about is added a toJSON method.
+[22:54] jed_away: call it on any fab, and it basically returns a sitemap.
+[22:54] jed_away: which you can run through a template and have an instant HTML sitemap.
+[22:54] jed_away: might even make it the default, like so much index.html
+[22:55] jed_away: okay, lunch awaits. back on in an hour or so.
+[22:57] Biscuits: Who made node-crypto again ?
+[22:58] mediacoder: rhys
+[22:58] mediacoder: waveto
+[23:05] rtomayko_ has joined the channel
+[23:06] the_undefined has joined the channel
+[23:09] bentomas has left the channel
+[23:12] orlandov: has anyone used Joose successfully? what do you think of it?
+[23:13] orlandov: (Joose being Perl's Moose for Javascript)
+[23:14] rtomayko has joined the channel
+[23:17] ashb: orlandov: i remain unconvinced
+[23:17] the_undefined: orlandov: I think its stupid :)
+[23:17] ashb: orlandov: and bear in mind i'm a perl guy who uses Moose daily
+[23:17] ashb: it feels very un javascripty to me
+[23:17] the_undefined: orlandov: great showcase of JS ninja stuff, but I wouldn't want to write JS like this
+[23:18] the_undefined: ashb: dito
+[23:18] ashb: and with ES5 having getters, setters, and Object.create i'm not sure if oyu need much more
+[23:24] orlandov: ashb: yeah, i hear ya. i like declarative programming, but subverting javascript's facilities seems bad
+[23:24] ashb: much the same reason Class::Std failed
+[23:25] orlandov: ah yes...
+[23:25] orlandov: inside out classes
+[23:26] ashb: yeah - it didn't work with all the rest ofhte perl tools/modules
+[23:26] ashb: Joose isn't that bad
+[23:26] ashb: but i feel the same
+[23:28] orlandov: yeah- i mean i would hope that Joose would attempt to build on JS' existing OO paradigm
+[23:28] orlandov: and not completely reinvent it
+[23:31] ashb: so it still uses protootype chains under the hood i *hope*
+[23:41] jed has joined the channel

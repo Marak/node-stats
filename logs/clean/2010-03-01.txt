@@ -1,0 +1,1612 @@
+[00:10] rsms has joined the channel
+[00:13] <rsms> ryah: hi Ryan. In a log I noticed you and Micheil discussed patching libeio for realpath support. Any news on that? Would be neat to be able to correctly resolve paths (and realpath is part of open group base as of issue 5)
+[00:21] <ashb> ih you have readlink thats all you need for realpath
+[00:34] <rsms> ashb: how would I simulate realpath with readlink?
+[00:34] <ashb> the sync version using boost::fs looks like: http://github.com/ruediger/flusspferd/blob/master/libflusspferd/io/filesystem-base.cpp#L132
+[00:35] <ashb> basically walk over each filename component, lstat/readlink on it
+[00:36] <rsms> But I can't find it. Readlink only returns the link data. Look at this use-case, which made me look into the problem: http://gist.github.com/317964
+[00:36] <ashb> yeah - thats exactly what that funciton is for
+[00:37] <ashb> require('fs-base').canonical(path)
+[00:37] <ashb> the bit that deals with links is L160-L177
+[00:37] <rsms> uhm… fs-base?
+[00:38] <ashb> common-js
+[00:38] <ashb> thats not node code - but it shows you the logic you need
+[00:38] <rsms> ah, I'll check it out.
+[00:38] <ashb> which is, give or take
+[00:38] <ashb> split that path on '/'
+[00:38] <ashb> foreach thing in that array
+[00:38] <ashb> if its a link, to the link logic
+[00:38] <ashb> if its '..' pop something of hte ret array
+[00:38] <ashb> else push into the ret array
+[00:39] <ashb> and the link logic is:
+[00:39] <ashb> if it starts with a '/' then canonicalize that
+[00:39] <ashb> else push the result of readlink, then start over canonicalizing the whole strong
+[00:40] <ashb> (symlinks can link to symlinks etc)
+[00:41] <ashb> oh the only thing i dont deal with there is a cycle
+[00:41] <ashb> which you could detct by getting the inode number of symlinks and keeping track of which ones you've seen
+[00:42] <rsms> So, should we try to get a "simulated" realpath implementation into node or a "real" (using tested OS-code)?
+[00:42] <ashb> realpath isn't anything special
+[00:42] <rsms> If it implements the above, it will be both faster and have less bugs (than new code in js)
+[00:43] <ashb> it won't have an upper limit on the length like realpath does
+[00:43] <Tim_Smart> ACTION is listening to 5Episode 0.1.5 - Leah Culver on OAuth, Hurl.it, Baconfile, and more by 3Adam Stacoviak and Wynn Netherland from 10The Changelog
+[00:43] <Tim_Smart> :D
+[00:43] <ashb> ugh. colours :)
+[00:43] <Tim_Smart> I blame colloquy
+[00:43] <ashb> the one possible advantage to realpath is it doesn't go in/out of kernel space
+[00:44] <ashb> the disadvantage is its 'blocking'
+[00:44] <ashb> one giat blocking op, rather than lots of small ones
+[00:45] <rsms> ashb: using the aio thread pool the blocking shouldn't be a big problem imho.
+[00:45] <rsms> ashb: here's a libc impl of realpath: http://www.google.com/codesearch/p?hl=en#O9u56JgGE18/src/usermode/libs/libc/realpath.c&q=lang:c%20realpath%20glibc&sa=N&cd=8&ct=rc
+[00:46] <rsms> I'd say implementing that from scratch would definitely introduce a bug or two :P
+[00:46] <ashb> rsms: that version doesn't deal with symlinks from what i can see
+[00:50] <rsms> ashb: true... 
+[00:50] <ashb> rsms: and does linux even have a realpath() fn?
+[00:51] <ashb> must do
+[00:51] <rsms> absolutely. its in the open group base spec
+[00:53] <rsms> ashb: I've done a aio impl with realpath. I'm going to try it out.
+[00:55] Harrison has joined the channel
+[00:55] <rsms> Works and solved the test case :)
+[01:00] <ashb> coward ;)
+[01:00] pjb3_ has joined the channel
+[01:04] jashkenas has joined the channel
+[01:04] steadicat has joined the channel
+[01:04] <rsms> hahaha
+[01:05] <tmpvar> Tim_Smart, alright, this is cool ;)
+[01:05] <Tim_Smart> tmpvar: coffee?
+[01:06] <tmpvar> yeah
+[01:06] <tmpvar> im liking the @ operator
+[01:06] <tmpvar> and .?
+[01:07] <JimBastard> cofeee
+[01:08] <tmpvar> Tim_Smart, is there a way to call a super.otherFunction() from a derived implementation?
+[01:09] <Tim_Smart> super represents the parent version of the function you are in
+[01:09] <Tim_Smart> like it would in other languages
+[01:09] <jashkenas> tmpvar: There isn't a shortcut for it. There was a ticket to access the super object and not just the super function.
+[01:09] <jashkenas> But I think it's a nasty Java-ism we want to avoid.
+[01:09] <Tim_Smart> I would go Parent::function.call @, arg1, arg2
+[01:09] <tmpvar> heh, I *hate* java, but I think it might be useful
+[01:10] <jashkenas> Usually you want to call your subclass' overridden implementation. Do you have an example?
+[01:10] steadicat has joined the channel
+[01:11] <tmpvar> off the top of my head? no.  I agree, that type of behavior stems from a possible over use of oop?
+[01:13] <ashb> sounds like you want to read some MOP books
+[01:13] <JimBastard> ante up
+[01:13] <Tim_Smart> tmpvar: If it belongs to the parent, the child should have inherited it
+[01:13] <Tim_Smart> so @method should be fine
+[01:13] <tmpvar> MOP books?
+[01:14] <tmpvar> Tim_Smart, yeah that seems fine
+[01:14] <tmpvar> perhaps I'm referring to my initial mis-use of oop
+[01:14] <tmpvar> :P
+[01:14] <Tim_Smart> maybe >.>
+[01:16] spot__ has joined the channel
+[01:18] <tmpvar> Tim_Smart, yeah.. looked at the project where I thought that was used..  I must be an idiot, because it's not heh.
+[01:18] <Tim_Smart> :D
+[01:26] bryanl has joined the channel
+[01:28] <ashb> anyone know of a python- or ruby-like string format lib for JS?
+[01:28] <ashb> "{foo} bar" or "#{foo} bar" type foramtting
+[01:28] <ashb> (i.e. named, not just printf
+[01:28] <konobi> ashb: played with Joose at all?
+[01:29] <ashb> konobi: no, last time i looked i decicded it looked to un-javascripty
+[01:29] <jashkenas> ashb: Underscore's micro-templating can do that. If you don't mind {{}}, you can use Mustache.
+[01:29] <jashkenas> You can customize the template delimiters by setting _.templateSettings
+[01:29] <ashb> {{ would probably do
+[01:30] <konobi> ashb: that argument could be made about Moose too
+[01:30] <ashb> konobi: moose def feels un-javascripty :)
+[01:30] <ashb> konobi: Moose at least behaves right with std perl OO
+[01:30] <ashb> (which is one reason why Class::Std failed etc.)
+[01:30] <konobi> yar
+[01:31] <ashb> also from what i can see from the example Joose ain't gonna like not being able to stick stuff in globals
+[01:32] <ashb> http://code.google.com/p/joose-js/wiki/CookbookRecipe3
+[01:32] <ashb> for instance that
+[01:32] <konobi> true
+[01:32] <ryah> hello
+[01:32] <ryah> i always forget to rename my nick. i shuld setup some irc script
+[01:32] <ashb> this.setX(0); <-- use a proper setter!
+[01:33] <ashb> stupid IE :(
+[01:35] <ryah> rsms: realpath - we should it in js like ashb says
+[01:39] <rsms> ryah: ashb: I have a branch where I've implemented it in C (sync and async w libaio) + a test case. I'm going to write a js impl now and do some tests
+[01:48] brapse has joined the channel
+[01:54] <rsms> ashb: do you have any ref to a fs-base.js implementing realpath/resolve? Only one I cand find is the narwhal/rhino one, which is kind ugly and does not deal w symlinks
+[01:58] <konobi> man... city is going absolutely _nuts_ tonight
+[02:00] <rsms> ryah: ashb: I've pushed a branch (rooted in ry/master) at http://github.com/rsms/node/tree/fs-realpath which contains impl, test and docs for realpath (in C/C++). The JS code got waaay too messy, but now at least there's a reference impl + test which one can use to develop a pure JS-version.
+[02:24] bpot has joined the channel
+[02:29] rictic has joined the channel
+[02:30] jcrosby has joined the channel
+[02:33] <tmpvar> can someone give me some feedback on this? http://gist.github.com/316442
+[02:34] <tmpvar> im working on defining a workflow / reusable workflows (performances / composite nodes).  any thoughts are appreciated
+[02:35] <spot__> Has anyone brought up the thought of rolling a bespin server in node?
+[02:35] <tmpvar> i think that might be a first
+[02:37] isaacs has joined the channel
+[02:38] <jashkenas> I've got a first cut of a literate-programming-style documentation generator (for CoffeeScript, wouldn't be hard to extend it to JavaScript). Here's the first bit of output:
+[02:38] <jashkenas> http://jashkenas.s3.amazonaws.com/misc/docco/lexer.html
+[02:38] <jashkenas> Any thoughts?
+[02:39] <jashkenas> It simply passes comments through github-flavored-markdown, and puts them on the left, and highlights the corresponding code, and puts it on the right.
+[02:39] <tmpvar> pretty cool idea for api docs
+[02:41] <spot__> jashkenas: yeah, nice
+[02:43] stepheneb has joined the channel
+[02:43] Booster has joined the channel
+[02:51] <rsms> jashkenas very nice
+[02:52] <jashkenas> would you be interested in using it if I turned it into a Node.js module, then?
+[02:52] <jashkenas> And added "//" to the current "#" for comment detection?
+[03:06] <rsms> I'm using this in no less than three projects already: fs.find http://gist.github.com/318044 — what do you think about it guys?
+[03:07] <jashkenas> yes, we need globs.
+[03:07] <rsms> I wrote a glob function first, but found this one both more flexible and more "node"
+[03:08] <konobi> looks similar to the perl File::Find API
+[03:08] mattly has joined the channel
+[03:09] <konobi> rsms: one thing I note is that it probably doesn't follow symlinks?
+[03:10] <konobi> then again that has problems of its own
+[03:10] <rsms> konobi: true. find_check should probably lstat if isSymbolicLink
+[03:10] <rsms> ie. not resolve the link, just check the actual type (file or dir)
+[03:11] <konobi> you also need to add cyclic link checking, etc.
+[03:11] <rsms> yeah, in the case of symlinks… could probably be solved using a simple object buffer and perform "in" checks.
+[03:12] <konobi> rsms: yeah, the File::Find stuff is battle tested... so might be good to check out what it does in edge and corner cases
+[03:14] <rsms> are you referring to some CommonJS impl now?
+[03:14] <konobi> rsms: http://search.cpan.org/~dapm/perl-5.10.1/lib/File/Find.pm
+[03:14] <rsms> Ah :)
+[03:14] <rsms> aka. The Monster™
+[03:19] rictic has joined the channel
+[03:23] <jashkenas> If you guys are curious about the implementation of that doc generator -- here it is, running against itself:
+[03:23] <jashkenas> http://jashkenas.s3.amazonaws.com/misc/docco/docco.html
+[03:25] <Tim_Smart> The docco of docco, huh?
+[03:30] jed has joined the channel
+[03:33] <tmpvar> hrm, i keep getting some weirdness :: node.js:1055:9
+[03:33] <tmpvar> i think its an unhandled exception -- will look
+[03:34] JimBastard has joined the channel
+[03:35] Spot_ has joined the channel
+[03:36] steadicat has joined the channel
+[03:37] <tmpvar> yeah, no clue hah
+[03:38] <Tim_Smart> 1055 is where the event loop starts :p
+[03:38] <Tim_Smart> Reproducing steps?
+[03:40] <tmpvar> yeah, 1 sec
+[03:44] <tmpvar> ah
+[03:44] <tmpvar> must be the way exceptions are displayed
+[03:44] <tmpvar> throw {hello:true}; does it
+[03:44] <Tim_Smart> ah ok
+[03:45] <jashkenas> throw new Error(message)
+[03:45] <tmpvar> yeah, my bad
+[03:45] <tmpvar> sort of :_
+[03:45] <tmpvar> :P
+[03:46] <JimBastard> http://rfw.posterous.com/how-nodejs-saved-my-web-application
+[03:48] <tmpvar> nice JimBastard 
+[03:48] <JimBastard> who was that
+[03:48] <tmpvar> rfwatson? :P
+[03:49] mikeal has joined the channel
+[03:52] BryanWB has joined the channel
+[03:56] RayMorgan has joined the channel
+[04:02] hassox has joined the channel
+[04:16] dnolen_ has joined the channel
+[04:30] mumrah has joined the channel
+[04:32] bpot has joined the channel
+[04:35] abadr has joined the channel
+[04:36] dekz has joined the channel
+[04:39] <mumrah> how is communicating with a db non-blocking in node
+[04:39] <mumrah> isn't that sort of thing, i.e., concurrent connections, determined by the db?
+[04:39] <inimino> mumrah: it depends on the database
+[04:40] <inimino> mumrah: some databases support non-blocking APIs natively (like postgresql)
+[04:40] <mumrah> orly
+[04:40] <mumrah> i've been looking at some of the document-dbs for an app i'm working on
+[04:40] <inimino> mumrah: other less capable databases would require a thread to wait for the database...
+[04:40] <mumrah> but i need consistency and the ability to lock things on the db side
+[04:40] <inimino> ACTION is a postgres snob
+[04:41] BryanWB has joined the channel
+[04:42] <mumrah> what levels of concurrency can you achieve with pg?
+[04:42] <inimino> doing away with SQL altogether when you can is always nice
+[04:42] <inimino> I've never used postgresql with node
+[04:43] <inimino> though I have done some ... comet type stuff with it
+[04:43] <inimino> what kind of thing are you doing?
+[04:43] <jan_____> CouchDB works well with node.
+[04:43] <mikeal> oh yes it oes
+[04:44] <mikeal> does
+[04:44] <mumrah> i'm trying to get a roadmap laid out for a game backend
+[04:44] <inimino> what kind of game?
+[04:44] <mikeal> felixge wrote a great client library
+[04:44] <jan_____> don't listen to mikeal, he's biased :D
+[04:44] <mumrah> any type really
+[04:44] <mikeal> everyone in here is biased :)
+[04:45] <mumrah> the peeps i'm working with are starting with a tower defense thing
+[04:45] <mikeal> so you need good push notifications
+[04:45] <mumrah> yea
+[04:45] <mikeal> lots of open connections possibly idle
+[04:45] <tmpvar> i really wish i could have gotten wayland compiling this weekend.. really want to dive into that world
+[04:45] <mumrah> i've already gotten long-polling working pretty well
+[04:45] <mikeal> yeah, node.js + CouchDB _changes would be great
+[04:45] ymmij has joined the channel
+[04:46] <mumrah> but we eventually want to do multiplayer things
+[04:46] <inimino> just keep it all in memory
+[04:46] <inimino> whatever you do, you probably don't want to build that on a traditional SQL database
+[04:46] <mumrah> heh
+[04:46] <mikeal> i love _changes
+[04:46] <mikeal> but it's hard to scale the filter
+[04:46] <mumrah> mikeal: i've thought long about using Couch - and i'd love to if i can figure out how to deal with locking/consistency
+[04:47] <mikeal> because it's per connection
+[04:47] <mikeal> so every change is going to hit the view server for the filter on every open changes listener
+[04:47] blazzy has joined the channel
+[04:47] <mikeal> which you probably don't want
+[04:48] <mikeal> you probably want some grouping designations that get notified about particular changes
+[04:48] <mikeal> which you could easily do with node listening to _changes
+[04:48] <mumrah> hmm
+[04:48] <mikeal> and screw long polling
+[04:48] <mikeal> continuous FTW!
+[04:48] <tmpvar> ^_^
+[04:48] <mumrah> continuous polling?
+[04:49] <mikeal> continuous feed
+[04:49] <mikeal> keep the connection open forever and get a JSON line for each change
+[04:49] <mikeal> works in non-IE browsers
+[04:49] <mumrah> *boggle*
+[04:49] <tmpvar> comet!
+[04:49] <mumrah> i didn't realize that was possible over http
+[04:49] <mikeal> google XHR onChangeState or something
+[04:50] <mumrah> there are just the 4 states, right?
+[04:50] <mumrah> open, init, finished, closed? or something like that
+[04:50] <mikeal> right, but you can add a listener to when it changes
+[04:50] <mikeal> no wait, maybe that's not it
+[04:50] <mikeal> lemme look at my code
+[04:51] <mumrah> there's onReadyStateChange
+[04:51] <mikeal> thats it!
+[04:51] <inimino> mumrah: yes, onreadystatechange fires each time the browser reads more data in Firefox and others
+[04:51] <mikeal> oh man, this is like the 4th time I've talked for like 10 minutes in #node.js thinking it was #couchdb
+[04:51] <mumrah> does that get fired everytime stuff comes down the pipe?
+[04:51] <mikeal> yup
+[04:51] <inimino> not in IE
+[04:52] <mikeal> yeah, IE you'll wanna do long polling
+[04:52] <mumrah> i could really care less about IE
+[04:52] <mikeal> but it's easy enough to write a generic interface for both
+[04:52] <mumrah> sure
+[04:52] <mumrah> maybe
+[04:52] <mikeal> CouchDB _changes already has it
+[04:52] <inimino> maybe you want to look at js.io :)
+[04:53] <mumrah> what is it?
+[04:54] <inimino> it's comet by the best available means
+[04:54] <BryanWB> Hey guys, this may sound like a dumb question, but do u think companies will be hiring node.js devs in 6-8 months?
+[04:55] <inimino> from Michael Carter, the orbited guy
+[04:55] <BryanWB> I ask because I am leaving my engineering mgt job in the next couple months
+[04:55] <abadr> BryanWB: no
+[04:55] <abadr> it's still far too immature
+[04:55] <BryanWB> and moving possibly to timbuktu
+[04:55] <abadr> the API changes weekly
+[04:55] <abadr> and there are few libraries
+[04:55] <BryanWB> abadr, very true, argh, then maybe I will have to learn php to get a freelancing job
+[04:55] <mumrah> learn python
+[04:56] <mumrah> better pay
+[04:56] <abadr> yeah, Django
+[04:56] <abadr> you should learn one of Tornado/Node.js though just for the experience
+[04:56] <BryanWB> mumrah, yeah, i used to do some python, i guess i could relearn it
+[04:56] <jan_____> BryanWB: node.js probably not. Just JS, yes.
+[04:56] <BryanWB> tks all
+[04:57] <abadr> inimino: have you used js.io?
+[04:57] <inimino> abadr: no
+[04:57] <mumrah> so, if i use couchdb and basically pass along _changes back to the client, how would i go about locking a document? 
+[04:58] <mumrah> i dont think that's possible in couch since all i/o is non-blocking
+[04:58] <mikeal> what do you mean by "lock"
+[04:58] <mikeal> when you update a document in couchdb you have to pass the _rev
+[04:58] <mikeal> so one client can't update the doc if it's local info is out of date
+[04:59] <mikeal> unless you want to use a _update function
+[04:59] <mumrah> i guess i would deal with conflicts after the fact
+[04:59] <mikeal> there are a couple ways to go about this
+[04:59] <mikeal> you can either use _update functions to update the current doc no matter what
+[05:00] <mikeal> or you can pass the _rev and the whole document for the update and if that rev is out of date the client will get an HTTP error and you can have client logic to work out what to do
+[05:00] <mikeal> if all your clients are listening to _changes
+[05:00] <mikeal> you'll also probably know when a local doc is out of date before you PUT it
+[05:00] <mumrah> sure
+[05:01] <mikeal> and it'll be rare to have an out of data _rev that you don't know is out of date
+[05:01] steadicat has joined the channel
+[05:01] <mumrah> so i guess one use case would be
+[05:01] <mumrah> in a multiplayer situation
+[05:01] <mumrah> hmm
+[05:01] <mumrah> actually
+[05:01] <mumrah> i think i see now
+[05:02] <mumrah> meditate on this, i will
+[05:02] <mikeal> do you know how _update functions work?
+[05:02] <mumrah> nope
+[05:02] <mikeal> there is this fairly terrible wiki doc http://wiki.apache.org/couchdb/How_to_intercept_document_updates_and_perform_additional_server-side_processing
+[05:02] <mikeal> http://www.mikealrogers.com/archives/737
+[05:02] <jan_____> mv mikeal mumrah #couchdb
+[05:03] <mikeal> dammit, i just did it again
+[05:03] <mumrah> lol
+[05:03] <mumrah> i'll keep it ot
+[05:03] <mikeal> i need to increase the font size for channel names in Adium
+[05:04] <mumrah> so is there a couchdb module for node? or do you just use HTTP directly
+[05:04] <mikeal> http://github.com/felixge/node-couchdb
+[05:04] <mikeal> there are a couple, I'm a fan of felix's
+[05:07] micheil has joined the channel
+[05:07] <tmpvar> have a good night 
+[05:10] nsm has joined the channel
+[05:10] <mumrah> mikeal: i'll have to pick your brain more some time
+[05:11] <mikeal> cool
+[05:13] <jan_____> mumrah: yeah, hit me or mikeal any time
+[05:14] <mumrah> will do - i wrote up a proposal to use couchdb at work that just got shot down, but i'd love to use it alongside node in this side project
+[05:16] <mumrah> anyhow, night all
+[05:16] mumrah has left the channel
+[05:16] tlockney has joined the channel
+[05:19] abadr has left the channel
+[05:19] abadr has joined the channel
+[05:19] abadr has left the channel
+[05:19] abadr has joined the channel
+[05:21] <micheil> ryah: is Rasmus beating me to all the fs.* stuff? Cool
+[05:29] abadr has joined the channel
+[05:35] BryanWB has joined the channel
+[05:39] leifkb has joined the channel
+[05:40] mattly has joined the channel
+[05:40] <leifkb> Any benchmarks of Twisted vs. node.js?
+[05:41] <mikeal> i don't have actual numbers
+[05:41] <mikeal> but I've used both
+[05:41] <jan_____> the fun benchmark suggests node wins.
+[05:41] <mikeal> haha
+[05:42] <mikeal> yeah, node.js kinda blows away the performance of Twisted for everything i was doing
+[05:42] <mikeal> and it take about 1/10 of the code to do the same thing
+[05:42] <mikeal> but that's not all Twisted's fault
+[05:42] <mikeal> Python isn't very good at callbacks
+[05:42] <mikeal> the coroutine stuff I've seen in Python is closer in performance
+[05:42] <jan_____> the having more libs around and having a more stable API benchmarks suggest twisted wins
+[05:43] <mikeal> well.....
+[05:43] <micheil> twisted is a lot older than node though
+[05:43] <mikeal> Twisted has some libraries
+[05:43] <mikeal> but you can't use most Python lirbaries with Twisted
+[05:43] <jan_____> twisted has more libs than node. qed.
+[05:43] <mikeal> if you want to do good IO concurrency in Python you should use coroutines
+[05:43] <leifkb> Libraries aren't a concern. I just need my code to run fast, support lots of clients, and not crash.
+[05:43] <mikeal> and you can adapt most Python libraries to work with them
+[05:44] <jan_____> leifkb: sweet, node it is then
+[05:44] <micheil> leifkb: tried erlang?
+[05:44] <micheil> or scala?
+[05:44] <jan_____> mikeal: I want to sound objective, don't undermine my strawman arguments.
+[05:44] <mikeal> i like node.js a lot more than Python's coroutines
+[05:45] <mikeal> nothing beats Erlang for concurrency and performance, most people just don't seem to be able to learn it
+[05:45] <mikeal> i think it scares them :)
+[05:45] <mikeal> i wouldn't call it a rapid development platform
+[05:45] <mikeal> but for reliability it's hard to beat
+[05:45] <leifkb> micheil: Erlang has good concurrency features, but the language itself is unpleasant to work with. Scala doesn't do async IO without special libraries like Netty (and then I'm in the whole Java enterprisey library ecosystem, which is evil).
+[05:45] <mikeal> I'm very glad my database is written in it :)
+[05:45] <mikeal> Scala makes me wanna hang myself
+[05:46] <micheil> I'm just waiting for the fully pub/sub database to come along
+[05:46] <mikeal> it's like they took all this great functional programming stuff and then said "let's make it all objecty"
+[05:46] <micheil> so that you can get back events when changes to the database are made
+[05:46] <micheil> that'd be epic.
+[05:46] <jan_____> hehe
+[05:46] <jan_____> mikeal: your customer :)
+[05:46] <mikeal> my only complaint with the whole pub/sub thing is that I don't understand it
+[05:46] <mikeal> and I've spent like 4 hours reading about it
+[05:46] <micheil> mikeal: it's like DOM events
+[05:46] <mikeal> and still have no idea what it actually means
+[05:46] <micheil> or node's Promises
+[05:47] <micheil> they are forms of pub/sub
+[05:47] <mikeal> but it's xml
+[05:47] <micheil> no
+[05:47] <micheil> that's pubsubhub, different thing
+[05:47] <jan_____> micheil: how about CouchDB's changes feed? not good enough?
+[05:47] <mikeal> ok… now i'm even more confused
+[05:47] <micheil> jan_____: I've not used couchdb, tbh, and I'm not that interested in it
+[05:48] <micheil> mikeal: pubsubhub or whatever it's called is a thing for like rss feeds and stuff
+[05:48] <micheil> pub/sub is a programming paradigm
+[05:48] <mikeal> ok, i kind of get that part
+[05:48] <mikeal> but what do you mean by "pub/sub database"
+[05:48] <micheil> http://en.wikipedia.org/wiki/Publish/subscribe
+[05:49] <jan_____> micheil: that's fine, but it does have "make a request and tell me when new stuff shows up"
+[05:49] <mikeal> Redis?
+[05:49] <micheil> basically that when someone writes to the database, I get that data pushed down
+[05:49] <mikeal> that's what CouchDB _changes does
+[05:49] <mikeal> and that's like the hello world app for Redis
+[05:49] <micheil> okay, let me rephrase: pub/sub db which does noSQL in JSON
+[05:50] <mikeal> that's exactly CouchDB
+[05:50] <micheil> no
+[05:50] <micheil> CouchDB isn't in JSON last I knew
+[05:50] <mikeal> umn......
+[05:50] <mikeal> it's never not been in JSON
+[05:50] <mikeal> it's a JSON document store
+[05:50] <micheil> hmm..
+[05:50] <mikeal> you might be thinking on MongoDB
+[05:50] <jan_____> micheil: when did you look last? :)
+[05:50] <micheil> I'm not using the right words here
+[05:51] <mikeal> they have a crazy binary superset of JSON that makes me wanna smack a baby
+[05:51] <micheil> I'm thinking more like mongodb, but with events
+[05:51] <mikeal> yeah, CouchDB does that
+[05:51] <mikeal> _changes is fairly new
+[05:51] <mikeal> added in the last like 9 months or so
+[05:51] <mikeal> but it's always been a JSON document store
+[05:51] <jan_____> mikeal: not true :)
+[05:51] <micheil> oh shit. Wikipedia compares CouchDB and MongoDB to lotus notes
+[05:51] <jan_____> but for a long time
+[05:52] <jan_____> micheil: the document paradigm is from notes, CouchDB even has the replication. the core of notes is very powerful, nothing wrong with being compared to.
+[05:52] <mikeal> i think it's fairly accurate for CouchDB but I think that MongoDB uses collections as table-like silos which makes it not like Lotus at all
+[05:52] <jan_____> CouchDB scraps all the crap and builds around open standards though
+[05:52] <mikeal> it's like if Lotus was built for the web
+[05:52] <mikeal> HTTP, JSON, map/reduce
+[05:53] <mikeal> _changes is badass tho
+[05:53] <mikeal> http://books.couchdb.org/relax/reference/change-notifications
+[05:53] <micheil> CouchDB sounds like a wanna be noSQL db, which can't give up on the structures of tables
+[05:53] <jan_____> .oO(mv jan_____ mikeal #couchdb)
+[05:53] <jan_____> micheil: CouchDB doesn't have any tables or structure.
+[05:53] <micheil> jan_____: the views?
+[05:53] <mikeal> micheil: CouchDB has nothing even remotely like tables
+[05:53] <jan_____> micheil: you maybe mix it up with mongodb?
+[05:53] <jan_____> micheil: that's just a query mechanism
+[05:53] <mikeal> yeah, MongoDB has collections which are effectively tables
+[05:53] <micheil> okay, well, similar enough
+[05:54] <micheil> collections are just a grouping method
+[05:54] <jan_____> micheil: nothing wrong with result sets :) cassandra has em :)
+[05:54] <mikeal> the queries are over the whole database, the btree generated from your map function
+[05:54] <micheil> some sites store almost all their data in only one mongo collection
+[05:54] <mikeal> there is nothing like a table, none of the indexes is based on placement or on the structure of the data
+[05:55] <jan_____> yeah, mongodb collections are more like couchdb databases. grouping devices.
+[05:55] sudoer has joined the channel
+[05:55] <mikeal> i guess
+[05:55] <micheil> but. yeah, I'd prefer the client to handle the construction of queries
+[05:55] <micheil> ACTION isn't a fan of "prepared queries"
+[05:56] <mikeal> views aren't "prepared"
+[05:56] <mikeal> they are map/reduce
+[05:56] <micheil> uhh..
+[05:56] <mikeal> the results are just stored in a btree so that you can query them quickly
+[05:56] <mikeal> and they are generated at query time, not at write time
+[05:57] <micheil> couchdb views are about to make as much sense to me as django views.
+[05:57] <mikeal> if you don't like "prepared" queries then I imagine you would prefer map/reduce
+[05:58] <mikeal> sleep time
+[06:17] aguynamedben has joined the channel
+[06:32] aaronq has joined the channel
+[06:39] bpot has joined the channel
+[06:48] sztanpet has joined the channel
+[07:03] JimBastard has joined the channel
+[07:04] <JimBastard> zzzz
+[07:06] <mikeal> has anyone done terminal color prints in node.js :)
+[07:06] <mikeal> that was suppose to be a ?
+[07:06] <mikeal> i'm just really tired and can't type
+[07:12] mahemoff has joined the channel
+[07:24] <JimBastard> someone did
+[07:24] <JimBastard> the code is kicking around somewhere
+[07:36] dekz has joined the channel
+[07:39] bentomas has joined the channel
+[07:39] <bentomas> mikeal: try http://github.com/elliottcable/Percival or http://github.com/elliottcable/Yarn
+[07:43] mattly has joined the channel
+[07:56] dekz has joined the channel
+[08:03] kennethkalmer has joined the channel
+[08:09] christkv has joined the channel
+[08:11] kjeldahl has joined the channel
+[08:19] piranha has joined the channel
+[08:44] felixge has joined the channel
+[08:44] felixge has joined the channel
+[08:49] tisba has joined the channel
+[08:51] Tim_Smart has joined the channel
+[08:56] JimBastard has joined the channel
+[08:58] <JimBastard> hey
+[08:59] <JimBastard> is there a "powered by node" type badge yet?
+[08:59] <JimBastard> ohh shit its JohnResig 
+[09:00] hassox has joined the channel
+[09:04] teemow has joined the channel
+[09:10] dekz has joined the channel
+[09:54] johanhil has joined the channel
+[09:57] christkv has left the channel
+[09:57] christkv has joined the channel
+[10:08] rsms has joined the channel
+[10:15] mahemoff has joined the channel
+[10:24] mahemoff has joined the channel
+[10:25] felixge has joined the channel
+[10:25] felixge has joined the channel
+[10:27] sztanphet has joined the channel
+[10:31] rolando has joined the channel
+[10:33] unomi has joined the channel
+[10:33] tisba_ has joined the channel
+[10:44] bru_ has joined the channel
+[10:54] markwubben has joined the channel
+[10:58] sztanphet has joined the channel
+[11:01] <JimBastard> Challah French Toast time
+[11:01] <JimBastard> <3 seamlessweb
+[11:05] ithinkihaveacat has joined the channel
+[11:41] ivan has joined the channel
+[12:09] sztanphet has joined the channel
+[12:11] maritz has joined the channel
+[12:19] rsms has joined the channel
+[12:43] alex-desktop has joined the channel
+[12:56] alex-desktop_ has joined the channel
+[13:06] charlenopires has joined the channel
+[13:38] <tisba> question from a node-noob: how can I implement a timeout for http.createClient[...].request?
+[13:41] <felixge> tisba: on the client side or server side?
+[13:41] gf3 has joined the channel
+[13:41] <tisba> I'm on the client-side
+[13:42] <felixge> tisba: regular AJAX or JSONP?
+[13:43] <tisba> ehm, I don't follow... I have a node-server getting requests. on each request i issue another http-request
+[13:44] <ashb> by 'client-side' he meant are you in the browser or not :)
+[13:44] <tisba> i'm using curl atm
+[13:45] markwubben has joined the channel
+[13:48] <felixge> tisba: ah, so when do you want to time out?
+[13:49] <tisba> I want the http request issued by the server to timeout and respond the initial request with something
+[13:52] <ashb> node has curl bindings? or you want to replace the curl with something else?
+[13:52] <felixge> ashb: no, there is only the native http client
+[13:52] <ashb> thats what i thought
+[13:52] <felixge> tisba: well in that case you just do setTimeout() inside the request handler
+[13:54] mahemoff has joined the channel
+[13:55] <tisba> felixge: I do client = http.createClient[...]; request = client.request[...]; request.addListener('response'[...]
+[13:56] <tisba> not sure, where my request handler is ^^
+[13:56] <felixge> tisba: oh, sorry I got confused
+[13:56] <felixge> tisba: I thought you were using the server
+[13:56] <tisba> I do also use the server, but the server is issuing http request
+[13:56] <felixge> tisba: in that case you still just do setTimeout() and when that callback fires you do client.connection.fullClose();
+[14:00] <tisba> inside my request.addListener('response', [...] ?
+[14:02] <tisba> ACTION is still a bit confused
+[14:10] <tisba> felixge: do you mean smth like client.setTimeout(1000); client.addListener('timeout', [...]
+[14:11] <felixge> tisba: no
+[14:11] <felixge> I'm not sure how the client timeout will work exactly, but it's very likely not what you want
+[14:11] <felixge> before you call client.request()
+[14:12] <felixge> you do: setTimeout(function() { // check if your request has finished yet }, 1000);
+[14:12] <felixge> so essentially you are manually setting up a timer for the timeout
+[14:16] <tisba> http://friendpaste.com/2eum91fe9LPCoJ0zBdWfdv
+[14:17] <tisba> the first google.com should be gooXXXogle.com, too
+[14:17] <tisba> this callback-non-blocking-programming makes my brain hurt :)
+[14:18] davidsklar has joined the channel
+[14:18] sztanpet has joined the channel
+[14:23] <ashb> tisba: the 'how do i detect' is:
+[14:23] <ashb> var done = false; then in the response listener 'done = true' ;)
+[14:24] <tisba> *arg* thanks ^^
+[14:24] <tisba> but I get a: TypeError: Cannot call method 'fullClose' of undefined
+[14:25] <tisba> can I assume that the connection is only defined, when it was successfully established?
+[14:25] <tisba> the node.js documentation is not very detailed at this
+[14:26] <ashb> beats me
+[14:30] <felixge> tisba: client is actually inheriting Tcp.Connection, so it's client.fullClose() directly
+[14:30] <felixge> sorry
+[14:31] jspiros has joined the channel
+[14:31] jspiros has joined the channel
+[14:32] <tisba> felixge: TypeError: Object #<a Client> has no method 'fullClose' ...
+[14:33] BryanWB has joined the channel
+[14:33] <felixge> tisba: try just client.close()
+[14:38] <tisba> felixge: looks good actually... thanks a lot!
+[14:39] <tisba> ashb: thank you, too!
+[14:42] markwubben_ has joined the channel
+[14:52] charlenopires_ has joined the channel
+[14:52] bryanl has joined the channel
+[14:58] Booster has joined the channel
+[15:01] jed_ has joined the channel
+[15:10] felixge has joined the channel
+[15:10] felixge has joined the channel
+[15:11] nsm has joined the channel
+[15:15] cloudhead has joined the channel
+[15:17] MattJ has joined the channel
+[15:17] <MattJ> Yay
+[15:22] kriszyp has joined the channel
+[15:25] nsm has joined the channel
+[15:29] dnolen has joined the channel
+[15:30] <rsms> hey guys, seems like chdir implies syscall(s) http://gist.github.com/318445
+[15:30] <rsms> resolves symlinks
+[15:32] brandon_beacher has joined the channel
+[15:33] aguynamedben has joined the channel
+[15:37] tisba has joined the channel
+[15:38] pmuellr has joined the channel
+[15:41] rsms has joined the channel
+[15:42] binary42 has joined the channel
+[15:43] <ashb> rsms: cant tell how many of those are from dyld or similar from that
+[15:45] mjr_ has joined the channel
+[15:57] maritz1 has joined the channel
+[15:58] stepheneb has joined the channel
+[15:58] maritz has joined the channel
+[16:07] stepheneb_ has joined the channel
+[16:08] stepheneb_ has joined the channel
+[16:08] steadicat has joined the channel
+[16:15] pmuellr has joined the channel
+[16:16] alexiskander has joined the channel
+[16:16] <rsms> ashb: this code DO resolve symlinks, so at some point lstat is called. http://gist.github.com/318496
+[16:18] <ashb> rsms: i was just saying that with that dtrace you can't tell *what* is causing the calls - if its your main funciton or something done by the dylib loader before then
+[16:18] <ashb> or the stdlib etc
+[16:26] <felixge> rsms: you posted this to the mailing list right?
+[16:27] <felixge> I think ryan will know
+[16:27] mattly has joined the channel
+[16:27] tbassetto has joined the channel
+[16:28] <felixge> but it makes sense, I guess we will have to either put those in the thread pool or just call them chdirSync
+[16:29] <ryah> hello
+[16:29] <rsms> felixge: correct. same stuff as on the list
+[16:29] <rsms> hi ryah
+[16:29] <ryah> what's the syscall to find which groups a user belongs to?
+[16:30] <felixge> ryah: 'morning :)
+[16:31] <rsms> ryah: http://www.opengroup.org/onlinepubs/009695399/functions/getpwent.html maybe
+[16:32] <rsms> sry thats for passwd, but one of the related in the family of cmds
+[16:34] <ryah> thanks
+[16:35] <maritz> so, what's the status of hot code reloading again? :D
+[16:36] <ryah> maritz: on hold
+[16:36] <maritz> :(
+[16:36] <maritz> why?
+[16:37] <felixge> ryah: I still think we should just go ahead and do it, we're literally 10 lines of code away from it now that we got sync require
+[16:37] <felixge> :)
+[16:39] <felixge> maritz: I think it's on hold because ryan is still thinking about alternative ways to implement hot reloading
+[16:40] <maritz> what's the problem with the supposed ~10 line addition?
+[16:40] <felixge> maritz: I don't see any
+[16:40] <felixge> anyway, g2g
+[16:41] <felixge> brb 20min
+[16:41] <ryah> maritz: i just haven't had a chance to look at it
+[16:42] <maritz> oh, ok :)
+[16:43] <rsms> ryah: oh, I thought you had sooo much time to waste and kill :P
+[16:47] <ryah> rsms: yeah - chdir and cwd probably both can spin the disk
+[16:48] <rsms> :( well, should we aim at aio_custom or something like that?
+[16:48] <ryah> eio
+[16:48] bpot has joined the channel
+[16:49] <ryah> um. we need to figure out a way to not go invinitely deep into posix binding.
+[16:49] <ryah> infinitely
+[16:50] <ryah> e.g. rslve paths internally
+[16:50] <rsms> agreed
+[16:50] <rsms> I've written a realpath impl in JS now: http://gist.github.com/318414
+[16:50] <ryah> if someone does fs.open('../blah') we can change that path to be relative to the module
+[16:50] <ashb> that might be suprising
+[16:51] <rsms> ashb: agreed. should never "change" cwd
+[16:51] <rsms> implicitly, that is
+[16:51] <ryah> i'd ather not expose cwd at all
+[16:51] <ryah> *rather
+[16:51] <ashb> its an insecure global concept
+[16:52] <rsms> How would you get the program's wd then?
+[16:52] <ashb> actually - what boost::fs lib does makes sense
+[16:52] <ashb> it captures it at startup
+[16:52] <ashb> and recommends you use that instead of cwd
+[16:52] <rsms> ashb: oh, that might be better
+[16:53] <rsms> however, then we'll need to tighten up all places where the working directory would matter (e.g. when spawning child processes)
+[16:55] <ashb> don't you pass it explicitly to exec* anyway if you care?
+[16:55] <ryah> no
+[16:56] <ryah> but wouldn't be hard to throw a chdir in there
+[16:56] <ryah> after the fork but before the exec
+[16:56] <rsms> agreed
+[16:58] <ryah> so if we added that to child process, would that be enough?
+[16:58] <ryah> probably not :)
+[16:59] <ryah> i've been thinking about having a process.daemonize() function which detaches from the termina
+[16:59] <ryah> it could include a chdir
+[17:02] <rsms> also, any call taking a filename (open, readlink, etc) would need to modify the path according to the virtual cwd I guess.
+[17:03] keeto has joined the channel
+[17:06] RayMorgan has joined the channel
+[17:06] steadicat has joined the channel
+[17:07] hassox has joined the channel
+[17:08] <rsms> ryah: so, I've completed a first version of fs.realpath & fs.realpathSync — review at http://gist.github.com/318414
+[17:11] nsm has joined the channel
+[17:12] <ashb> can i suggest calling it canonical since it does the same as the commonjs method of the same name
+[17:13] nsm has left the channel
+[17:13] <rsms> ashb: I recall ryan stating he wanted to keep posix names for functionality equivalent to posix calls.
+[17:13] brianm has joined the channel
+[17:13] <ashb> fair enough then
+[17:14] <ryah> rsms: do you have that in patch form?
+[17:14] <rsms> ppl from other languages will recognize the name "realpath" also.
+[17:14] <rsms> ryah: I'll clean it up, patch it and send one over
+[17:14] <ryah> rsms: camel case
+[17:14] <ashb> rsms: C maybe, most other langagues dont do it very often in my experience
+[17:14] <ashb> camelCase makes ash a sad panada
+[17:14] jcrosby has joined the channel
+[17:15] <rsms> ryah: uhm, no other of the posix-inherited functions in the fs module is camel cased?
+[17:15] <ryah> rsms: build_path_base_swap
+[17:15] <ryah> symlink_resolveSync
+[17:15] <rsms> oh, yes. :)
+[17:16] <rsms> already cleaned up locally ;)
+[17:16] <ryah> braces on if-else branches
+[17:16] <ryah> } else { on one line
+[17:16] <rsms> also done already
+[17:17] happyelephant has joined the channel
+[17:18] <ryah> rsms: i don't think you need to handle the case that stats isn't passed to symlink_resolve
+[17:18] <ryah> (i assume that's what next() is for)
+[17:19] <ryah> hm
+[17:19] <ryah> somehow we need to get this fs stuff out of src/node.js
+[17:19] <rsms> ryah: as an optimization, I pass a stats object at the first time calling readlinkDeep (see updated cleaned source at http://gist.github.com/318414)
+[17:20] <rsms> agreed… getting messy in the fs
+[17:20] <ashb> rsms: are you detecting cycles?
+[17:20] <rsms> ashb: yes
+[17:20] <rsms> by dev+inode uniqueness
+[17:21] <ryah> rsms: would you be willing to rebase your changes onto a patch that moves fs out of src/node.js
+[17:21] <ashb> ah stats.dev yeah
+[17:21] <ryah> i think i can do that quickly
+[17:22] <rsms> ryah: yes. I'll hold on and maybe you can ping me to push from your repo when you have moved it out?
+[17:23] codeswing has joined the channel
+[17:24] <codeswing> Hi guys
+[17:24] <codeswing> I want to use node.js for displaying clock
+[17:24] <rsms> codeswing: on a terminal?
+[17:24] <codeswing> the time shoud automatically get incremented without javascript and without page refresh
+[17:24] <codeswing> on browser
+[17:25] <codeswing> is that possible with node.js
+[17:25] <rsms> codeswing: node is not something you can run in a browser
+[17:25] <codeswing> lol
+[17:25] <codeswing> rsms: I will run the .js on server side with node
+[17:25] <codeswing> then point my browser to something like localhost:8000
+[17:25] <codeswing> my requirement is that there should be no page refresh and no javascript .. but time should get incremented
+[17:26] <rsms> codeswing: uhm, and reply with "time is 12:34"?
+[17:26] <rsms> you could use websockets
+[17:26] <codeswing> rsms: yeah
+[17:26] <ashb> codeswing: 'no page refresh and no javascript' you are SOOL then
+[17:26] qFox has joined the channel
+[17:26] <codeswing> ashb: looks like answer is websockets
+[17:26] <rsms> codeswing: http://wiki.github.com/ry/node/modules#ws-ajax
+[17:26] <ashb> which needs javascript
+[17:26] <rsms> codeswing: that of course implies using javascript
+[17:27] <codeswing> can somebody point me some examples of node.js and websockets
+[17:27] <rsms> codeswing: otherwise you'll have to do plain old http streaming
+[17:27] <ashb> google can i'm sure
+[17:27] <rsms> codeswing: link above
+[17:27] <codeswing> rsms: I want to do plain http streaming ..
+[17:27] <codeswing> and it should change content of my webpage
+[17:27] <ashb> would oyu like a stick with that too?
+[17:27] <codeswing> thanks for link
+[17:28] <ashb> so that you can put the moon on it
+[17:28] <rsms> lol
+[17:29] <rsms> codeswing: read http://nodejs.org/api.html#_http — now, each time you want to update the clock, call response.write(…). All you need is in the documentation.
+[17:30] <codeswing> okay
+[17:31] joshbuddy has joined the channel
+[17:31] joshbuddy has joined the channel
+[17:38] <ryah> it'd be cool if i could compile the modules into node
+[17:38] <ryah> but then only execute them once they're required.
+[17:38] <ryah> hmm
+[17:38] <ryah> (path issues are death)
+[17:39] <ryah> restated: i want to include modules in the node executable without spending start up time executing them)
+[17:39] <rsms> you mean like lazily load dynamic libs?
+[17:40] <rsms> oh, but couldn't you simply skip the actuall calling of the compiled code and postpone that?
+[17:40] <rsms> hm, maybe tricky to get the bytecodes into node
+[17:41] <rsms> ryah: could even use Google Closure Compiler on the modules if they are compiled at …compile time.
+[17:41] <ashb> nah - you just 'preprocess' them into C strings
+[17:41] <ashb> ugh. Google Closure Compiler is fucking retarded and produces borken code
+[17:41] <ashb> do not use.
+[17:42] <rsms> http://bespin.cz/~ondras/html/classv8_1_1ScriptData.html "Pre-compilation data that can be associated with a script. This data can be calculated for a script in advance of actually compiling it, and can be stored between compilations. When script data is given to the compile method compilation will be faster."
+[17:42] <rsms> ashb: in what sense? I've had no probs with it
+[17:43] <ashb> using it on the highest setting can and will just produce code that doesn't work
+[17:43] <ashb> http://code.google.com/p/closure-compiler/issues/detail?id=23
+[17:43] <ashb> i mean whats up with that
+[17:43] <rsms> ah
+[17:43] <ashb> 'oh we don't know about this property, okay lets just produce code that doesn't work. Yeah! that seems like a really code idea'
+[17:44] <ashb> the fact that its designed like that (and have you *looked* at the code?) means i just dont trust it
+[17:45] <ashb> the fact you have to *tell* it about externals, rather than it just preserving them is such a monumentally stupid idea
+[17:45] aguynamedben has joined the channel
+[17:46] <rsms> ryah: or maybe, _maybe_ you could have V8 compile the code (into native asm/code) then embed the actual code, later load the code (should be safe as you copile node & v8 itself).
+[17:46] <ashb> and to make matters worse: 1) no error. 2) you can't do that from your own script either - it needs to be fixed in google closure itself
+[17:46] <ashb> rsms: i think you need the JS too
+[17:46] <rsms> ashb: My default setting for Java projects is: don't trust
+[17:46] <ashb> as istr that v8 occasioanlly fals back to using an interpreter
+[17:47] <ashb> rsms: its not java thi - its javascript written to look like java by java programmers isn't it?
+[17:47] <rsms> ashb: oh. okay, maybe doing it the "pretty" way then, using ScriptData
+[17:47] <cloudhead> is there an 'official' way to check if the environment is node?
+[17:47] <cloudhead> other than checking for the `node` var that is
+[17:47] <ashb> cloudhead: arguably you shouldn't care, just doing feature testing
+[17:48] <cloudhead> ashb: that's not very robust though
+[17:48] <ashb> cloudhead: testing explicitly for node is not very robust either
+[17:48] <ashb> what if something else comes along that supports the same APIs?
+[17:48] <cloudhead> I can check for require() but nothing tells me it's going to do the right thing
+[17:48] <cloudhead> that's my point
+[17:48] <cloudhead> well
+[17:49] <ashb> so test for the feature you care about? (which is what exactly?)
+[17:49] <ryah> cloudhead: not an official way - check for require and process?
+[17:49] <cloudhead> ok
+[17:49] <ashb> do you care if you are in node or if you are not in the browser?
+[17:49] <cloudhead> ashb: it's mainly for require I guess
+[17:50] <cloudhead> ashb: I care about a require() which behaves like node mostly
+[17:50] <cloudhead> and process.mixin
+[17:50] <cloudhead> I'm writing code which is supposed to run in both the browser, and node
+[17:50] <cloudhead> but I'd like to minimize the differences
+[17:50] felixge has joined the channel
+[17:50] felixge has joined the channel
+[17:51] <ashb> so either check for document and window and detect you are in a browser?
+[17:51] <ashb> rather than detecting that you are in node?
+[17:51] <cloudhead> hmm yea, that might be a better way to go
+[17:52] <rsms> ryah: ashb: example of precompiling script data: http://gist.github.com/318601
+[17:52] <ashb> ah v8 has an api for it. cool.
+[17:52] <rsms> :)
+[17:52] <ashb> i've never dug very deep into the v8 api
+[17:53] <rsms> I guess you would just append a blob of precompiled script data to the end of the node binary and then just "eat from yourself"
+[17:53] mahemoff has joined the channel
+[17:53] <rsms> I'm stupid.
+[17:54] <rsms> Simply put it sideway next to the related source, of course. core/fs.js, core/fs.jsm (made-up extension, "m" for "meta")
+[17:54] <ryah> rsms: that's not precompied
+[17:54] <ryah> rsms: precompied would be at compile time :)
+[17:55] <rsms> ryah: yeah, what I mean is doing http://gist.github.com/318601 when compiling node
+[17:55] <rsms> ryah: then shipping the .jsm files along with the source
+[17:55] <ashb> rsms: can you save/load ScriptData via compiling?
+[17:55] markwubben has joined the channel
+[17:55] <ashb> *other than via
+[17:56] <rsms> ashb: yes
+[17:56] <ashb> i.e. give it Data and Length
+[17:56] <rsms> it's meant for this very purpose
+[17:56] <ashb> cool.
+[17:56] <rsms> http://izs.me/v8-docs/classv8_1_1ScriptData.html
+[17:56] <rsms> "This data can be calculated for a script in advance of actually compiling it, and can be stored between compilations. When script data is given to the compile method compilation will be faster."
+[17:57] <ashb> .jsn or .njs then
+[17:57] <ashb> like you have .pyc
+[17:57] <ryah> rsms: then dlopen'ing it?
+[17:57] <ryah> no - i don't see how it works
+[17:58] <ashb> ryah: to bundle them in process i'd probably suggest PreCompile, then output a .c file with it as an unit8[] = { 0x....} array
+[17:58] <ryah> you know the snapshot in v8? 
+[17:58] <rsms> ryah: hm… well, if you actually compile it to native code, yeah… but I dunno how much crazy dylib header fiddling you would need to do
+[17:58] <orlandov> ryah: hey, so if i want to pass data/arguments from v8 to an eio threadpool function, i have to do it through the eio_req data member?
+[17:59] <orlandov> wondering if i'm looking at writing a struct defn for each function i will have to call
+[17:59] <ryah> orlandov: yes
+[17:59] <rsms> ashb: having it as a sidecar file is probably better in one sense — if you modify any .js file in a node installation, things will start havocing if you don't clear/recompile the meta
+[17:59] <orlandov> ryah: do you know offhand of any easier way than defining a struct per function?
+[17:59] <ashb> rsms: you only do it for releases
+[17:59] <rsms> ryah: I think the snapshot stuff only saves partial context and need the source
+[17:59] <ashb> not when developing in tree
+[17:59] stepheneb_ has joined the channel
+[18:00] <rsms> ashb: of course, but would still be error prone.
+[18:00] <ashb> rsms: why?
+[18:00] <ashb> the files that are bundled wouldn't be installed
+[18:00] <rsms> however, having a separate file means an extra read which is slow
+[18:01] <ashb> rsms: there wouldn't be an extra file - it would be compiled into the node binary
+[18:01] <rsms> ryah: ashb: guys, look at this: deps/v8/tools/js2c.py 
+[18:01] <rsms> # This is a utility for converting JavaScript source code into C-style
+[18:01] <rsms> # char arrays. It is used for embedded JavaScript code in the V8
+[18:01] <rsms> # library.
+[18:02] <ashb> yes i mean like that - but instead of hte source, you do it with the PreCompile data
+[18:02] <rsms> let's just embed the whole stdlib then
+[18:02] <rsms> precompile + embed the code
+[18:03] <ryah> rsms: node already does that
+[18:03] <ryah> it doesn't precompile it though, it just includes the js
+[18:03] <rsms> oh
+[18:03] <ryah> "precompiling" really requires starting the node process and then core-dumping before it get started
+[18:04] <ryah> then using that somehow as the executable
+[18:04] <rsms> so, then the problem with some dude altering js code, putting md out of sync is not a problem
+[18:04] RayMorgan_ has joined the channel
+[18:04] <rsms> ryah: no, I think we could use the ScriptData metadata. http://izs.me/v8-docs/classv8_1_1ScriptData.html 
+[18:04] <ashb> ryah: v8::ScriptData::PreCompile
+[18:04] <rsms> simply write a small "precompiler" which we run before building (or linking) node
+[18:05] <ashb> how else would you do it?
+[18:05] <ryah> okay, but then we have to load that memory into the executable somehow
+[18:06] <ryah> is it clear this can be down without a context?
+[18:06] <ashb> const char * file_1 = []...
+[18:06] <ashb> then hook require
+[18:06] mahemoff has joined the channel
+[18:06] <ryah> s/this/script::precompile/
+[18:06] <rsms> Guys, I need to run. GF cooking something extra tonight I've heard so better get my ass from the office to my home. (7pm over here in Sweden). Maybe I'll drop in later.
+[18:12] kennethkalmer has joined the channel
+[18:12] kennethk_ has joined the channel
+[18:16] ericflo has joined the channel
+[18:16] dnolen has joined the channel
+[18:17] <CIA-77> node: 03Ryan Dahl 07master * rfaa0c6d 10/ doc/index.html : Add note about testing patches with debug build - http://bit.ly/ash8nA
+[18:17] <CIA-77> node: 03Ryan Dahl 07master * r810882c 10/ (src/node.js lib/fs.js): Move 'fs' module out of src/node.js into its own file - http://bit.ly/awWizU
+[18:23] <codeswing> hi guys
+[18:23] <codeswing> node server.js --port='4000'
+[18:23] <codeswing> Server at http://127.0.0.1:8001/
+[18:23] <codeswing> even after running node.js with port 4000 it is picking up 8001
+[18:24] <ashb> codeswing: and what is server.js doing with the args?
+[18:25] sudoer has joined the channel
+[18:25] <codeswing> ashb: I did not get you
+[18:25] <ashb> nopaste/gist the contents of server.js
+[18:26] <codeswing> got it
+[18:26] <codeswing> you can chat with me at http://icanhasruby.com:4000/
+[18:30] <codeswing> are you trying to hack into my server
+[18:31] rictic has joined the channel
+[18:35] charlenopires has joined the channel
+[18:39] markwubben_ has joined the channel
+[18:40] hassox has joined the channel
+[18:44] <CIA-77> node: 03Ryan Dahl 07master * r30b700e 10/ (4 files in 4 dirs): Move watchFile into fs module - http://bit.ly/dcISZt
+[18:46] <ryah> how did process.mixin get put into process?
+[18:47] <gwoo> ryah: late night coding?
+[18:47] <gwoo> :)
+[18:47] <ryah> gwoo: it's morning here
+[18:48] <gwoo> oh good point
+[18:48] <gwoo> big hangover?
+[18:48] eikke has joined the channel
+[18:48] <ryah> no? why :)
+[18:49] <gwoo> cause i have one for myself
+[18:49] <gwoo> i must be projecting
+[18:49] <gwoo> haha
+[18:50] isaacs has joined the channel
+[18:58] <ryah> probably should rename sys to utils
+[18:58] <gwoo> it seems to be collecting some interesting methods
+[18:59] <gwoo> but puts and print?
+[18:59] <gwoo> what about a generic "stream"
+[19:00] RayMorgan has joined the channel
+[19:03] JimBastard_ has joined the channel
+[19:04] <tisba> next newbe question: is there anyway to reuse a http connection oped by http.client?
+[19:04] <JimBastard_> I feel like with JohnResig and ryah in the same room we can conjure up some serious javascript juju :-D
+[19:05] <ryah> tisba: yes, i think so
+[19:05] mikeal has joined the channel
+[19:06] <ryah> tisba: call .connect(port, host) on it
+[19:06] <ryah> actually, no, just call require() again
+[19:06] <ryah> er
+[19:06] <ryah> request()
+[19:06] <tisba> ryah: "Currently the implementation does not pipeline requests."
+[19:06] <tisba> but I'll double check
+[19:07] <ryah> tisba: hm. you might have to wait until it's finished
+[19:08] <ryah> well some combination of .connect() and .request() should work
+[19:08] pdelgallego has joined the channel
+[19:08] stephenlb has joined the channel
+[19:10] <tisba> ryah: I've collected some (thousands) of shorten urls and I'm trying to figure out the fastest way to unshorten them. node seems to be an excellent candidate for this problem. but i'm running into system limitations (like pending TCP connections)
+[19:12] <tisba> I do the benchmark with node as well (modified the static_http_server.js benchmark from the source)
+[19:13] <orlandov> libeio certaintly makes debugging a whole lot more interesting :)
+[19:13] <ryah> orlandov: heh
+[19:15] <orlandov> urgh i'm retarded, forgot to return Undefined();
+[19:16] <ryah> tisba: some http.Client pool should work 
+[19:17] <ryah> orlandov: yeah, and don't forget handlescope - those errors are extremely hard to find
+[19:17] <tisba> ryah: yeah, but I see _lots_ of TIME_WAITs, much more than my connections in my pool
+[19:18] RayMorgan has joined the channel
+[19:18] <orlandov> ryah: is it necessary to HandleScope within eio callbacks?
+[19:18] <ryah> tisba: that's not necessarily indicative of a problem
+[19:18] <orlandov> ryah: also... how hands off should i be within those functions with Node/v8 objects?
+[19:19] <orlandov> as much as possible i'm guessing :)
+[19:19] <ryah> tisba: you probably want to have pipelining
+[19:19] <tisba> ryah: the problem is the limit of my system resources :)
+[19:19] <ryah> tisba: have you increased ulimit -n 
+[19:20] <ryah> orlandov: you can't touch v8 in the thead pool - so , no handlescppe
+[19:20] <tisba> ryah: good, point. let me try this out...
+[19:21] Tim_Smart has joined the channel
+[19:21] <orlandov> ryah: so basically i should have all my data/objects ready to go before anything happens in those callbacks
+[19:21] <orlandov> de-v8'd
+[19:21] <ryah> tisba: but since you're probably connecting to a small number of hosts but doing many requests, pipelining would help very much
+[19:22] <tisba> yeah, it's not implemented currently, isn't it?
+[19:22] <ryah> orlandov: well, arguments
+[19:22] <orlandov> right
+[19:22] <ryah> tisba: no - but it's not far off
+[19:22] <orlandov> ryah: should be okay to use pointers to my EventEmitter's member vars though?
+[19:22] <tisba> ryah: awesome! :)
+[19:23] <ryah> tisba: that's not to say that i'll be implementing it soon - i'm just saying it's not extremely difficult
+[19:23] <ryah> orlandov: mm.. what do you mean?
+[19:24] <ryah> orlandov: paste me a code snippit
+[19:24] <tisba> ryah: sure, it's just my first test with node and I'm only playing around :) i'm wondering how hard it might be to implement pipelining on the js side
+[19:25] <ryah> tisba: the problem with client side pipelining it that you have to test the connection
+[19:25] piranha has joined the channel
+[19:25] <ryah> not all servers support pipelining 
+[19:26] <ryah> so you have to wait for the first response to see if the server is 1.1
+[19:26] <ryah> before you send all the rest
+[19:26] stepheneb has joined the channel
+[19:26] <ryah> because it could be that the server hangs up after the first response
+[19:27] <ryah> they might even misinterpret your multiple requests
+[19:27] <ryah> depending on how shitty the server is
+[19:27] <ryah> so probably node should have a http.Client pool built in
+[19:28] <ryah> which does this first-request testing itself
+[19:28] <ryah> and if you send two requests immediately
+[19:28] <ryah> then it sends them to two connections
+[19:28] <ryah> shrug
+[19:29] <ryah> the point is - this version-testing is what makes it a bit complex
+[19:30] <ryah> or maybe if you do c = createClient();  c.request(..); c.request(..)
+[19:30] <ryah> and it turns out the server is 0.9 or 1.0 - then the client reconnects between the requests
+[19:31] <ryah> i guess that's the right way to do it
+[19:31] <tisba> hmm
+[19:31] <ryah> it'll have to queue requests 2..N until it knows if the server supports pipelining
+[19:32] <ryah> but i guess users would want to have different stratagies if the server wasn't pipelining
+[19:32] <ryah> they probably want to open multiple connections to get better bandwidth
+[19:32] <ryah> hence the thread pool
+[19:33] <ryah> er connection pool
+[19:33] <ryah> yeah. so basically i think http.Client shouldn't really be user visable 
+[19:33] <ryah> visible
+[19:33] <ryah> http.request(blah); http.request(foo);
+[19:34] <ryah> and node takes care of the rest
+[19:34] <ryah> maybe have something like http.maxConnectionsPerHost = 8
+[19:35] teemow has joined the channel
+[19:36] <tisba> this would be awesome :) for the start, I think, I need to find a way to throttle down incoming requests to my server...
+[19:36] <tisba> after a while I get way too much timeouts
+[19:37] <ryah> em- yeah 
+[19:37] <ryah> that's a good feature request
+[19:37] <ryah> i don't there isn't a way to do that right now
+[19:38] <ryah> s/i don't//
+[19:39] <tisba> do you want me to file a ticket or smth?
+[19:41] <tisba> ryah: uh wait, did you mean there is no way to do throttling down incoming requests?
+[19:41] <ryah> nope
+[19:42] <ryah> you can throttle down an incoming request
+[19:42] <ryah> req.pause()
+[19:42] <ryah> but you can't say, like, i want only 20 connections on this server
+[19:42] <JimBastard_> i couldnt find my belt this morning and the top button on my clean jeans popped off. im wearing iphone buds as a belt today
+[19:43] <tisba> already saw that in the manual. what is the best practice to find out how many requests are currently served?
+[19:44] <ryah> tisba: keep track yourself
+[19:44] <felixge> ryah: I'd love to see node become a little more high level for http requests, but it will become harder to find the right abstractions - so it'd be nice if the low level interfaces stay user visible
+[19:44] <ryah> felixge: yeah - i agree
+[19:44] <tisba> ryah: hmm, okay. will be my next exercise :) thanks a lot!
+[19:45] <ryah> felixge: the low-level ones need to do the right thing regarding testing the frist connection though
+[19:45] <felixge> yeah, probably
+[19:46] <felixge> btw. I'm rebuilding dirty right now for JSConf. Initial testing shows I can get 5 million writes / sec and 50 million reads / sec
+[19:46] <felixge> :)
+[19:46] <felixge> v8 is awesome
+[19:46] ericflo has joined the channel
+[19:46] <orlandov> ryah: here's the gist, there's no rush; just wanted to double check that what i'm doing is, in fact, sane http://gist.github.com/318729
+[19:46] <felixge> I'm also thinking about adding virtual memory support like redis is doing, but that's pretty difficult
+[19:47] <felixge> orlandov: building a sqlite lib?
+[19:47] <orlandov> basically passing a pointer to a private member variable of my eventemitter
+[19:47] <orlandov> felixge: trying to :)
+[19:47] <felixge> orlandov: :)
+[19:47] <orlandov> it's kinda funky
+[19:48] <felixge> orlandov: mysql would be nicer : )
+[19:48] <orlandov> felixge: actually, trying to get an existing driver to use eio
+[19:48] <felixge> I don't like sqlite, it's very user unfriendly
+[19:48] <felixge> ah
+[19:48] <felixge> I see
+[19:49] <orlandov> felixge: i hear ya, but it's not really up to me :)
+[19:49] <felixge> orlandov: ah this is for a project?
+[19:49] <ryah> orlandov: looks fine
+[19:50] <ryah> orlandov: so on line 21 is where you'd put your sqlite3_connect call?
+[19:50] <orlandov> ryah: exactly
+[19:53] <CIA-77> node: 03Ryan Dahl 07master * rb021a84 10/ (lib/assert.js lib/http.js lib/sys.js src/node.js): Move process.inherits to sys - http://bit.ly/cn8bgZ
+[19:54] <ryah> orlandov: last arg of eio_custom is wrong
+[19:54] <ryah> should be conn_req
+[19:55] <orlandov> ryah: oops yeah you're right
+[19:56] <felixge> ryah: I can't refactor transloadit as fast as node is breaking it anymore :(
+[19:57] <felixge> but it has to be done ...
+[19:58] <ryah> the alternative is freezing it as it is
+[19:58] RayMorgan_ has joined the channel
+[19:59] <ryah> well i suppose i could have longer depriciation times
+[20:00] <cloudhead> does posix.cat still exists?
+[20:00] <orlandov> ryah: i assume the After* functions execute out of the threadpool and can emit events, and use v8 again yeah?
+[20:01] <cloudhead> having trouble with the module system ; /
+[20:01] <cloudhead> I got a bunch of files which all need access to an object
+[20:01] <cloudhead> but I'd rather not make a global
+[20:02] <cloudhead> or should I just use a global?
+[20:02] <felixge> ryah: yeah, it'd be nice to just show "warnings" instead of breaking for 1-2 released.
+[20:02] <felixge> * releases
+[20:02] <orlandov> cloudhead: i think your modules can use globals defined within them
+[20:03] <orlandov> er i'm not quite sure how to explain it
+[20:03] <ryah> orlandov: yes
+[20:03] <orlandov> kk
+[20:03] <cloudhead> orlandov: how do you mean? I'd like to share an object between various modules
+[20:05] <orlandov> cloudhead: okay, forgive me if i'm wrong... but i think if you have module A and module B, if B requires A, and A modifies A.foo, B will see B.foo has been modified
+[20:05] <orlandov> er
+[20:05] <orlandov> B will see that A.foo has been modified
+[20:05] <cloudhead> oh, right hmm
+[20:06] <orlandov> sorry that's about as clear as mud :)
+[20:06] rsms has joined the channel
+[20:06] <cloudhead> I get the idea
+[20:06] <ryah_away> orlandov: ping me on jabber if you have Qs
+[20:06] <orlandov> ryah_away: for sure, will do
+[20:07] <orlandov> i think i have a handle on this... for now
+[20:08] sztanpet has joined the channel
+[20:15] kjeldahl_ has joined the channel
+[20:19] <orlandov> man i wish there was a way to know whether a function in a library was blocking other than reading it
+[20:19] <orlandov> blah
+[20:21] <ashb> orlandov: docs/culture issue. submit doc patches ;)
+[20:22] drostie has joined the channel
+[20:28] morgan_ has joined the channel
+[20:32] hassox has joined the channel
+[20:34] stepheneb has joined the channel
+[20:40] <ryah_away> orlandov: i think you can assume all sqlite functions are blocking :)
+[20:41] mahemoff has joined the channel
+[20:45] joshbuddy has joined the channel
+[20:46] <JimBastard_> hey binary42 i decided my next rap song is gonna be the Git Rap. a whole rap song about how to use Git
+[20:46] <JimBastard_> when you do a git pull you better rebase, if you dont rebase i will break your face
+[20:46] <binary42> hahah.
+[20:46] <binary42> The GitHub guys would prob. feature it on their blog if you do it well.
+[20:47] <JimBastard_> im gonna collab with a few people
+[20:47] <JimBastard_> i could use some help on good git tips include
+[20:47] <binary42> Cool. I can't rap but I'll chip in if you need something.
+[20:47] <binary42> Ah.
+[20:47] <binary42> Cool.
+[20:48] <JimBastard_> yeah i mean if you are really good at git i could use help with lyrics
+[20:48] <binary42> I'll come up with a list.
+[20:48] <JimBastard_> awesome
+[20:48] <binary42> All your rebase are belong to us.
+[20:48] <JimBastard_> i was thinking maybe, Git Down
+[20:48] <JimBastard_> or just The Git Rap
+[20:49] <binary42> Git Down is better.
+[20:50] mattly has joined the channel
+[20:52] yaroslav has joined the channel
+[20:57] <felixge> JimBastard: you should make fun of people using the porcelain
+[20:58] <felixge> JimBastard: no respect for people who don't hang with their blobs
+[21:01] <binary42> plumbing vs. porcelain heheh.
+[21:01] <binary42> If anything you need to ref. Linus and his smelly subversion users comment.
+[21:02] <binary42> And if you don't know what I'm talking about you need to watch his google tech talk.
+[21:03] <binary42> (keep in mind some of the subversion devs were there in the audience)
+[21:04] <JimBastard_> so big talking points would be github, and linus's disdain for "normal" people who arent "as smart" as he is
+[21:04] <JimBastard_> linus linus the royal highness, he didn't think svn was the finest!
+[21:09] tisba has joined the channel
+[21:16] <ryah_away> ashb: ping
+[21:18] <Tim_Smart> ryah: Thoughts on my last reply? http://groups.google.com/group/nodejs/browse_thread/thread/3bdbbbb1f54df298
+[21:18] <Tim_Smart> well actually, my only reply
+[21:20] <ryah> Tim_Smart: i'd rather have just a hook
+[21:20] <Tim_Smart> example?
+[21:21] <ryah> require.addHook('.coffee', parseCoffeeScript)
+[21:21] <Tim_Smart> and where would this hook be inserted?
+[21:21] <Tim_Smart> a startup file?
+[21:21] <ryah> in a node-coffee script with a "#!/usr/bin/env node" shebang
+[21:22] <Tim_Smart> So you couldn't exactly do: 'node file.coffee' ?
+[21:23] <ryah> no, but you could do 'node-coffee file.coffee'
+[21:23] <ryah> :)
+[21:23] <Tim_Smart> Right
+[21:24] <ryah> or - maybe we could do something like
+[21:24] <ryah> hm
+[21:24] <Tim_Smart> We could have something like a .noderc file :p
+[21:24] <ryah> add a NODE_PRESCRIPT env var?
+[21:24] <ryah> maybe...
+[21:25] <Tim_Smart> insert the hook in there
+[21:25] <ryah> .node/startup.js
+[21:25] <ryah> maybe
+[21:25] <Tim_Smart> yeah
+[21:26] <Tim_Smart> but it would be hard for other libraries to automatically add support for their stuff
+[21:26] <Tim_Smart> so maybe .node/startup/*
+[21:26] <ryah> mm
+[21:27] <ryah> no, i don't think i want libraries adding thier stuff
+[21:27] <ryah> i was thinking - like - just user preferences
+[21:27] <Tim_Smart> ok
+[21:28] <ryah> i want to shift process.argv by two elements
+[21:28] <ryah> anyone object?
+[21:29] <Tim_Smart> well, I have used argv in a few script
+[21:29] <Tim_Smart> scripts*
+[21:30] <Tim_Smart> but I'm not too fussed with breaking changes atm :D
+[21:34] <JimBastard_> breaking changes in node upgrades is like poorly named methods in PHP. its expected.
+[21:35] kriszyp has joined the channel
+[21:38] devinus has joined the channel
+[21:38] paulbaumgart has joined the channel
+[21:43] RayMorgan has joined the channel
+[21:44] siong1987 has joined the channel
+[21:46] <devinus> so if i bench node it just sort of...stops at 15,000 requests
+[21:46] <devinus> ab -t10 -c100 -k http://127.0.0.1:8080/
+[21:46] <JimBastard_> hi devinus 
+[21:46] <devinus> hi, JimBastard_ 
+[21:47] <JimBastard_> ive seen this happen on the mailing list, there is a setting you gotta change
+[21:47] <CIA-77> node: 03Benjamin Thomas 07master * r6034701 10/ (lib/sys.js test/simple/test-sys.js): (log message trimmed)
+[21:47] <CIA-77> node: Stop sys.inspect from adding extra new lines for deep objects that are elements in an array.
+[21:47] <CIA-77> node: A couple other small fixes:
+[21:47] <CIA-77> node: If the keys of an object were all numeric they should be quoted. This
+[21:47] <CIA-77> node: way, you can now hypothetically copy and paste the output into your code
+[21:47] <CIA-77> node: (if the object doesn't contain any circular objects, deeply nested
+[21:47] <CIA-77> node: objects, Dates, RegExps or functions. I think).
+[21:47] isaacs has joined the channel
+[21:48] drostie has joined the channel
+[21:48] <devinus> JimBastard_: any keywords i can search the mailing list for?
+[21:49] <JimBastard_> im searching now, one sec
+[21:49] <JimBastard_> are you using nginx or anything like that infront of node?
+[21:49] <devinus> JimBastard_: no
+[21:50] <devinus> JimBastard_: my sysctl.conf looks like this http://gist.github.com/318851
+[21:51] <JimBastard_> node can 100% handle more then 15k requests
+[21:51] <JimBastard_> and ive defintely seen this issue come up before, i just cant remember the exact details im sorry
+[21:51] <JimBastard_> what OS are you running?
+[21:51] <JimBastard_> snow leopard?
+[21:51] <devinus> OS X 10.5.8
+[21:52] <JimBastard_> thread name is [nodejs] Basic HTTP Server hangs when running Apache Bench on it
+[21:53] dandean has joined the channel
+[21:53] <konobi> JimBastard_: tried running dtruss on it to see what happens when it hangs?
+[21:54] <devinus> ahah
+[21:55] <devinus> yeah that thread doesn't solve the problem. just tells him to use linux :-P
+[21:55] <ryah> devinus: i think this is a bug in ab
+[21:55] <ryah> devinus: i occurs if you do it to nginx too
+[21:55] <ryah> (iirc)
+[21:56] <devinus> ryah: you may be right. i've seen this with mochiweb too i believe
+[21:56] <devinus> oh well
+[21:56] <ryah> don't use shitty OSes? 
+[21:56] <ryah> :)
+[21:57] <devinus> os x pwns linux
+[21:57] <devinus> i kid
+[21:57] <devinus> actually about to get this bad boy: http://www.system76.com/product_info.php?cPath=28&products_id=99
+[21:58] <tlrobinson> devinus: i ran into that problem too
+[21:59] <tlrobinson> devinus: i think ulimit works on OS X
+[22:01] <Tim_Smart> ryah: If I go about a module system clean-up, is there anything you would like to see changed / added?
+[22:01] <devinus> tlrobinson: yeah, i've already added it to my sysctl.conf
+[22:03] <konobi> devinus: tried ab -k ?
+[22:04] <devinus> konobi: yes
+[22:04] <konobi> sounds like you're running into TCP/file descriptor limitations
+[22:06] <konobi> since iirc TCP sockets wait around until any lost/delayed packets are delivered, (max segment lifetime)
+[22:07] <ryah> Tim_Smart: module system clean-up?
+[22:09] <konobi> http://stackoverflow.com/questions/1216267/ab-program-freezes-after-lots-of-requests-why
+[22:10] <JimBastard_> devinus: if you need a testing env i would suggest spinning up a rackspacecloud instance, not exactly the best solution but its cheap and easy
+[22:10] <JimBastard_> kinda like my preference in women
+[22:10] <konobi> devinus: that looks like exactly your issue
+[22:10] <konobi> =0)
+[22:10] <Tim_Smart> ryah: Just cleaning up the code, re-arranging furniture, making it simpler and easier to manage. I just found it was a little messy
+[22:10] <tlrobinson> heh, yeah i had upvoted that page on SO awhile ago
+[22:11] brandon_beacher has joined the channel
+[22:12] <JimBastard_> i got yelled at today at work for shortening the name of or analytics.rake task
+[22:12] <JimBastard_> aparently anal.rake and rake anal:get isnt funny
+[22:12] <Tim_Smart> ryah: I'll make the patch anyway, I got some time to waste. It doesn't have to be used :p
+[22:12] <felixge> ryah: if you're doing some more merging later on, could you look at: http://groups.google.com/group/nodejs/browse_thread/thread/bb5a3db609fe6d17 ?
+[22:12] brandon_beacher has joined the channel
+[22:13] <ryah> Tim_Smart: run changes by me first
+[22:13] <konobi> JimBastard_: could be worse... could be something like `valgrind --tool=memcheck --leak-check=anal`
+[22:14] <JimBastard_> thats a good one konobi 
+[22:15] <ryah> Tim_Smart: i wouldn't mind having process.mixin moved into sys
+[22:16] <Tim_Smart> ryah: ok ^^
+[22:16] <CIA-77> node: 03Felix Geisendörfer 07master * r55ab9b4 10/ (src/node.js test/simple/test-process-mixin.js): 
+[22:16] <CIA-77> node: Bug fix for deep process.mixin array handling
+[22:16] <CIA-77> node: process.mixin was throwing an exception when trying to do a deep copy
+[22:16] <CIA-77> node: of an object that included an array.
+[22:16] <CIA-77> node: This bug was introduced in: 3bb7ad6fea42545e9d84ba5cbef8b48e470790fc - http://bit.ly/aaQKij
+[22:16] <ryah> felixge: thanks
+[22:17] <felixge> ryah: sweet, thanks : ), here is hope I can finish my migration to 0.1.30 :)
+[22:17] <ryah> felixge: :)
+[22:17] <felixge> actually I got it mostly working, but I had to use the backported promises
+[22:17] <felixge> no way I'm gonna rewrite those right now :)
+[22:18] <felixge> I also had to backport the file module
+[22:18] <ryah> yeah i'm using that too
+[22:18] <felixge> it's still really hard to model basic file stuff in free-style
+[22:18] <felixge> ryah: would you care about a file class that conforms to the new stream patterns?
+[22:19] stepheneb_ has joined the channel
+[22:20] <ryah> felixge: yes
+[22:20] <ryah> felixge: been meaning to do it
+[22:20] stepheneb_ has joined the channel
+[22:21] <ryah> felixge: two of them - one for writing and one for reading
+[22:21] <felixge> ryah: do you already have an API in mind? If you paste me the stub I'll go and implement it right now
+[22:21] <felixge> ryah: otherwise I can propose sth
+[22:22] <Tim_Smart> JimBastard: http://img.skitch.com/20100301-bthqa982ds7g71esbpr82ycj8y.jpg
+[22:23] technoweenie has joined the channel
+[22:23] <devinus> ryah: now that promises are removed :[ how would you rewrite this: http://gist.github.com/318882 ?
+[22:24] <felixge> devinus: http://gist.github.com/318885 ?
+[22:25] <mikeal> hahaha
+[22:25] <Tim_Smart> devinus: http://gist.github.com/gists/318884
+[22:25] <felixge> devinus: refresh, fixed an issue on line 3
+[22:25] <devinus> :)
+[22:25] <devinus> great im not insane then
+[22:25] <devinus> i did that, thinking attaching sql to cb would be dumb
+[22:25] <devinus> guess im not that dumb
+[22:26] <felixge> devinus: well, it means your cb won't be optional
+[22:26] <felixge> devinus: but in that case you could do: cb = cb || {};
+[22:26] <devinus> hrm, yes
+[22:26] <felixge> devinus: and check if cb is a function or object before deciding to call it in maybeDispatchQuery
+[22:26] <technoweenie> promises are gone in node head?
+[22:26] <mikeal> no, cause you're gonna wanna call cb at some point with error/success info
+[22:27] <felixge> devinus: or use an array. this._queries.push([sql, cb]); <- probably cleaner
+[22:27] <mikeal> after it gets pulled off that query pool
+[22:27] <felixge> technoweenie: yeah, promised :)
+[22:27] <mikeal> probably cb(undefined, undefined.sql)
+[22:27] <mikeal> haha
+[22:27] <mikeal> no
+[22:27] <Tim_Smart> devinus: https://gist.github.com/gists/318884
+[22:27] <technoweenie> so then everyone should just inherit from process.eventEmitter
+[22:27] <mikeal> cb(undefined, cb.sql)
+[22:27] <felixge> technoweenie: if you need to emit events, yeah
+[22:28] <mikeal> technoweenie: mostly just pass around callback functions that take an error as the first condition
+[22:28] <felixge> technoweenie: but some conservatives (hey isaacs), are even pushing for just binding those events like myParser.onError = function() ...
+[22:28] <felixge> :)
+[22:28] <ryah> felixge: fs.fileReadStream(function (readStream) {})
+[22:28] <ryah> readStream.addListener('data')
+[22:28] <ryah> etc
+[22:29] <mikeal> i don't like that, because it means only one caller per event by default
+[22:29] jcrosby has joined the channel
+[22:29] <felixge> ryah: ok, let me start some hacking
+[22:29] pdelgallego has joined the channel
+[22:29] <felixge> mikeal: well ... for 95% of the code I've written with node that would have been fine so far.
+[22:29] <technoweenie> i may have to figure out a better way to write my tests then
+[22:29] <technoweenie> i relied a lot on promise.wait()
+[22:30] <felixge> mikeal: so I think it has it's appeal
+[22:30] <mikeal> it's fine when it's just you writing code that you use
+[22:30] <mikeal> but then someone else uses your code and needs to add a handler
+[22:30] <felixge> technoweenie: ah, you'll just need more functions & callbacks
+[22:30] <mikeal> and that becomes significantly more difficult to extend
+[22:30] <devinus> yeah i have no idea how to rewrite this haha
+[22:30] <ashb> ryah: sorry was playing SC2
+[22:30] <ashb> whats up?
+[22:30] <technoweenie> i have lots of functions and callbacks
+[22:31] <mikeal> i didn't like the promise removal at first but it's really grown on me, all the code I had to move got a lot cleaner
+[22:31] <technoweenie> i havent found any test frameworks that i like yet
+[22:31] <mikeal> technoweenie: i think i'm going to adapt resig's 
+[22:31] <felixge> mikeal: I agree - I guess I'm just being nostalgic. Node used to not have event emitters and this was the way to go :)
+[22:31] <technoweenie> qunit or whatever it is?
+[22:31] <mikeal> yeah
+[22:31] <mikeal> i like the syntax
+[22:31] <technoweenie> ideally it'd just work the same on jquery in the browser and node.js
+[22:32] <felixge> technoweenie: I wrote my own called simplicity which I kinda like
+[22:32] <mikeal> but the implementation requires DOM at the moment
+[22:32] <felixge> need to update it for 0.1.30
+[22:32] <technoweenie> yes that qunit syntax is how nunit looks
+[22:32] <mikeal> i've written a couple dozen test frameworks
+[22:32] <mikeal> and really don't want to do it again
+[22:32] <felixge> it's basically just 60-70 lines of code doing some very basic sequencing of async tests and minimal reporting
+[22:32] <technoweenie> sorry, ntest: http://github.com/technoweenie/ntest
+[22:32] <mikeal> and i like the syntax for qunit
+[22:33] <ryah> ashb: what's $0 in commonjs? 
+[22:33] <technoweenie> its basically the same, but ntest uses describe/it vs module/test
+[22:33] <technoweenie> but hey if qunit works i'll move to it in a heartbeat
+[22:33] <ashb> ryah: not speced i think
+[22:33] <ashb> ryah: the script name is system.args[0]
+[22:34] <ryah> oh
+[22:34] <ashb> but $0 as process name as a changeable value (if thats waht you mean) isn't specd
+[22:34] <ryah> is that how it is in perl?
+[22:34] <technoweenie> it is in ruby
+[22:34] <technoweenie> its actually valuable, a web process can change $0 to the url being requested
+[22:34] <mikeal> i wish you could get away with just an ok() assert in javascript
+[22:34] <ashb> ryah: no, $0 is script name and @ARGV is rest of args
+[22:35] <technoweenie> yea script name, not process naem
+[22:35] <ryah> ashb: how about executable name?
+[22:35] <ryah> like, which perl executable
+[22:35] <ashb> $^X
+[22:35] <ashb> lovely, eh :)
+[22:35] <ashb> fwiw hippo has require('flusspferd').exectuableName
+[22:36] <ashb> ryah: $0 is changeable in perl tho (which changes what top/ps etc report
+[22:36] <technoweenie> https://gist.github.com/16b5a9ef53fc0adfeb3b <= me changing $0 in ruby
+[22:36] <ryah> $0 isn't very descriptive, but kind of everyone know what it means :)
+[22:37] <ryah> maybe i ought to use that in node
+[22:37] <ashb> do you want $0 or $^X/node binary name?
+[22:37] <technoweenie> ruby supports perl vars and has ruby-specific ones, you could do something similar
+[22:37] <technoweenie> $LOAD_PATH (ruby) vs $: (perl, i think?)
+[22:38] Booster has joined the channel
+[22:38] <ashb> $: is part of the old FORMAT stuff
+[22:38] <ashb> what does $LOAD_PATH do in ruby?
+[22:39] <technoweenie> its like uh require.paths in node
+[22:39] <ashb> @INC
+[22:39] <technoweenie> ah, then i dont know why the fuck ruby uses $: too :)
+[22:39] <ashb> no one really uses $: in perl mind
+[22:39] <ashb> its left over from the old 'perl is a text report' thing
+[22:40] <felixge> ryah: so the stream object would only be created if fs.open suceeds?
+[22:41] <felixge> ryah: I think this would not be nice for the writeStream, it means you'd have to queue your writes until the stream object is ready
+[22:41] <felixge> * queue them yourself
+[22:41] <ashb> wonder what python does with $0
+[22:41] <technoweenie> invalid syntax
+[22:41] <mikeal> fails
+[22:41] <ashb> *how it does it sorry
+[22:41] <mikeal> sys.argv
+[22:41] <isaacs> anyone know where execvpe is supported?
+[22:41] <ashb> no way of changing process name?
+[22:42] <mikeal> you can change sys.argv
+[22:42] <isaacs> i see it mentioned in a few places, but the man doesn't mention is
+[22:42] <isaacs> *it
+[22:42] <mikeal> it's not read-only
+[22:42] <ashb> mikeal: yeah but it doesn't change the process name in ps does it?
+[22:42] <mikeal> oh god no
+[22:43] <mikeal> there is none of that
+[22:43] <ashb> sewtting $0 in ruby or python does
+[22:43] <ashb> and its useful
+[22:43] <ashb> *or perl
+[22:44] <devinus> so...
+[22:44] <mikeal> http://code.google.com/p/procname/
+[22:44] <devinus> i've rewritten node_postgres to no longer use promises
+[22:44] <devinus> anybody interested?
+[22:44] <Tim_Smart> Does it use the C++ lib? Or tcp?
+[22:45] <devinus> C++
+[22:45] <ryah> felixge: yeah, but i think the stream shouldn't buffer anything
+[22:45] <ryah> well i guess the writes should buffer
+[22:45] <felixge> ryah: it must
+[22:45] <felixge> right
+[22:45] <Tim_Smart> devinus: Got a link?
+[22:45] <devinus> sec
+[22:45] <felixge> ryah: so I'm thinking the stream object should be the return value, rather than the callback param
+[22:46] <ryah> felixge: mmm okay
+[22:46] <felixge> ryah: if an error occurs during opening, it would be an event
+[22:46] <ryah> felixge: have it emit something like 'open' after open?
+[22:46] <felixge> ryah: will do
+[22:47] <Tim_Smart> EventEmitter's are awesome-sauce
+[22:47] <JimBastard_> agreed
+[22:51] <isaacs> hey there
+[22:51] <isaacs> yes. blarg.onsomething = function() {}
+[22:51] <isaacs> that's the way to go
+[22:51] <isaacs> felixge: (saw your ping)
+[22:51] <devinus> Tim_Smart, ryah: http://github.com/devinus/node_postgres
+[22:51] <felixge> isaacs: fight it out with mikeal :)
+[22:51] <isaacs> mikeal: let's fight.
+[22:51] <felixge> isaacs: I will only fight you about camel case :)
+[22:52] <isaacs> hahah
+[22:52] <felixge> isaacs: onSomething
+[22:52] <isaacs> felixge: i'd really meant to go that way, but then a few people all started using sax-js, and i'd break their stuff if i change it.
+[22:52] <isaacs> so it'll wait for next version
+[22:52] <Tim_Smart> devinus: Looks good
+[22:53] <isaacs> felixge: what are you streamifying?
+[22:53] <ryah> devinus: nice
+[22:53] <devinus> Tim_Smart: next order of business is postgres datetimes => Date objects
+[22:53] <devinus> maybe....
+[22:53] <devinus> i don't know
+[22:53] <felixge> isaacs: you could very easily just leave the alias for the old casing
+[22:54] <devinus> all i know is i want this postgres driver fleshed out
+[22:54] <isaacs> felixge: yeah, that's the plan
+[22:54] <isaacs> just havent gotten to it yet
+[22:54] <felixge> isaacs: anyway, I'm trying to implement file streams
+[22:54] <JimBastard_> devinus: we've been messing with node-persist
+[22:54] <isaacs> i like that saxjs is so wicked crazy fast, though, and i really don't want to add any aliasing lookup stuff.
+[22:54] <isaacs> maybe the first time, and then it'll just toLowerCase the handler if it finds it in the camelCase spot
+[22:54] <Tim_Smart> node-persistence isn't persisting for me :/
+[22:56] <isaacs> anyway, lower priority than npm, which is close to being done.  dependencies, versions, and activation all working.  install script support is really a pita without being able to set the env, though, because your script won't know what version it's dealing with, so that makes it tricky.
+[22:56] <mikeal> hehe
+[22:56] <mikeal> isaacs: i don't like the single event handler by default stuff
+[22:56] <isaacs> just gotta get mikeal's registry stuff tied in there.
+[22:56] <isaacs> mikeal: if you want more, you can use the Power of JavaScript to extend it
+[22:56] <mikeal> i was gonna ask how far along all that is
+[22:56] <isaacs> ^_^
+[22:57] <mikeal> isaacs: there are timing considerations tho
+[22:57] <mikeal> if someone wrote code that assumed they were the only listener
+[22:57] <mikeal> and someone else binds to it first it'll just get blown away
+[22:57] <isaacs> blerg.onSomething = (function (orig) { return orig ? function () { orig.apply(this, arguments); myNewShiz.apply(this, arguments) } : myNewShiz })(blerg.onSomething);
+[22:58] <mikeal> no matter how good you make your code to handler other listeners already attached someone else can always blog it away
+[22:58] <ashb> felixge: on_something
+[22:58] <isaacs> mikeal: right.  so you create the emitter, and you attach the listeners.  problem solved.
+[22:58] <ashb> under_scores ftw
+[22:58] <mikeal> yes, i can do that, but all of a sudden I use Rando Developer's library and he's killing my listeneres
+[22:58] <isaacs> ashb: snake_case ftl
+[22:58] <isaacs> mikeal: why are you sharing objects with Rando Developer?  you KNOW that guy's a nut
+[22:58] <mikeal> haha
+[22:59] jan____ has joined the channel
+[22:59] <mikeal> we're sharing the default objects
+[22:59] <isaacs> that works for sax-js because you don't share the parser unless you mean to.
+[22:59] <mikeal> we're both using the http library
+[22:59] <felixge> ashb: yeah, snake_case -1 :)
+[22:59] <isaacs> you create a parser, you write to it, you listen to it
+[22:59] <mikeal> yeah, that totally works for sax
+[22:59] <isaacs> mikeal: but we're not sharing the same request, or the same server.
+[22:59] unomi has joined the channel
+[22:59] <isaacs> http.createServer returns a server, and that's MY server, and i don't share it with you
+[22:59] <isaacs> or Rando
+[22:59] <ashb> isaacs: what are you - a java dev?
+[23:00] <isaacs> ashb: no, i'm a javascript dev ;P
+[23:00] <mikeal> hahaha
+[23:00] <mikeal> i think the extensibility model is a lot simple with event emitters
+[23:00] <isaacs> mikeal: i prefer has-a rather than is-a for exactly that reason
+[23:00] <mikeal> and it's easier to on people emitting events as well because they don't need to check if attributes are set before calling the method
+[23:00] <isaacs> ie, composition rather than extension
+[23:01] <ashb> someone musth hae done a study of what languages prefer s_c vs cC
+[23:01] <isaacs> blerg.emit = function (ev, data) { if (blerg["on"+ev]) blerg["on"+ev](data) }
+[23:01] <isaacs> mikeal: i have something very much like that in sax.js, but it's just a private function, rather than being exposed on the object.
+[23:01] <isaacs> since i don't trust what i didn't write.
+[23:02] <mikeal> that's fair
+[23:03] <devinus> anybody know if a way to execute sandboxed (e.g. no require) JS within node?
+[23:03] siong1987 has joined the channel
+[23:03] <isaacs> devinus: process.compile?
+[23:03] <mikeal> eval
+[23:03] gf3 has joined the channel
+[23:03] <devinus> eval sandboxes?
+[23:03] <isaacs> devinus: ver fn = process.compile("(function () {" + tehCodez + "})");
+[23:03] yaroslav has left the channel
+[23:03] <isaacs> erm, var fn
+[23:03] <mikeal> "function (stuff, I, want) { return " + source + "}"
+[23:04] <isaacs> devinus: then call fn()
+[23:04] <mikeal> eval(s).apply(null, [stuff, i want])
+[23:04] <isaacs> mikeal: process.compile's better.  doesn't leak the local scope
+[23:04] <mikeal> i always forget it does that
+[23:04] <isaacs> devinus: it'll still have access to the global obj, though
+[23:04] <mikeal> i keep thinking of it just providing the filename stuff
+[23:05] <isaacs> right
+[23:05] <mikeal> right, if you want to mask that stuff just do
+[23:05] <devinus> isaacs: so it could modify the global object?
+[23:05] <isaacs> devinus: yes
+[23:05] <devinus> yeah
+[23:05] <mikeal> "function (require, process, global, etc) "
+[23:05] <mikeal> then pass in null for those values
+[23:05] <devinus> i need it completely sandboxed
+[23:05] <isaacs> mikeal: but the global is always var G = (function () {return this})()
+[23:05] <devinus> ah, yes
+[23:05] <isaacs> devinus: do what mikeal said, but run it in a child node proces.
+[23:06] <isaacs> devinus: so, you'd do process.createChildProcess("node", ["sandbox.js"])
+[23:06] <devinus> i see
+[23:06] <mikeal> isaacs: what i the issue with masking everything in a function wrapper?
+[23:06] <Tim_Smart> ryah: Are you thinking of implementing WebWorkers within the Javascript, or within C++?
+[23:07] <isaacs> then, write the code to that sandbox, and have the sandbox.js read from stdin, and then do var fn = process.compile("(function (global, process) {"+code+"})"), and then call fn()
+[23:07] <Tim_Smart> ryah: Or both?
+[23:07] <isaacs> mikeal: well, he'd still be able to get at process via (function(){return this}).process
+[23:07] <mikeal> mask require, or else it'll have file IO access
+[23:07] <isaacs> mikeal: rather (function(){return this})().process
+[23:07] <isaacs> mikeal: if it's process.compiled, then it's outside in the global scope, no require
+[23:08] <isaacs> but it would have access to process, which exposes process.fs, and global.process, etc.
+[23:08] <isaacs> yikes.
+[23:08] <isaacs> ok.. nvm.
+[23:08] <isaacs> devinus: the sandbox leaks.
+[23:08] <mikeal> we need to expose contexts
+[23:08] <isaacs> devinus: don't use it.
+[23:08] <mikeal> even if they are expensive
+[23:08] <devinus> sounds like we need a sandbox
+[23:09] <devinus> maybe a process.sandbox(jsString) ?
+[23:09] <isaacs> devinus: good idea. go do that ;)
+[23:09] <isaacs> build it as a standalone module, though
+[23:09] <isaacs> not in process
+[23:09] <mikeal> what does sandbox actually mean tho?
+[23:09] <Tim_Smart> wait, let me get my bot
+[23:09] <mikeal> it has to have *something* in it
+[23:09] mahemoff has joined the channel
+[23:09] <isaacs> yeah, how "sandboxed" shoudl it be?
+[23:09] <devinus> mikeal: no access to anything node has added to v8
+[23:10] <devinus> that's what i need
+[23:10] <mikeal> v8 could add things you don't want in the future
+[23:10] <mikeal> what we do in couchdb is call evalcs
+[23:10] <isaacs> devinus: so, just the js language, but no api?
+[23:10] <mikeal> er evalcs
+[23:10] <mikeal> dammit
+[23:10] <mikeal> evalcx !!
+[23:10] nodejs_v8 has joined the channel
+[23:10] <devinus> right
+[23:10] <Tim_Smart> devinus: nodejs_v8 runs on node
+[23:10] <mikeal> it allows you to pass a context to the eval and the global scope isn't exposed
+[23:11] <Tim_Smart> nodejs_v8: Object.getOwnPropertyNames(this)
+[23:11] <nodejs_v8> Tim_Smart: ["TypeError", "decodeURI", "String", "Function", "Number", "undefined", "parseFloat", "encodeURI", "encodeURIComponent", "ReferenceError", "RegExp", "escape", "Array", "isNaN", "URIError", "unescape", "RangeError", "Date", "Infinity", "decodeURIComponent", "EvalError", "Math", "Boolean", "Error", "SyntaxError", "Object", "NaN", "eval", "parseInt", "execScript", "JSON", "isFinite"]
+[23:11] <Tim_Smart> clean sandbox ---^
+[23:11] <isaacs> nodejs_v8: Object.getOwnPropertyNames((function () { return this })())
+[23:11] <mikeal> right, but you'll usually want at least one more object in there
+[23:11] <nodejs_v8> isaacs: ["TypeError", "decodeURI", "String", "Function", "Number", "undefined", "parseFloat", "encodeURI", "encodeURIComponent", "ReferenceError", "RegExp", "escape", "Array", "isNaN", "URIError", "unescape", "RangeError", "Date", "Infinity", "decodeURIComponent", "EvalError", "Math", "Boolean", "Error", "SyntaxError", "Object", "NaN", "eval", "parseInt", "execScript", "JSON", "isFinite"]
+[23:11] <mikeal> some kind of API you're passing to the sandbox
+[23:11] <mikeal> this is what contexts are designed for
+[23:11] <devinus> nodejs_v8: 1 + 1
+[23:11] <nodejs_v8> devinus: 2
+[23:11] <mikeal> we should use them :)
+[23:11] <devinus> nodejs_v8: global
+[23:11] <nodejs_v8> devinus: Exception: ReferenceError: global is not defined
+[23:12] <mikeal> v8 has them
+[23:12] kriskowal has joined the channel
+[23:12] <isaacs> devinus: yeah, looks like you could steal from nodejs_v8 
+[23:12] <devinus> nodejs_v8: (function(){return this}).process
+[23:12] <nodejs_v8> devinus: undefined
+[23:12] <devinus> heh
+[23:12] <devinus> where is the code hosted?
+[23:13] <Tim_Smart> I haven't got it in a repo yet
+[23:13] <devinus> ah
+[23:13] <devinus> is anybody working on a good node REPL yet?
+[23:13] <Tim_Smart> It uses a C++ addon, which creates a v8 sandbox
+[23:13] <isaacs> devinus: there's node-repl that comes with nodejs
+[23:13] <Tim_Smart> devinus: What is wrong with node-repl?
+[23:13] <isaacs> devinus: i like that
+[23:13] <devinus> Tim_Smart: let me know when you release it
+[23:13] <devinus> node-repl...hadn't heard of it
+[23:14] <isaacs> devinus: it's bundled with node
+[23:14] <mikeal> up arrow doesn't work on mac for one
+[23:14] <isaacs> use rlwrap
+[23:14] <isaacs> alias js='rlwrap node-repl'
+[23:14] <isaacs> then it'll even read your .inputrc
+[23:15] <devinus> nice
+[23:15] <devinus> now all we need to do
+[23:15] <isaacs> and log to the .node-repl_history
+[23:15] <devinus> is combine this with a JS highlighter :-P
+[23:15] <mikeal> isaacs is full of great information
+[23:15] <isaacs> ^_^
+[23:15] <Tim_Smart> lol it even recommends it in the node-repl startup
+[23:16] <isaacs> yeah, i don't invent this stuff.  i just copy it from other people
+[23:16] <mikeal> isaacs: since you've been spending some time in that couchapp, tell me what you think about this  http://github.com/mikeal/node.couch.js/blob/master/couchapp/tests/app.js
+[23:16] <mikeal> that's the test for a new couchapp utility I'm writing in node.js
+[23:16] <mikeal> it does a ton of extra testing as well
+[23:17] <isaacs> nice.
+[23:17] <isaacs> i'll take a look a bit later.
+[23:17] <mikeal> it's even simpler than the current tree strucutre
+[23:18] <devinus> i'd really love to not have to write my own node web framework, but i guess i'm too picky :(
+[23:19] <mikeal> a lot of the existing ones are clones of existing frameworks from other languages
+[23:19] <devinus> i don't want a DSL, i want powerful regex routing, and pluggable templating because i want to use RayMorgan's Mu
+[23:19] <mikeal> it's going to be a little while until someone writes one that feels good
+[23:19] <mikeal> mustache.js has streamed renders now
+[23:19] <ashb> devinus: whats your defn of powerful regex routing?
+[23:20] <mikeal> did you see that twitter.com is using mustache.js now
+[23:20] <ashb> i blame Dan Webb
+[23:20] <mikeal> i DONT want regex routing
+[23:20] <ashb> ah dont
+[23:20] <RayMorgan> devinus: :)
+[23:20] <ashb> some do some dont
+[23:20] <Tim_Smart> devinus: http://dl.dropbox.com/u/396394/v8eval.zip
+[23:20] <ashb> mikeal: what do you want?
+[23:20] <mikeal> i want my web framework to smack me over the head if I try to do anything not RESTy
+[23:21] <mikeal> and make it dirt simple for me to simple rest routing
+[23:21] <ashb> doens't mean you can't do it with regexps
+[23:21] <mikeal> that's a pain in the ass
+[23:21] <devinus> ashb: as in, (/foobar\/(\d*)\/(\d*)/, [function(id1, id2) { } ])
+[23:21] <ashb> but i guess regepxs make it easier to do something else
+[23:21] <mikeal> and hard to reverse map
+[23:21] <ashb> devinus: thats what i've got :)
+[23:21] <mikeal> i need the reverse map so that I can generate a sitemap
+[23:22] <ashb> sitemaps are old and overrated
+[23:22] <mikeal> they work
+[23:22] <ashb> not for humans they dont. and google will find anything interesting otherways
+[23:22] <mikeal> you get far less spider traffic
+[23:23] <mikeal> and regex's lend to have a few paths map to the same content, which does lower the search results
+[23:23] <mikeal> urls should be simple
+[23:23] <mikeal> not infinitely complex like regex
+[23:26] <ashb> 'regex's lend to have a few paths map to the same content' only if you do it massively wrong
+[23:27] <ashb> still - i think you should give people the power to shoot themselves in the foot if they way/need to
+[23:27] <ashb> its more fun that way
+[23:30] <felixge> ryah: gotta wrap up for tonight, but could you have a quick look at what I got so far and let me know if you like the direction? https://gist.github.com/5e3ef7fdfa454f78cd18
+[23:30] unomi has joined the channel
+[23:30] <mikeal> ashb: haha
+[23:31] <mikeal> i'm not opposed to having the extensibility to shoot yourself in the foot, I just don't like that being the default
+[23:31] <ashb> thats a sane practice
+[23:31] <JimBastard_> im working on a javascript joke
+[23:32] <JimBastard_> except it isnt quite funny yet, needs better code
+[23:32] <ashb> mikeal: the one thing where regexps are probably helpful is validing 'captures' in the /pics/\d+/edit kind of sense
+[23:32] <JimBastard_> http://gist.github.com/318937
+[23:33] <ashb> JimBastard_: needs to be more sublte somehow too
+[23:33] <JimBastard_> indeed
+[23:33] <JimBastard_> .toString is too cheap
+[23:34] <mikeal> two NaNs to not equal a right :)
+[23:34] <mikeal> s/to/do
+[23:34] <ashb> nan comparse false to everything
+[23:35] <mikeal> NaN !== NaN is true :)
+[23:35] <ashb> you know what i mean :P
+[23:35] <mikeal> haha
+[23:35] dekz has joined the channel
+[23:35] <mikeal> that's my favorite slide in the Crockford talk
+[23:35] <mikeal> he just puts it up there and starts laughing
+[23:36] <mikeal> "this is clearly just wrong"
+[23:38] <Tim_Smart> nodejs_v8: NaN !== NaN
+[23:38] <nodejs_v8> Tim_Smart: true
+[23:38] <Tim_Smart> lolwut
+[23:38] <JimBastard_> thats a good js joke
+[23:38] <JimBastard_> remember kids NaN == NaN, except in JS
+[23:39] <ashb> C is the same
+[23:39] <JimBastard_> im sure there is some really good ones you could do
+[23:39] <Tim_Smart> nodejs_v8: NaN === NaN
+[23:39] <nodejs_v8> Tim_Smart: Exception: SyntaxError: Unexpected token ILLEGAL
+[23:39] unomi has joined the channel
+[23:39] <mikeal> but in C it's a different type
+[23:39] <mikeal> isn't it?
+[23:40] <mikeal> isn't NaN a special constant like null?
+[23:40] mumrah has joined the channel
+[23:40] <mikeal> it's been a long time since i wrote C
+[23:41] joshbuddy has joined the channel
+[23:41] joshbuddy has joined the channel
+[23:41] <JimBastard_> i dont think ive written production C since 2006 and that was a 8 line api wrapper
+[23:41] <JimBastard_> before that i was like 1998
+[23:41] <ashb> no - NaN is just a particular bit pattern
+[23:41] <ashb> (i'm not sure if NaN == NaN or not in C , but the I'm 90% sure that the I##754 spec says how comparisons of NaN should behave
+[23:42] <mikeal> it's so much less of a issue tho
+[23:42] <mikeal> if you don't have type coercion you rarely need to handle NaN
+[23:42] <mumrah> mikeal: got an example of that open connection thing we talked about yesterday?
+[23:43] <mikeal> i drink, so you'll have to remind me
+[23:43] <mumrah> heh
+[23:43] <mumrah> instead of long polling
+[23:43] <mikeal> oh that
+[23:43] <mumrah> you were talking about having an open connection that you just send stuff down
+[23:44] <mikeal> yeah, hold on
+[23:44] <mikeal> i have an outdated one but i know jchris has a working one
+[23:45] <felixge> gn8
+[23:45] <Tim_Smart> Hmm I want to land a patch for WebWorkers, but I got no idea what ryah has already got planned for it
+[23:45] <mikeal> http://github.com/mikeal/jquery.couch.js/blob/master/jquery.couch.js#L179
+[23:46] <mumrah> then is there anything special i need to do in node?
+[23:46] <mumrah> or do i just set up an http server like normal
+[23:47] <mumrah> and write to the response object
+[23:50] tmpvar has joined the channel
+[23:50] <Tim_Smart> yeah, and so that why tmpvar fails...
+[23:50] <Tim_Smart> o wait
+[23:51] <tmpvar> haha, hi
+[23:51] <tmpvar> whats up Tim_Smart 
+[23:51] <Tim_Smart> jk, hai2 u2
+[23:51] <tmpvar> man, i am so burnt today
+[23:52] <tmpvar> woke up (super) early, after getting just about null sleep
+[23:54] <tmpvar> ah well, im done complaining :P

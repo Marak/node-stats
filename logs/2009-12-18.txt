@@ -1,0 +1,1104 @@
+[00:00] hassox: maybeCallback is pretty nice
+[00:00] hassox: descriptive
+[00:00] jazzychad: you'll just have to document really well what that means since it wouldn't be at all obvious :)
+[00:01] isaacs: code that relies on documentation is bad code.
+[00:01] isaacs: if you cant grok it from rtfs, then there's a problem, imo
+[00:01] jazzychad: +.5
+[00:01] isaacs: ACTION doesn't read documentation. just skips to the code samples.
+[00:02] isaacs: i only read the docs when i have a specific question about the args to a fn or whatever.  general overview stuff?  booooorrrrrinnnnnggggg
+[00:02] jazzychad: so what would you call this style of adding a callback, isaacs?
+[00:03] isaacs: i haven't ben paying attention... you're looking for a default behavior type thing?
+[00:03] inimino: hm...
+[00:04] hassox: it's more: If something downstream hasn't taken care of things, I want a crack at it
+[00:04] jazzychad: sayeth hassox: "this is a callback that will execute unless something further down the stack decides it wanted to finish things"
+[00:04] hassox: and I can chose to either pass it back to the next callback, or finish it myself
+[00:06] isaacs: ok
+[00:06] isaacs: so you've got a chain of event handlers, and then something that gets called at the end, if no one cancelled the event.
+[00:06] isaacs: kinda DOMish
+[00:06] isaacs: i can dig it.
+[00:06] hassox: :)
+[00:06] hassox: cool
+[00:06] hassox: glad it's to weird
+[00:06] hassox: too
+[00:07] kriskowal has joined the channel
+[00:07] jazzychad: hassox: can you add more than one? or is the idea only to set one?
+[00:07] hassox: you can add as many as you like
+[00:08] isaacs: so... i would object to putting this in the core node lib.
+[00:08] isaacs: imo, this should be a different kind of thing in a higher-level library, since it's not strictly necessary, and there's really nothing you can do with it that you can't do without it.
+[00:08] isaacs: ACTION has built this sort of behavior in vanilla JS, twice.
+[00:08] hassox: oh
+[00:09] hassox: not talking about it being in node lib
+[00:09] hassox: this is just something I'm playing with
+[00:09] isaacs: i'd call it addDefault(fn)
+[00:09] isaacs: ie, obj.addDefault("eventName", handler)
+[00:09] isaacs: then track the return vals from the handlers, or have a way to detect what event is happening, and kill it.
+[00:10] isaacs: javascript is only limited by your cleverness and wit.
+[00:10] jazzychad: stackCallback, addHandler, stackHandler, lazyCallback, fallthroughCallback, justincaseCallback, ...
+[00:10] hassox: if I set it up as an event handler
+[00:10] hassox: a
+[00:10] hassox: ll will fire right?
+[00:10] hassox: all
+[00:10] isaacs: obj.on() adds a handler, in order.  obj.addDefault() adds a default behavior.  of an "on" handler returns false, stop the chain.  if the chain goes all the way through, call the default behavior fn.
+[00:10] isaacs: that's how i'd do it.
+[00:11] isaacs: as in, that's how i did it for yap
+[00:11] hassox: so you stored the chain as an array and checked the return of each callback?
+[00:11] isaacs: except for the returning false bit... i had a YAP.cancel() event.
+[00:12] isaacs: YAP.cancel() deleted the thing from the queue and killed the timeout
+[00:12] isaacs: before calling the handler, i set a hidden var to the value of the event i was processing, so that YAP.cancel() could know what even was being cancelled.
+[00:12] hassox: hrm
+[00:12] hassox: interesting
+[00:12] isaacs: YUI uses a more dom-like event model.
+[00:13] isaacs: event handlers get an e object that looks a lot like the event obj that dom handlers get.
+[00:13] isaacs: e.halt() stops it.  e.preventDefault() prevents the default, etc.
+[00:13] mikeal has joined the channel
+[00:31] sudoer has joined the channel
+[00:38] mikeal1 has joined the channel
+[00:53] pixelcort has joined the channel
+[01:16] erichocean: finally got all of node.js' dependencies compiling on Solaris; now on to node.js itself
+[01:16] mikeal1 has joined the channel
+[01:21] shfx has joined the channel
+[01:23] cloudhead: is there a way I can 'wait' for all promises to finish before calling process.exit?
+[01:25] cloudhead: hmm, seems like calling wait() on the last promise does the trick
+[01:27] rtomayko has joined the channel
+[01:32] chakrit has joined the channel
+[01:36] dnolen has joined the channel
+[01:37] chakrit: Is there a way to auto-reload when file content changes? Anyone has a script for that?
+[01:43] isaacs: chakrit: yes, i did see a way to do that... just a sec, lemme see if i can dig it up.
+[01:43] chakrit: isaacs: awesome :)
+[01:44] sudoer has joined the channel
+[01:47] isaacs: oh, hrm, that method wont' work any more, because the require() module cache isn't exposed.
+[01:47] isaacs: and there's no way to force-reload a module that's cached.
+[01:48] isaacs: unless... you were running node in a child process... and then killed and re-spawned the process whenever the file changed.
+[01:52] chakrit: isaacs, aww.. too bad. I'll have to makedo myself then ... thanks anyway dude
+[01:52] isaacs: almost done with it, i'll have example code in a few minutes.
+[01:52] isaacs: it's a race :)
+[01:52] chakrit: lol, I havn't had breakfast yet
+[01:52] chakrit: it's 9am here XD
+[02:04] erichocean: so...there are four different build systems at work in the current node.js source tree
+[02:04] kriskowal: are there really?  that could be problematic.
+[02:04] kriskowal: i've patched wscript, being unaware of the others.
+[02:04] kriskowal: presumably the Makefile is just a shortcut.  what's the other?
+[02:04] erichocean: scons, autoconf, and plain old make are also there
+[02:05] erichocean: of the deps, v8 is by far the biggest
+[02:05] kriskowal: do they overlap in behavior?
+[02:05] erichocean: it's also got pretty well-thought out platform support
+[02:05] erichocean: and solid subproject support
+[02:05] erichocean: it looks to me like it would be easier to invert things a little and let v8 run the show
+[02:05] erichocean: making node.js equivalent to say, d8 or the sample shell v8 comes with
+[02:06] erichocean: the other deps are all relatively small
+[02:06] chakrit: python waf
+[02:06] erichocean: evlib is the worst, but it does have a manual mode that I find easy to control, and would fit in well with the SConstruct v8 has now
+[02:07] erichocean: I've already converted udns to scons, because it's Makefile was crap
+[02:08] erichocean: node is using waf currently, but the build itself is pretty trivial
+[02:09] isaacs: chakrit: http://github.com/isaacs/node-playground/blob/master/watchfile.js
+[02:09] hassox: lads
+[02:09] hassox: nm
+[02:10] chakrit: isaacs, Ah... I was investigating process.createChildProcess .. you beat me to it haha
+[02:10] chakrit: isaacs, trying it out now 
+[02:10] isaacs: on osx it restarts a LOT
+[02:10] isaacs: or maybe textmate was just touching my files a bunch
+[02:10] isaacs: i usually prefer the while true; do node my-file.js; done
+[02:10] isaacs: trick
+[02:11] isaacs: then you do ^C to reload
+[02:11] chakrit: umm that's still manual
+[02:11] isaacs: right
+[02:12] isaacs: erichocean: it's not so much that node is bigger/smaller than v8, it's more like a separation of concerns.
+[02:12] isaacs: d8 makes sense as  a bundled v8 tool, since it's specifically a v8 debugger.  but why should a js engine contain a posix/http thingie?
+[02:12] chakrit: ok, this works .... thanks dude XD
+[02:12] erichocean: that's typical for compilers
+[02:12] erichocean: LLVM also has projects that use it embedded in the source tree
+[02:13] isaacs: erichocean: not js cmpilers ;)
+[02:13] chakrit: it seems to print 2 nulls every reload not sure why...
+[02:13] erichocean: including projects that aren't part of the LLVM project
+[02:13] isaacs: yeah, that's odd.
+[02:13] chakrit: but I don't have your reload problem so I guess it's TextMate 
+[02:13] isaacs: chakrit: well, i'll leave that as an exercise for the reader.
+[02:13] isaacs: i figured it was because i'm messing around with sys.debug
+[02:13] chakrit: isaacs, ok :)
+[02:14] bentomas has joined the channel
+[02:16] gwoo has joined the channel
+[02:16] isaacs: erichocean: that's a good point.  but node being part of v8? it just doesn't seem right for some reason.
+[02:17] erichocean: just nested in the source tree
+[02:17] isaacs: maybe because v8 is, for better or worse, the product of a BDC (though, arguably one of the less-D of the BDCs)
+[02:17] chakrit: isaacs, it's just emitting EOF (== null) to stdout/err on child.kill()
+[02:17] isaacs: erichocean: what does that get us, though, really?
+[02:17] isaacs: chakrit: oh, that makes sense.
+[02:17] erichocean: we can piggy back on v8s build system with ease
+[02:17] erichocean: and then all of the source built will use the same settings as v8
+[02:18] isaacs: but at the cost of reducing the visibility of the code.  i dunno bout you, but i kinda like that it's separate.
+[02:19] isaacs: makes the separation fo concerns more apparent.
+[02:20] isaacs: v8 itself can just kinda be a black box, then
+[02:21] eddanger has joined the channel
+[02:22] erichocean: node currently access 88 symbols from v8
+[02:24] isaacs: erichocean: well, yeah, you kinda need to if you're going to embed v8 into a project.
+[02:24] isaacs: v8::String v8::Function v8::Array, etc.
+[02:25] isaacs: not to mention the stuff for compiling scripts with process.compile
+[02:32] jed has joined the channel
+[02:35] erichocean: on a more practical note, moving node into the v8 source tree would allow us to use the -fvisibility=hidden flag
+[02:35] erichocean: which makes the resulting binary faster and smaller
+[02:35] isaacs: i see
+[02:35] isaacs: i like practical notes :)
+[02:35] isaacs: what does that flag do?
+[02:36] erichocean: remove C++ symbols from the binary and allows the compiler to optimize based on the fact that their positions are now known
+[02:36] erichocean: C++ template symbols are quite large
+[02:37] bentomas: I'm sorry, I think I missed something, is v8 considering including Node in its source?
+[02:37] isaacs: bentomas: no, it's not
+[02:37] isaacs: erichocean is suggesting putting the node src into hte v8 tree, and then compiling it with their build tools.
+[02:38] isaacs: erichocean: so, iiuc, we can't do that because the v8 compiler doesn't know what symbols node is gonna need?
+[02:38] erichocean: correct
+[02:40] isaacs: interesting.
+[02:40] isaacs: could we just have the node compiler do the same thing with the node binary?
+[02:46] hassox: lads
+[02:46] hassox: maybe a silly question
+[02:46] isaacs: erichocean: in other words, is there any way to do that without changing the code tree structure?
+[02:46] erichocean: isaacs: I'm note sure, but I kind of doubt it. The problem is that the compiler needs to know what symbols to hide, and it wouldn't have the information at that point.
+[02:46] hassox: if I want to listen to all objects of kind Foo
+[02:47] hassox: can I add my listeners to the prototype?
+[02:47] hassox: the prototype of Foo
+[02:47] erichocean: hassox: no
+[02:47] isaacs: hassox: no, that won't work, because the events are emitted by the obj, not via the prototype.
+[02:47] isaacs: the Foo object would have to have this kind of functionality built into it.
+[02:47] hassox: yehah
+[02:47] hassox: but
+[02:47] hassox: if I put it into the _events collection?
+[02:47] isaacs: ie, its "emit" function could be overridden to do that.
+[02:47] hassox: would it do it then?
+[02:48] isaacs: hassox: i don't believe so
+[02:48] isaacs: you could do this, though:
+[02:49] isaacs: sys.inherits(Foo, process.EventEmitter); Foo.prototype.emit = function () { /* do something, and then */ process.EventEmitter.prototype.emit.apply(this, arguments) }
+[02:49] hassox: i thought it was process.inherits ? did it change?
+[02:49] isaacs: hassox: it's on both objects.
+[02:49] hassox: oh trixy
+[02:49] isaacs: same thing, tho
+[02:49] hassox: is that considered ok in js?
+[02:49] isaacs: hassox: i'm ok with it :)
+[02:50] hassox: hehe
+[02:50] hassox: hrm
+[02:50] hassox: actually
+[02:50] erichocean: okay, well I'm going to give it a try and see how it goes
+[02:50] hassox: I don't quite think that's what I mean
+[02:50] isaacs: not sure if process.EventEmitter is doing something tricky with the native code or something
+[02:50] hassox: lets say the api looked like this
+[02:51] hassox: Foo.listenToAllInstances("event_name", function(arg){...})
+[02:51] isaacs: right
+[02:51] isaacs: so you'd have a *different* event emitter somewhere, and when you call the static Foo.listenToAllInstances, you'd attach a listener to that private eventemitter
+[02:51] isaacs: then, in the "/* do something, and then */" bit above, you'd emit the event on that private thingie, too
+[02:52] hassox: ah i see
+[02:52] hassox: so setup a private property in the prototype
+[02:52] gjritter_ has joined the channel
+[02:52] isaacs: well, no
+[02:52] hassox: which is an event emitter that acts as a proxy event emitter for all of them
+[02:52] hassox: then I don't see
+[02:52] hassox: ;)
+[02:52] isaacs: i mean, almost
+[02:52] isaacs: but not on the prototype
+[02:52] hassox: oh right
+[02:52] isaacs: just a local var in the module.
+[02:52] hassox: kk
+[02:53] isaacs: if you wanted to expose it, sure, you could totally do that, but it'd be silly.
+[02:54] hassox: so in that case though
+[02:55] hassox: how would you make it the same instance?
+[02:55] isaacs: huh?
+[02:55] hassox: every time you instanticated one it would get a new instance of the proxy emitter wouldn't it?
+[02:55] hassox: just before I go down this road... is it possible to ask where the event came from?
+[02:56] isaacs: Foo.prototype.emit = function () { Foo.proxy.emit.apply(Foo.proxy, arguments); return process.EventEmitter.prototype.emit.apply(this, arguments) }
+[02:56] isaacs: Foo.proxy = new process.EventEmitter
+[02:56] isaacs: Foo.proxy.addListener("something", function () { something happened to a Foo! })
+[02:56] scudco has joined the channel
+[02:56] isaacs: hassox: the prototype is shared across all instances.
+[02:57] isaacs: that's its value
+[03:01] hassox: it's not the emitting
+[03:01] hassox: it's the listening
+[03:02] hassox: bah
+[03:02] hassox: I'm a bit lost now
+[03:05] chakrit: hassox: I think he's suggesting that if you change the way events are emitted (shared EventEmitter on the prototype) then it's easy to add a "global" listener
+[03:11] jamiew_ has joined the channel
+[03:22] micheil has joined the channel
+[03:30] brain_in_vat has joined the channel
+[03:33] micheil: ryah_away: If you're intending on moving towards the Dojo style API, would you be interested in using the Dojo Doc style as well?
+[03:51] jspiros has joined the channel
+[03:51] deanlandolt has joined the channel
+[03:54] sveimac has joined the channel
+[04:02] gwoo has joined the channel
+[04:04] jspiros has joined the channel
+[04:04] deanlandolt has joined the channel
+[04:07] jcrosby has joined the channel
+[04:09] Micheil1 has joined the channel
+[04:10] micheil_ has joined the channel
+[04:54] gjritter_ has joined the channel
+[05:10] brain_in_vat has left the channel
+[05:29] onar_ has joined the channel
+[05:41] sudoer has joined the channel
+[05:52] RayMorgan has joined the channel
+[06:20] JoePeck has joined the channel
+[06:25] alex-desktop has joined the channel
+[06:33] micheil: ryah_away: With fu.js, is there a dedicated git repo for it?
+[06:52] jasonwang has joined the channel
+[06:53] jasonwang has left the channel
+[06:59] logicuce has joined the channel
+[07:16] JimBastard has joined the channel
+[07:16] JimBastard: sup party people
+[07:18] micheil: ACTION is implementing a basic MVC framework
+[07:19] micheil: just something simple to throw up over at brandedcode.com shortly
+[07:19] JimBastard: always with the mvc
+[07:19] JimBastard: :p
+[07:19] micheil: well, it's not really MVC, just controller's and views
+[07:19] JimBastard: what are views? static html?
+[07:19] micheil: yeah
+[07:19] JimBastard: meh
+[07:19] micheil: it's an experiment
+[07:20] micheil: wow.. it's 6pm, that came quick
+[07:20] JimBastard: MVVM would be sweet...with some front-side JS databinding
+[07:22] JimBastard: bbl
+[07:36] qFox has joined the channel
+[07:36] onar_ has joined the channel
+[07:40] binary42 has joined the channel
+[07:40] mikeal has joined the channel
+[07:49] micheil has joined the channel
+[07:55] dnolen has joined the channel
+[08:07] binary42 has joined the channel
+[08:32] johan-s has joined the channel
+[08:36] chrisfarms has joined the channel
+[08:48] micheil has joined the channel
+[08:49] JimBastard has joined the channel
+[08:50] JimBastard: is there any JS code floating around for compacting JS code?
+[08:51] erichocean: yes
+[08:52] erichocean: Douglas Crockford has a minifier
+[08:52] erichocean: I think the others are in Java
+[08:53] the_undefined has joined the channel
+[08:53] micheil: there's also one at beautify.com or something
+[08:53] micheil: I'll find the exact address, one sec
+[08:54] micheil: http://jsbeautifier.org/
+[08:55] micheil: wait. you wanted packer, not unpacker..
+[08:56] JimBastard: i got one here
+[08:56] JimBastard: http://dean.edwards.name/packer/
+[08:56] JimBastard: lots of JS files
+[08:56] JimBastard: thinking about building a module in node around this
+[08:56] JimBastard: kinda need it
+[08:56] micheil: yeah
+[08:56] micheil: just make sure you cache stuff
+[08:57] JimBastard: like what
+[08:57] micheil: well, after packing a file, store it on the filesystem so you don't need to repack every run
+[08:58] inimino: JimBastard: who do you need it?
+[08:58] inimino: ACTION is generally against minification
+[08:58] inimino: s/who/why/
+[08:59] micheil: inimino: you do need it in some cases for faster load times
+[08:59] mikeal has joined the channel
+[08:59] qFox: against minification..?
+[08:59] inimino: micheil: gzip
+[09:00] micheil: true
+[09:00] qFox: unless showcasing, what's the point if it's lossless?
+[09:00] qFox: or rather, problem.
+[09:00] micheil: although, better results can be found with gzip+minification
+[09:00] inimino: qFox: the Web is built on cut and paste, and reading other's code
+[09:00] inimino: "view-source" is a feature
+[09:01] qFox: that's what showcasing is for
+[09:01] qFox: for a production site not focussed on javascript, the extra bytes count
+[09:01] JimBastard: i need to have a whole bunch of JS loaded via one JS script tag
+[09:01] JimBastard: and im also gonna have to append like 10 js files together into one big one
+[09:01] inimino: s/tag/element/
+[09:02] inimino: qFox: different priorities, perhaps
+[09:02] qFox: :)
+[09:02] inimino: suffice it to say I disagree strongly
+[09:03] qFox: that's ok.
+[09:03] inimino: and I don't think we'd all be using the Web today if it wasn't for view-source
+[09:03] qFox: i stand by what i said. there is more than enough showcasing for learning. people that do cool stuff in js generally publish their howto's somewhere
+[09:03] micheil: I'll admit that I learnt html & css from reading source, but the rest was from reading open source.
+[09:03] qFox: bcause they're proud of it.
+[09:04] JimBastard: imacomputer
+[09:04] inimino: I don't consider that sufficient
+[09:04] JimBastard: i think i need to go buy some fruit pies stat
+[09:04] JimBastard: tommorow is the first day in the hackathon
+[09:04] qFox: now try to run a big international website, where timing really counts, and tell your boss you're loading about 150k of javascript where it could be 30k, clogging the tubes for people abroad
+[09:04] inimino: unless you're going to publish everything in an unminified form and link to it from the compressed source, and keep it up to date
+[09:05] qFox: there are fixes for that, but they cost moneyz. packing the scripts and cs, dont.
+[09:05] qFox: ... doesnt.
+[09:05] inimino: "150k of javascript where it could be 30k" is utter nonsense
+[09:05] JimBastard: yeah i mean
+[09:05] JimBastard: had does 5 become 1
+[09:06] micheil: inimino: I think it's suffice to say that in some situations, packing is done because you don't want people trying to read the source code
+[09:06] inimino: please test with the minifier of your choice, using gzip on both, then come back and you can throw numbers around
+[09:06] micheil: also, if amazon.com lags by 200ms in it's loading times, then they loose something like 10-20% of their sales.
+[09:06] qFox: i know the numbers. but it's still gonna be 10k. and not every internetcafe uses browsers that support gzip
+[09:07] qFox: for a travelblog, that's a problem
+[09:07] inimino: micheil: obfuscation is the main reason why I object to it
+[09:09] micheil: inimino: I'm pretty sure there's a firefox addon that automatically unpacks packed javascript code
+[09:09] JimBastard: if you have self describing variable names and they get shortened and shit, how you gonna unpack that?
+[09:09] JimBastard: a, b, c, d, e, f, g, 
+[09:10] qFox: :p
+[09:10] micheil: inimino: for some of the larger websites I've worked on, we've actually packed our css as well, because we needed the time on the load
+[09:10] micheil: JimBastard: I'm not sure to be honest
+[09:10] saimon has joined the channel
+[09:10] JimBastard: im not trying to hide anything, just dont want people to copy pasta my shit
+[09:10] qFox: i'm sure. you can't. that's inimino's main objection to begin with.
+[09:10] inimino: packing is generally lossy, yes
+[09:10] inimino: ("minification" usually isn't)
+[09:11] qFox: in a way it is. you are still losing information.
+[09:11] JimBastard: hrmmm
+[09:11] qFox: oh and comments.
+[09:11] inimino: well, you are usually losing whitespace and comments, true
+[09:11] inimino: just not variable names
+[09:12] qFox: whichever way you put it, all current minify/pack scripts produce scripts that cannot be reverted to their original script
+[09:12] qFox: maybe one should write a huffman encoder and just produce the raw script
+[09:12] qFox: and make inimino happy :p
+[09:12] qFox: although i'm not sure how that'll work in regards of load time...
+[09:12] inimino: just use gzip and I'll be happy :)
+[09:13] micheil: inimino: it's jim's site, you don't need to be happy with the code, he does.
+[09:13] micheil: =P
+[09:13] qFox: for a well documented large app, that could still differ 20% (see what i did here, i didnt use kb :p)
+[09:14] qFox: i understand your point. it's just a fact that larger scripts take longer to parse. maybe you should talk to steve souders about this :p
+[09:16] micheil: bbl
+[09:24] saimon_ has joined the channel
+[09:27] mikeal has joined the channel
+[09:35] saimon has joined the channel
+[09:43] bentomas has left the channel
+[09:53] saimon: Anyone around?
+[09:55] JimBastard: yep
+[10:04] saimon: JimBastard: If you scroll up do you see any other messages by me. I keep dropping connection and I'm not sure wether my message got through or not
+[10:13] saimon: sigh
+[10:22] malkomalko has joined the channel
+[10:52] JimBastard: sorry
+[10:52] JimBastard: working
+[10:52] JimBastard: uhhh i dunno i dont see messages
+[10:52] JimBastard: its logged
+[10:52] JimBastard: read the topic
+[11:02] bry has joined the channel
+[11:03] saimon_ has joined the channel
+[11:04] saimon_: Morning all...I need some help witha proxy server I'm writing. What I really need though is someone to put me on the right track. This is what I'm doing: A proxy server that a chat app (in the browser) POST's to, the server then rePOST's to a publish endpoint in the nginx web server. The author of the nginx pubsub module said quote: "Don't forget to make sure your application uses a persistent HTTP connection to the push module server, or you'll be wasting 
+[11:04] saimon_: of CPU cycles establishing new TCP connections every time your application publishes a message." As far as I understand him, this means that I need to keep the connection from the browser to the node server open and simultaneously keep the connection from the node server to the web server open too until either the browser closes the connection or a timeout occurs. The thing is that the http requests are POST's and I'm not sure wether this is possible or not
+[11:04] saimon_: tried to implement this but the following behaviour is what I see: The browser sends the initial post request, node receives it and posts to nginx, I get a response back from nginx and I push it back to the browser. This works for the first request but after that any other posts are never received by the node server. What's more I get the following error from node: http://pastie.textmate.org/private/hyrcwlpfkeaneoz4hhkq The post request in the browser is st
+[11:04] saimon_: open. Here is my code: http://gist.github.com/259396 Any ideas what I'm doing wrong? Or even if this is theoretically possible?. I can easily do a non persistant connection proxy which works fine but I was trying to heed the pubsub module's author suggestion but I'm unfamiliar with persistant connections. Any help is appreciated. Thanks
+[11:10] brosner_ has joined the channel
+[11:25] elliottcable: saimon: How’s it going?
+[11:26] Connorhd has joined the channel
+[11:26] saimon: elliottcable: basically stuck at that point...I'm hoping someone can give me an idea to move on. I've reverted to non-persistant server and started working on persistance.
+[11:29] ionfish has joined the channel
+[11:29] saimon: doesn't seem to be an interesting topic on google groups either :(
+[11:35] elliottcable: saimon: I’m not sure about your problem, was just saying hi because I’m bored. Sorry )-:
+[11:37] saimon: elliottcable: heh...ok...I'll be nice too...Hello. Fine thanks...Enjoying a nice cold day of free coding on my startup. (Running into hiccups but enjoying it nonetheless). Very exciting to be working on cool technologies like node.js...
+[11:38] saimon: and learning a thing or two about writing servers (though obviously haven't learnt enough)
+[11:42] saimon: elliottcable: and you?
+[11:43] elliottcable: Well, was watching stuff on Hulu for the last few days
+[11:43] elliottcable: *mad* depressed over a girl (flew to Seattle, got stood up over a few thousand miles… entire thing cost me a few grand, too)
+[11:43] elliottcable: but at this particular moment, I’m actually doing pretty good
+[11:43] elliottcable: thinking about adding semantic shortlinking for services other than Twitter to http://tau.pe/
+[11:44] elliottcable: for instance, GitHub commits, since commit IDs are generally globally unique
+[11:44] elliottcable: such as http://tau.pe/5a26b6 → http://github.com/elliottcable/elliottcable.name/blob/5a26b6eeaa2516a69a2d54bfd793c7fa4ee65783/index.xhtml#L25-42
+[11:46] saimon: sorry about the girl, taupe what's the benefit over something like bitly?
+[11:46] elliottcable: saimon: http://tau.pe/why.xhtml
+[11:47] saimon: I see.then cool...github commits idea is nice
+[11:48] saimon: I don't tweet myself so no use to me :)
+[11:48] elliottcable: yeah
+[11:48] saimon: maybe it's time I should be tweeting
+[11:48] elliottcable: trying to think of other things that have globally unique IDs like that
+[11:49] inimino: hm...
+[11:49] micheil has joined the channel
+[11:50] inimino: saimon: the browser's connection to node and node's connection to the other http server are completely independent
+[11:50] inimino: saimon: what you would want to do is maintain one connection to the other httpd and queue responses to send to it
+[11:52] saimon: inimino: that sounds about right. But I'm not sure how to go about that.
+[11:52] micheil: hmm.. sounds interesting
+[11:52] inimino: saimon: last I looked the node HTTP client does not support keepalive
+[11:53] micheil: I thought it did..
+[11:53] micheil: or was that the HTTP server?
+[11:54] saimon: inimino: I've written a simple long polling node client (subcriber) to the httpd server. That was using keepalive (or at least I thought it was)
+[11:54] inimino: micheil: the server does
+[11:55] elliottcable: micheil: nope
+[11:55] elliottcable: micheil: There is an absolute metric shitton of infrastructure to be done first
+[11:55] elliottcable: micheil: Mu itself, to tell the truth, is going to be *extremely* thin. *Using* Mu is actually going to involve a small ecosystem of tools that are going to be developed and published separately.
+[11:56] inimino: maybe this is has changed...
+[11:56] elliottcable: micheil: some of those, the very bottom tools in the pyramid of support, are under development now: `from`, poopy.js, JESS…
+[11:56] saimon: inimino: in my code example, what I was currently trying to do is basically: on connection, open a new connection to the http server, then as chunks come in from the browser push them on to the http server. You're suggesting I queue the chunks first? Or am I misunderstanding?
+[11:56] micheil: elliottcable: I'm not following.
+[11:57] elliottcable: micheil: Okay.
+[11:57] micheil: saimon: queues are always good
+[11:57] micheil: elliottcable: any reference?
+[11:57] elliottcable: micheil: Rails is a monolithic project, with tons of features and a huge internal ecosystem of supportive code.
+[11:58] elliottcable: micheil: not to mention, all of the exsting support from other Ruby libraries (things like irb, rake, Rack, Mongrel…)
+[11:58] micheil: elliottcable: is this in response to my mention of an MVC framework earlier on?
+[11:58] elliottcable: micheil: Mu is going to be completely inside-out: an *external* ecosystem of libraries written to coexist with, and support, Mu… but existing entirely separately.
+[11:58] elliottcable: micheil: nope, you hilighted me about it
+[11:58] elliottcable: micheil: while I was asleep
+[11:59] saimon: micheil: what exactly should I be queueing? the browser's request chunks? Why do I need to queue those rather than immediately push them on (i.e. stream). 
+[12:00] micheil: saimon: no idea, but when working with lots of data, queue can be useful.
+[12:00] micheil: elliottcable: oh.. righht
+[12:00] micheil: ACTION goes to find that message
+[12:00] elliottcable: ACTION hasn’t really be online much, aforementioned depression
+[12:00] elliottcable: so it may have been several days ago, not sure
+[12:01] micheil: uh-right.
+[12:01] saimon: micheil: ok but I'm not at that stage yet. All I want is to maintain the connection to the http server and push messages from the browser as they come in.
+[12:01] elliottcable: saimon: so, what’s the problem? o_O
+[12:01] elliottcable: saimon: sounds like you just need to create an HTTP client, store it somewhere, and do things with it without closing the connection
+[12:02] saimon: elliottcable: I only get as far as the first request and then nothing...then after a while node throws an error (see gist above)
+[12:03] elliottcable: ah, you have code. re-link me, client is being too unresponsive to scroll up and search for something d-:
+[12:03] saimon: If someone can take a quick peek at my code example above, they may spot where I'm going wrong.
+[12:03] saimon: ok
+[12:03] saimon: +
+[12:03] saimon: hold on
+[12:04] saimon: code: http://gist.github.com/259396 node error: http://pastie.textmate.org/private/hyrcwlpfkeaneoz4hhkq
+[12:04] inimino: saimon: you can't do that currently with the node HTTP client, having just looked at the code
+[12:05] saimon: inimino: do you know why not exactly?
+[12:06] elliottcable: hahahaha
+[12:06] elliottcable: okay
+[12:06] elliottcable: saimon: initialize the request *outside* the server, and then simply ship data down it (sendBody) as necessary
+[12:06] elliottcable: unless I am very wrong (haven’t written anything like what you’re writing, yet)
+[12:07] inimino: saimon: look at lib/http.js around line 336
+[12:08] saimon: inimino: are you referring to this:   this.closeOnFinish = true;
+[12:08] micheil: is there such thing as a sync exists()
+[12:08] micheil: ?
+[12:08] inimino: saimon: also, you don't want to be doing all that UTF-8 encoding and decoding, since you are just passing the data through you can use binary encoding everywhere
+[12:09] micheil: I wish to check if a file exists (before trying to load it)
+[12:09] saimon: inimino: true....
+[12:09] inimino: saimon: pretty much that entire function body, yes
+[12:10] saimon: inimino: also this.should_keep_alive
+[12:10] saimon: = false
+[12:10] inimino: right
+[12:11] saimon: So I'm stuck with non-persistant connections for now?
+[12:11] inimino: until somebody fixes the client :-)
+[12:12] saimon: I wonder why ryan did it like that to begin with?
+[12:12] inimino: it's simpler
+[12:12] inimino: it would require some other code changes, like adding a timeout, adding a method to close the connection, and so on
+[12:14] saimon: I see...My only hope right now then is a feature request for keepalive in the http client and hope someone takes a stab (I don't have the skills to do that myself )
+[12:15] inimino: it's just a few extra bytes and CPU cycles
+[12:16] inimino: it'll happen eventually though
+[12:18] saimon: inimino: yeah, at this stage I can live with that...I'll just keep an eye open for it when it does...thanks...I've learnt something. That's good...
+[12:18] saimon: :)
+[12:18] inimino: :)
+[12:19] saimon: thanks
+[12:24] jasondavies has joined the channel
+[12:30] micheil: ACTION is finally getting somewhere with his framework
+[13:06] alex-desktop has joined the channel
+[13:11] mikeal has joined the channel
+[13:11] micheil: okay.. that just worked SO quickly that I think it's broken.. is that a good thing?
+[13:12] jasondavies: micheil: wassat?
+[13:12] micheil: some code I'm working on
+[13:12] micheil: I was expecting my promise to timeout, but it didn't
+[13:17] martyn__ has left the channel
+[13:28] elliottcable: wooo http://html5.validator.nu/?doc=http://elliottcable.name
+[13:29] elliottcable: hey, anybody see a way to improve this? http://github.com/elliottcable/elliottcable.name/blob/5a26b6eeaa2516a69a2d54bfd793c7fa4ee65783/index.xhtml#L25-42
+[13:31] micheil: I would if firefox wasn't using 101% of my mac's CPU
+[13:34] jasondavies: elliottcable: why is that in the <head>?
+[13:34] elliottcable: jasondavies: why not?
+[13:34] jasondavies: elliottcable: I guess now they have async loading it no longer needs to be at the end of the page?
+[13:35] jasondavies: ACTION answered his own question :)
+[13:35] elliottcable: lol
+[13:35] jspiros has joined the channel
+[13:35] deanlandolt has joined the channel
+[13:41] malkomalko has joined the channel
+[13:48] jspiros has joined the channel
+[13:48] deanlandolt has joined the channel
+[13:50] jspiros has joined the channel
+[13:50] deanlandolt has joined the channel
+[13:50] ryah: okay. time to do some patches
+[13:50] kriszyp has joined the channel
+[13:55] elliottcable: ryah: DO SUM PATCHZ
+[13:57] ryah: hard to keep up with patches when i'm on vacation :)
+[13:58] mediacoder: hehe
+[14:09] sveimac has joined the channel
+[14:13] pmuellr has joined the channel
+[14:13] n8o has joined the channel
+[14:18] ryah: wtf.. has node not been using epoll on linux?
+[14:20] micheil: I think so
+[14:20] ryah: okay. well. free performance boost.
+[14:21] ryah: ACTION fixes the configure script
+[14:22] micheil: Checking for epoll_ctl                   : fail 
+[14:22] micheil: ubuntu 8.10
+[14:23] micheil: although, sys/epoll.h = ok, sys/event.h = not found
+[14:25] micheil: ryah: here's the full ./configure output: https://gist.github.com/91f3aaa8e11586e9557f
+[14:45] CIA-56: node: 03Ryan Dahl 07master * r22d1d3d 10/ deps/libev/wscript : Fix kqueue check (broke it in last commit) - http://bit.ly/8h39EA
+[14:45] ryah: should be working now
+[14:47] micheil: https://gist.github.com/91f3aaa8e11586e9557f/c4f9be7a9e5db76ce98df4181f4650d4b482f252
+[14:47] micheil: ACTION updated ./configure run
+[14:48] micheil: ryah: Any ideas on the port.h and sys/event.h not found's?
+[14:50] ryah: doesn't exist on linux
+[14:50] micheil: ah
+[14:50] micheil: okay
+[14:50] ryah: bsd stuff
+[14:50] micheil: :)
+[14:50] ryah: well, i guess port is solaris?
+[14:50] micheil: I wouldn't know, I'm running os x 10.6.2 and ubuntu 8.10
+[14:50] ryah: me neither
+[14:51] alexiskander has joined the channel
+[14:51] ryah: micheil: this is yours: http://github.com/Miksago/node/commit/0a3e845186f4e7061f443ec66b633781d20bb51c
+[14:51] micheil: I'm just waiting for node to make again on my mac
+[14:51] ryah: ?
+[14:51] micheil: yes, but it's not at any stage to be merged yet
+[14:51] ryah: i think its fine
+[14:52] micheil: unless you wish to merge it
+[14:52] micheil: I think it could do with more
+[14:53] ryanmcgrath has joined the channel
+[14:53] micheil: hmm.. I'm stil not sure why I'm getting test errors on os x
+[14:54] micheil: test-tcp-tls
+[14:54] micheil: could it be because gpg-error is not found at configure time?
+[15:05] micheil: okay, to fix the gpg-error not found error, you need Mac GPG
+[15:05] micheil: bf8c6babe1e28cae7dd6374ca24ddcc42d57e902
+[15:05] micheil: erm
+[15:05] micheil: http://macgpg.sourceforge.net/
+[15:07] micheil: ryah: would it be an idea to start up an Installation notes page on the wiki?
+[15:11] saimon: ryah: Can I ask for a feature request: http://pastie.textmate.org/private/fc3afv9s3ikiecbi4s8qbg ;)
+[15:12] micheil: ugh.. why is stuff installed into /usr/sbin in mac os x but not in PATH
+[15:13] micheil: woot! make test passed with 0 errors
+[15:16] ryah: saimon: thats so much to read
+[15:17] ryah: saimon: summary?
+[15:17] saimon: ryah: summary: keepalive for httpClient
+[15:17] ryah: :)
+[15:17] saimon: :)
+[15:17] ryah: yes, i want that too
+[15:17] saimon: oh goody
+[15:17] ryah: it will wait until after the socket refactor
+[15:17] ryah: which should be merged in the next week or two
+[15:18] saimon: I can wait until after the holidays :)
+[15:18] saimon: but it'll be a great xmas/new year present for when I come back....
+[15:18] saimon: gyay
+[15:21] ashb: inimino: did you add support for '<-' yet? ← looks a bit ass in my chosen font
+[15:21] CIA-56: node: 03Micheil Smith 07master * rd8e69d3 10/ doc/api.txt : Documentation for the assert module - http://bit.ly/5RiC9d
+[15:21] CIA-56: node: 03Joshaven Potter 07master * r7873639 10/ src/node.js : syntax fixes in src/node.js - http://bit.ly/87Dp01
+[15:21] ashb: as its not there and it spaces a bit funny
+[15:22] micheil: oh, thanks ryah 
+[15:29] micheil: ryah: http://wiki.github.com/ry/node/installation-notes
+[15:30] ryah: cool
+[15:30] ryah: okay. that was all the time i could spare. gtg.
+[15:30] micheil: have fun :)
+[15:31] micheil: ryah_Away: when you get the chance, you might want to delete the wiki page FreeBSD
+[15:34] saimon_ has joined the channel
+[15:45] inimino: ashb: haven't added that yet
+[15:46] micheil: hmm...
+[15:46] ashb: inimino: how did you go about boostraping PEG_generator.js
+[15:46] ashb: cos it looks generated itself
+[15:46] inimino: it is
+[15:46] inimino: there's a handwritten parser for a subset of the PEG grammar, which PEG.peg is then written in
+[15:46] ashb: ah k.
+[15:47] ashb: classical boostrap then
+[15:47] inimino: yeah
+[15:47] ashb: shouldn't be hard to add <- then
+[15:47] ashb: just ("←" / "<-" )
+[15:47] inimino: not too hard
+[15:48] inimino: what I need to do is actually come up with ASCII syntax for everything that doesn't currently have it
+[15:48] inimino: I will make a note to do that before the next release though
+[15:49] ashb: would be nice. can live for now
+[15:49] ashb: i'm about to start playing with it to write a markdown parser
+[15:49] ashb: http://github.com/evilstreak/markdown-js
+[15:49] inimino: oh, very nice
+[15:49] ashb: (cos the world needs more markdown engines. just like it needs more blog engines)
+[15:50] ashb: going full TDD/pair programming too :D
+[15:51] inimino: hehe, cool
+[15:51] inimino: ACTION sees lots of tests
+[15:52] nrstott has joined the channel
+[15:52] inimino: well, I'd use that
+[15:52] ashb: yeah - lots of test being the important thing
+[15:53] inimino: yes, in the sake of markdown I suspect tests have substituted for any kind of actual spec...
+[15:54] ashb: yup
+[15:54] ashb: some projects dont even have tests
+[15:54] inimino: I suspect the documentation on the original markdown site has little to do with reality in the various implementations that exist
+[15:54] cloudhead has joined the channel
+[15:54] micheil has joined the channel
+[15:56] micheil has joined the channel
+[15:57] ashb: probably little. yes
+[15:57] ashb: also have you *Seen* the original markdown.pl?
+[15:57] ashb: its the kind of code that i refer to as PERL.
+[15:57] ashb: not perl
+[15:58] inimino: ha, no I never looked at it
+[15:59] inimino: I think I'm using it one of my build ... oh, yeah, that's right ... it was the README for the parser generator itself
+[15:59] ashb: got a ling to the PEG file for the ES5 grammar?
+[16:00] ashb: link
+[16:00] inimino: hehe, so yeah, it would be awesome to replace the original markdown in the build script with yours :)
+[16:00] inimino: http://boshi.inimino.org/3box/PEG/ECMAScript_unified.peg
+[16:00] ashb: (or to the git reop)
+[16:01] ashb: [:Lu:]
+[16:01] ashb: where do those classes come from?
+[16:01] inimino: Unicode character classes
+[16:01] inimino: Lu is Letters, uppercase
+[16:03] inimino: these are the ones that are defined: http://boshi.inimino.org/3box/PEG/cset_unicode_properties_generated.js
+[16:03] logicuce has joined the channel
+[16:04] inimino: ACTION needs to document the PEG grammar at some point soonish
+[16:05] ashb: please :D
+[16:05] ashb: i'll bumble along
+[16:06] ashb: one for newlines and such?
+[16:07] inimino: hm, there is Zs but that is all whitespace
+[16:07] ashb: unicode line breaks be damned then :D
+[16:07] ashb: "\n" works, right?
+[16:07] ashb: or do i need U+A
+[16:07] inimino: yeah, for newlines I just tend to allow \r\n, \r, or \n
+[16:07] inimino: or just that, yes
+[16:08] ashb: \n is clearer
+[16:09] inimino: "\n" works as long as it's in quotes
+[16:09] ashb: yeah
+[16:09] ashb: see privmsg
+[16:09] inimino: inside [ ] you have to use the U+XXXX
+[16:15] ashb: Strict warning: test for equality (==) mistyped as assignment (=)? at /Users/ash/code/js/markdown-js/vendor/PEG/PEG_generator.js:28
+[16:15] ashb: wow okay i really need a way to disable some of those warnings
+[16:16] jamiew has joined the channel
+[16:16] aurynn has joined the channel
+[16:17] binary42 has joined the channel
+[16:20] dnolen has joined the channel
+[16:22] inimino: yeah, that one in particular fires a lot on my code, I'm really not a fan of Mozilla's strict mode
+[16:31] ashb: some of them i like
+[16:31] dnolen has joined the channel
+[16:31] ashb: trailing comma is good if you want to work with IE which barfs on it
+[16:31] ashb: and assignment to undefined var
+[16:32] ashb: inimino: is that example working for you?
+[16:33] inimino: it works now, after getting rid of the comment, but hm, let me test something else
+[16:34] ashb: i stole a simple rule from ES5.peg and couldn't get that to work
+[16:34] inimino: ashb: you do need to pass in an opts object, even if it's empty
+[16:34] ashb: ah. interesting
+[16:34] ashb: no change
+[16:34] inimino: I meant to fix that in the API with an ||{} but looks like I forgot
+[16:35] inimino: I will test now with the released build and see...
+[16:37] inimino: Ah, I bet this is the problem
+[16:37] inimino: ashb: do you have a newline at the end of the file?
+[16:37] inimino: that seems to break it
+[16:38] ashb: yeah - its a unix text file :D
+[16:38] inimino: hehe yeah
+[16:38] ashb: its quite hard to get it without a new line at the end
+[16:38] ashb: var parser = gen_parser("\nSourceCharacter                 \u2190 [ U+0000-U+10FFFF ]", {});
+[16:38] ashb: is what i'm testing with
+[16:39] ashb: 10FFFF - does v8 support chars outside the BMP then?
+[16:39] inimino: no, the support for that is done by translating everything into surrogate pairs
+[16:40] inimino: I actually wrote a blog post about that here: http://inimino.org/~inimino/blog/javascript_cset
+[16:40] ashb: which are still anoying to deal with?
+[16:40] ashb: cos they have length of 2?
+[16:40] ashb: yeah.
+[16:40] ashb: hate.
+[16:40] inimino: yeah
+[16:40] inimino: yep
+[16:41] inimino: let me test with a leading newline also...
+[16:41] inimino: yep, that breaks it too
+[16:41] ashb: bug testind :D
+[16:42] cloudhead: is there a decent js peg parser generator?
+[16:43] inimino: I don't know about decent yet, but there is one ;)
+[16:43] cloudhead: mmm
+[16:43] inimino: http://inimino.org/~inimino/blog/peg_first_release
+[16:44] cloudhead: I've been using this in ruby: http://treetop.rubyforge.org/
+[16:44] cloudhead: I'd love to see something as intuitive for js
+[16:44] cloudhead: aha cool, will check that out
+[16:44] inimino: ashb is finding some of the bugs in that release as we speak :)
+[16:45] inimino: yeah someone mentioned treetop to me recently, it does look nice
+[16:45] ashb: ACTION is probably first sucker to use it besides the author
+[16:45] cloudhead: yea, it's pretty great, but unfortunately kind of slow
+[16:45] inimino: yep, you are :)
+[16:46] inimino: cloudhead: the main difference from treetop is that these require a separate compilation step
+[16:46] cloudhead: yea, it's implemented in itself
+[16:46] ashb: of course :)
+[16:46] cloudhead: but it makes the grammar much clearer than using the language synta
+[16:46] cloudhead: x
+[16:46] cloudhead: even if that language is ruby
+[16:46] inimino: treetop is more of a pure-JS parser combinator library, which tends to be slow
+[16:47] inimino: oh, it's not Ruby syntax?
+[16:47] inimino: I thought it was
+[16:47] inimino: ACTION looks again
+[16:47] cloudhead: not exactly : D
+[16:47] cloudhead: it looks like ruby, but it's not
+[16:47] ashb: treetop embeds blocks of ruby
+[16:47] ashb: its PEG tho
+[16:47] cloudhead: only the methods to build the syntax tree is ruby
+[16:47] cloudhead: yeh
+[16:48] ashb: given a simplisitic (non class based) PEG we can build something like that without much effort
+[16:48] inimino: ah, I see
+[16:48] inimino: yeah, embedding into JavaScript files would be pretty easy
+[16:49] cloudhead: inimino: what were you refering to then, with 'compilation step'?
+[16:49] cloudhead: are you saying your grammar doesn't generate a parser?
+[16:49] inimino: and if people like that syntax, that's easy enough to add too, someone just needs to write a parser for it basically
+[16:50] inimino: cloudhead: I thought treetop was directly embedded Ruby, my project actually requires separate compilation but Treetop does too
+[16:50] cloudhead: ah right
+[16:50] cloudhead: kk
+[16:50] inimino: so that's not a difference
+[16:50] inimino: in that case I'm not sure why treetop would be slow :)
+[16:50] ashb: treetop uses somthing called polyglot to hide the compilation step
+[16:50] ashb: where in ruby knows how to load a .treetop file, by getting treetpo to compile on the fly
+[16:50] cloudhead: well, it's slow because it's ruby, and it's instantiating tons of nodes
+[16:50] JoePeck: lol
+[16:51] cloudhead: it uses to instantiate a new node for each character
+[16:51] inimino: hehe, fair enough
+[16:51] inimino: oh, wow
+[16:51] cloudhead: it was optimized since then, to instantiate less nodes
+[16:52] cloudhead: but it's still not very fast
+[16:52] cloudhead: most of the regex stuff is implemented in pure ruby
+[16:52] inimino: ok
+[16:53] cloudhead: I'd be interested to see how much faster a js implementation would be
+[16:53] cloudhead: especially running on V8
+[16:54] bryanl has joined the channel
+[16:54] cloudhead: inimino: your grammar file actually uses the left arrow unicode char?
+[16:55] cloudhead: can I use <- instead? xD
+[16:56] JoePeck: cloudhead: on a mac? Use a  program like TextExpander to automatically do ← with a few keystrokes
+[16:56] cloudhead: hum
+[16:56] cloudhead: howbout in vi?
+[16:56] JoePeck: it would work in vi
+[16:57] inimino: ^V u XXXX
+[16:57] cloudhead: right right
+[16:57] JoePeck: TextExpander takes a set of keystrokes like for me "_left" and automatically replaces it with "←"
+[16:57] cloudhead: I guess I could create a macro
+[16:57] JoePeck: typeing _word makes it trivial: ← → ↑ ⌘ ⌥ ...
+[16:57] inimino: 2190 is that case
+[16:58] ashb: http://tlt.its.psu.edu/suggestions/international/keyboards/mackey.html#unihex
+[16:58] ashb: JoePeck: ^^
+[16:58] ashb: cloudhead: ^^
+[16:58] JoePeck: memorizing the code points is pretty impressive
+[16:58] JoePeck: I still have to check ASCII charts =P much less Code Points
+[16:58] inimino: hehe
+[16:59] ashb: inimino: got me a new version, or do i have to strip line endings myself?
+[16:59] dnolen has joined the channel
+[16:59] inimino: it's going to take a while to regenerate that, it requires some code changes
+[17:00] ashb: k
+[17:00] inimino: actually, I could just add a .replace() in the API function...
+[17:00] inimino: which is what I was about to tell you to do in your code :)
+[17:00] inimino: one moment...
+[17:01] ashb: i shall continue adding support to turn of warnings and specify encoding of .js files
+[17:07] inimino: ACTION crashes Firefox
+[17:07] inimino: ok
+[17:07] cloudhead: inimino: what file encoding do I use to get 2190 to be back arrow? UTF-8 gives me an 'a' with ^
+[17:07] ashb: winnor is you
+[17:07] ashb: then you'r doing utf8 wrong :)
+[17:08] cloudhead: hmm
+[17:08] ashb: 0xE28690
+[17:08] ashb: is the utf8 byte seq for U+2190
+[17:08] ashb: E2 in latin-1 is a-cirumflex
+[17:09] cloudhead: ah hmm
+[17:13] ashb: what editor?
+[17:15] JoePeck: ashb: "i'm about to start playing with it to write a markdown parser" - I'm watching it
+[17:16] ashb: wathcing what? markdown-js?
+[17:16] ashb: indeed.
+[17:17] JoePeck: I'm interested in seeing a JavaScript markdown parser, especially one based on inimino's PEG
+[17:17] ashb: JoePeck: me and evilstreak want it for the blog/vanity sites we're building
+[17:17] JoePeck: nice =)
+[17:17] JoePeck: ashb: have you seen the Markdown syntax for slides?
+[17:17] ashb: and the showdown-js or what ever it is doesn't inspire me with confidence
+[17:18] ashb: no, i'm also not going to invent any new syntax
+[17:18] JoePeck: fair enough
+[17:18] JoePeck: I'll fork it eventually ={
+[17:18] JoePeck: I mean =P
+[17:18] ashb: if you write/find some tests we might add it in
+[17:19] cloudhead: ashb: vim
+[17:19] JoePeck: ashb: tests are lame, but the syntax couldn't be simpler => http://github.com/nakajima/slidedown
+[17:19] ashb: JoePeck: if something doesn't have tests, it doesnt work
+[17:20] JoePeck: I meant the git hub repo's tests are lame
+[17:20] JoePeck: I'm with you one tests
+[17:20] JoePeck: on*
+[17:20] ashb: ah k
+[17:20] ashb: ah its just !SLIDE separating things
+[17:20] ashb: shouldn't be too hard to turn on as an option/ or to textend the grammar to support someother way
+[17:20] JoePeck: it also has @@@ blocks for automatic syntax highlighting
+[17:21] JoePeck: focus on MarkDown itself, but keep in mind extensions like that =)
+[17:21] ashb: dont like that
+[17:21] ashb: there are otheer more 'standard' ways of doing that
+[17:21] ashb: php-extra's gated code blocks
+[17:21] ashb: or maruku's meta attrs
+[17:22] JoePeck: google failed to give me something reasonable on either of those
+[17:22] ashb: http://maruku.rubyforge.org/proposal.html
+[17:23] ashb: http://michelf.com/projects/php-markdown/extra/#fenced-code-blocks
+[17:23] JoePeck: thanks!
+[17:23] JoePeck: oh, neat
+[17:23] ashb: i think either of those two are better than the @@@ version
+[17:23] JoePeck: you know a lot about this =)
+[17:23] JoePeck: yah, @@@ is ugly
+[17:23] ashb: yeah i've done a lot of research looking for test suites :D
+[17:24] ashb: best i found so var came from perl's Text::Markdown
+[17:24] JoePeck: well, keep up the good work
+[17:24] ashb: it has 173 .text files
+[17:24] dnolen has joined the channel
+[17:24] JoePeck: hmm, I just read an article the other day about a Perl module (not about tests, but about parsing markdown)
+[17:24] ashb: Text::Markdown or Text::MultiMarkdown
+[17:24] ashb: are the two usually used
+[17:25] JoePeck: Markdent => http://blog.urth.org/2009/11/want-good-tools-break-your-problems-down.html
+[17:27] ashb: oh Auturch's module
+[17:27] ashb: yeah that'll be good too
+[17:28] ashb: event driven, eh
+[17:28] ryah: internet finally
+[17:28] JoePeck: yep
+[17:28] ashb: SAX sucks tho ;)
+[17:29] inimino: ashb: alright, updated http://boshi.inimino.org/3box/PEG/build/PEG_generator.js
+[17:29] JoePeck: but, if you've got a grammar, then producing a AST is just as good =)
+[17:29] ashb: inimino++
+[17:29] ashb: inimino: any other changes than newlines?
+[17:29] inimino: newlines and the opts {} is optional
+[17:30] johan-s has joined the channel
+[17:30] ashb: inimino: exports would be nice too ^_^
+[17:30] inimino: exports?
+[17:31] ashb: exports.generateParser
+[17:31] inimino: oh, yeah, good idea
+[17:31] ashb: not hard to do either
+[17:31] ashb: just change the end to be:
+[17:31] ashb: }).call(typeof exports != "undefined" ? exports : window);
+[17:31] ashb: or there are other ways of doing it
+[17:32] inimino: yeah, makes sense
+[17:33] kriskowal has joined the channel
+[17:33] aguynamedben has joined the channel
+[17:35] bentomas has joined the channel
+[17:38] inimino: ashb: updated again with that change (only tested in a browser, though)
+[17:38] aguynamedben has joined the channel
+[17:38] ashb: inimino: cool - will try it
+[17:40] saimon_ has joined the channel
+[17:42] jcrosby has joined the channel
+[17:44] sveimac has joined the channel
+[17:45] ryah: the_undefined: ping
+[18:03] CIA-56: node: 03visionmedia 07master * rf3b0cef 10/ src/node.js : 
+[18:03] CIA-56: node: Replaced several Array.prototype.slice.call() calls with Array.prototype.unshift.call()
+[18:03] CIA-56: node: Acts in pretty much the same manor just a bit more elegant - http://bit.ly/6pFrm5
+[18:03] CIA-56: node: 03isaacs 07master * r2f9722c 10/ (lib/uri.js test/mjsunit/test-uri.js): Pull in the uri.js from Narwhal and create tests, stripping out the cruft from a previous code-surgery. - http://bit.ly/77fNnK
+[18:03] CIA-56: node: 03isaacs 07master * r4a615dd 10/ lib/uri.js : Add credits, and a "decode" function. - http://bit.ly/89oWWW
+[18:03] CIA-56: node: 03isaacs 07master * rf65b36e 10/ lib/http.js : Use the new uri parser. - http://bit.ly/63wXvo
+[18:03] CIA-56: node: 03isaacs 07master * r4526308 10/ (lib/uri.js test/mjsunit/test-uri.js): Update to fix failing test. Rewrite of the resolveObject function, and some tweaks to format. - http://bit.ly/8N4fWm
+[18:09] scudco has joined the channel
+[18:14] careo has left the channel
+[18:14] ashb: inimino: can i request an API change?
+[18:15] ashb: to the return value. somehow the eval returning a single type would be nice so that I dont have to know what the top level rule is called
+[18:15] ashb: perhaps.
+[18:15] ashb: or maybe just put them as properties on an object that you pass into the function or something?
+[18:16] ashb: (just worried a bit about namespace pollution)
+[18:16] sudoer has joined the channel
+[18:21] inimino: ashb: putting what as properties?
+[18:21] ashb: the rules?
+[18:21] ashb: so the ideal would be return a function which proxies to the main rule
+[18:21] ashb: and have the rules as properties on that funciton
+[18:21] inimino: I'm not following
+[18:21] ashb: so that for the simple case you just call the function
+[18:22] inimino: that's the only case, right?
+[18:22] ashb: well you might want to call subrules directly for some reason
+[18:22] inimino: yeah, that's not supported
+[18:23] ashb: also, whats the format of hte parse tree?
+[18:23] ashb: [ didItWork, tree]
+[18:23] ashb: and each node of hte tree is [type, index, children] ?
+[18:23] inimino: http://boshi.inimino.org/3box/PEG/doc/parse_tree_representation
+[18:23] inimino: type, length, children
+[18:24] inimino: there's some other stuff in /doc too, but beware some of it is out of date
+[18:24] the_undefined: ryah: pong
+[18:24] inimino: also the stuff in that file that talks about streaming isn't actually supported yet
+[18:24] ashb: k
+[18:25] the_undefined: ryah: http://github.com/ry/node/commit/f3b0cefd0b1916c7f3ba0ca04560614bb6de9122 - will bite me
+[18:25] jamiew has joined the channel
+[18:25] the_undefined: ryah: anyway, big merge day today? :)
+[18:26] ashb: inimino: hmmm finding the start requires you to keep state
+[18:27] inimino: there is a chaining API and a DSL for dealing with parse trees but you'll have to wait a little while on those
+[18:27] inimino: ashb: yes, I tried to keep the tree representation as minimal as I can for a couple reasons
+[18:28] inimino: ashb: I could add a helper function to flesh it out a bit if you think that would be useful
+[18:28] ashb: not sure right now
+[18:28] mikeal: you know
+[18:28] mikeal: whoops
+[18:28] inimino: k
+[18:29] Booster has joined the channel
+[18:30] inimino: using one of the DSLs to deal with the tree should eventually be the best option
+[18:30] ericflo has joined the channel
+[18:32] jasondavies: the_undefined: why will it bite you?
+[18:34] brandon_beacher has joined the channel
+[18:38] eddanger has joined the channel
+[18:41] Nathan_ has joined the channel
+[18:46] brosner has joined the channel
+[18:46] brosner has left the channel
+[18:48] jcrosby has joined the channel
+[18:55] dnolen has joined the channel
+[18:56] logicuce has joined the channel
+[18:58] saikko has joined the channel
+[18:59] staydecent has joined the channel
+[19:00] the_undefined: jasondavies: I got a branch where I'm working on replacing Promises with Deferreds
+[19:01] jasondavies: the_undefined: ah, so it conflicts with your changes?
+[19:01] the_undefined: yeah
+[19:01] the_undefined: but its ok
+[19:01] jasondavies: ok, just curious :)
+[19:06] mikeal has joined the channel
+[19:09] kriszyp has joined the channel
+[19:15] RayMorgan has joined the channel
+[19:17] sztanphet has joined the channel
+[19:19] jspiros has joined the channel
+[19:19] deanlandolt has joined the channel
+[19:19] sudoer has joined the channel
+[19:20] isaacs has joined the channel
+[19:22] jspiros has joined the channel
+[19:22] deanlandolt has joined the channel
+[19:24] the_undefined_ has joined the channel
+[19:27] teemow has joined the channel
+[19:38] pixelcort has left the channel
+[19:44] ashb: inimino: you managed to segfault my error report hack :P
+[19:44] inimino: w00t!
+[19:45] inimino: what's the hack?
+[19:51] erichocean: I've now get everything in deps moved under v8 and compiling using v8's build system
+[19:51] erichocean: node itself is next
+[20:09] Booster has joined the channel
+[20:12] bryanl has joined the channel
+[20:14] brandon_beacher has joined the channel
+[20:30] jamiew_ has joined the channel
+[20:34] isaacs: kriskowal: http://groups.google.com/group/commonjs/browse_thread/thread/11c6f25c46b3837b/3b09f3ba59bbfd0a#msg_bd20d8b12da28d76 ++
+[20:34] mikeal has joined the channel
+[20:35] kriskowal: thanks isaacs
+[20:35] isaacs: wes brings up some interesting points.
+[20:37] erichocean: "Something this low level *cant* be optional. If it is you are segregating the module market."
+[20:37] erichocean: another premature standardization proponent
+[20:39] ryah: anyone want to see my new network stuff? :)
+[20:39] erichocean: ryah: I do!
+[20:39] isaacs: new network stuff?
+[20:39] ryanmcgrath: Hell yeah
+[20:40] ryanmcgrath: Oh, ocean dude - you're following my repo, I was wondering where I knew your name from.
+[20:40] ryanmcgrath: Coolness.
+[20:41] ryah: http://gist.github.com/259747
+[20:41] ryah: to replace "tcp" 
+[20:41] ryah: and deps/evcom
+[20:42] ryah: so basically it's deps/evcom written in js
+[20:42] orlandov: ryah: is there much of a performance hit in doing something like this in js vs c++?
+[20:43] orlandov: i've wanted to implement a wire protocol but i'm not sure if i should do that at the c++ level, or higher
+[20:43] ryah: orlandov: i don't know yet
+[20:44] orlandov: ACTION stays tuned
+[20:46] the_undefined has joined the channel
+[20:47] ryah: orlandov: it has a lot to do with how you store data - avoiding tons of memcpy() seems to help
+[20:53] sztanphet has joined the channel
+[20:54] binary42 has joined the channel
+[20:54] quirkey has joined the channel
+[20:55] the_undefined: ryah: this looks really cool
+[20:58] ryah: hacking will become much easier with this refactor
+[21:01] the_undefined: yeah
+[21:01] the_undefined: is this the new stream API you talked about as well?
+[21:01] the_undefined: I think some of it would apply to multipart streams, not all so
+[21:06] jcrosby has joined the channel
+[21:07] mikeal has joined the channel
+[21:08] the_undefined: ryah: I've been talking with kriszip over at #commonjs about their promise API
+[21:09] the_undefined: I think their proposal wiki page is not really showing what they are doing
+[21:09] the_undefined: and some of it is interesting
+[21:10] the_undefined: one thing we discussed was error/exception handling
+[21:10] the_undefined: if promises are the async counterpart of functions, then I think we should be able to handle exceptions in them
+[21:10] the_undefined: and they should go to the errback
+[21:11] the_undefined: at the same time nothing else should go to the errback, even objects that are "instanceof Error" should go to the callback
+[21:11] the_undefined: because when you think about it, a function only has a single return value - so should a promise
+[21:11] the_undefined: with the Dojo Deferred API we would give functions 2 possible return values - one for success and one for error
+[21:11] the_undefined: I think it breaks the symmetry
+[21:11] binary42 has joined the channel
+[21:16] isaacs: ryah: neat.  can you use the socket-style Stream to read and write files?
+[21:17] binary42 has joined the channel
+[21:38] jcrosby has joined the channel
+[21:48] brosner has joined the channel
+[21:53] ryah: isaacs: no
+[21:53] isaacs: ryah: cool
+[22:01] ryah: so. i don't really get libxml2
+[22:01] ryah: are xml parsers so hard?
+[22:01] ryah: why not just write one in js
+[22:04] jan____: I'd rather not write one for the hope of getting rid of XML
+[22:05] inimino: XML parsers are damn hard
+[22:06] ryah: inimino: why?
+[22:06] inimino: XML is a big, ugly, overcomplicated spec
+[22:06] inimino: DTDs, namespaces...
+[22:07] orlandov: a world of pain
+[22:07] ryah: ignoring dtds 
+[22:07] ryah: just parsing an xml document into a tree - i think this solves 99% of people's problems
+[22:08] ryah: should be able to be done very efficently in a couple hundred lines of js
+[22:08] erichocean: ryah: do you know where fun->Call() is defined in v8?
+[22:08] ericflo: ryah: what about streaming xml parsing, like is needed for XMPP?
+[22:09] ryah: ericflo: include/v8.h class Function
+[22:09] ryah: ericflo: like SAX parsing - i think that's should be done with the same parser
+[22:09] ryah: just do it character by character
+[22:09] ryah: keep state in some object
+[22:10] ericflo: ryah: I see
+[22:10] inimino: ignoring DTDs you don't really have an XML parser, but it's true that if you ignore the parts that are hard XML parsing is relatively easy
+[22:10] ryah: i think maybe i'm going to do this.
+[22:11] inimino: I seem to recall having this same discussion with Bluebie earlier
+[22:11] ryah: inimino: no one cares about DTDs though - they just want to commuicatte
+[22:12] ryah: parsing html is probably a bit harder - the tags don't have to be balanced...
+[22:12] ryah: but i guess it can be done
+[22:12] jan____: ryah: php's simplexml and ruby's nokogiri are good APIs for simple XML parsing
+[22:12] jan____: in case you need inspiration
+[22:12] inimino: I'd suggest you stop by #xml for a second opinion
+[22:13] jan____: rm -rf #xml
+[22:13] inimino: parsing HTML correctly is also extremely hard
+[22:13] ryah: i don't want to link to libxml2 to just do something that can be done in js
+[22:14] jan____: ACTION keeps waving the XML needs to go away flag
+[22:14] ryah: jan____: i mean, i agree. but it's kind of reality :)
+[22:15] ericflo: jan____: hah, but RSS/ATOM/XMPP though man
+[22:17] jan____: ryah: only if we keep suppoorting it
+[22:17] jan____: -o
+[22:17] jan____: ericflo: just transport. and bloated.
+[22:18] inimino: I have read correct parsers for XML, HTML, and HTTP, and in terms of complexity they really are vastly different
+[22:18] ericflo: jan____: not disagreeing at all, but it's what we've got man :D
+[22:18] jan____: ericflo: we've also got Java and C++ and I'm happily ignorant of both for 10 years :)
+[22:19] orlandov: ACTION hasn't found a place where he couldn't shoehorn json/yaml in place of xml
+[22:22] ryah: inimino: i think, if i find some time, i will try to write a parser. maybe i'll understand what's so hard then :)
+[22:22] Booster has joined the channel
+[22:23] joemccann has joined the channel
+[22:23] joemccann: u guys should totally use MySQL and Perl
+[22:24] inimino: ryah: as a shortcut, look at the source of any XML parser that sees widespread use, and check the corresponding bug tracker :)
+[22:26] voxpelli-laptop has joined the channel
+[22:27] voxpelli-laptop has left the channel
+[22:27] jan____: joemccann: aye
+[22:27] voxpelli-laptop has joined the channel
+[22:27] joemccann: lol
+[22:27] joemccann: whatup jan
+[22:27] joemccann: you guys coming to SXSWi this year?
+[22:30] joemccann: shit, i'm out this mofo...vacation for 3 weeks...snowboarding and surfing...FTW
+[22:31] micheil has joined the channel
+[22:32] staydecent: orlandov: yesss json can usually shoehorned as a replacement :D
+[22:34] staydecent: is a yaml parser significantly easier to write than an xml parser?
+[22:35] orlandov: if i'm not mistaken i believe there are already javascript YAML parsers
+[22:35] iamstef_ has joined the channel
+[22:35] voodooti1igod_ has joined the channel
+[22:35] beppu_ has joined the channel
+[22:35] ryah: names
+[22:35] erikcorry|away has joined the channel
+[22:35] sr_ has joined the channel
+[22:36] rbranson has joined the channel
+[22:36] RJ2 has joined the channel
+[22:36] Nailor has joined the channel
+[22:36] voodootikigod has joined the channel
+[22:38] erichocean: and node.js now runs on Solaris
+[22:38] jan____: win!
+[22:39] alexiskander: erichocean: good job!
+[22:39] ryah: erichocean: props
+[22:39] excsm has joined the channel
+[22:42] excsm has joined the channel
+[22:58] CIA-56: node: 03Ryan Dahl 07master * rbfa3613 10/ (3 files in 3 dirs): 
+[22:58] CIA-56: node: require() should throw error if module does.
+[22:58] CIA-56: node: Reported by Kris Zyp
+[22:58] CIA-56: node: http://groups.google.com/group/nodejs/browse_thread/thread/1feab0309bd5402b - http://bit.ly/63mKDu
+[23:00] ryah: isaacs: your ".." changes. How should I include merge them?
+[23:00] isaacs: ryah: i believe my dotdotmodulepath branch should be a fast-forward for you.
+[23:01] isaacs: oh, you just pushed.  i'll pull your master first
+[23:04] isaacs: ryah: i just pushed the changes onto my master branch
+[23:06] jcrosby has joined the channel
+[23:08] jspiros has joined the channel
+[23:08] deanlandolt has joined the channel
+[23:13] jspiros has joined the channel
+[23:13] deanlandolt has joined the channel
+[23:15] jspiros has joined the channel
+[23:15] deanlandolt has joined the channel
+[23:15] CIA-56: node: 03isaacs 07master * r3b8e477 10/ src/node.js : 
+[23:15] CIA-56: node: Bugfix: require("../foo")
+[23:15] CIA-56: node: If you have a circular require chain in which one or more of the modules are
+[23:15] CIA-56: node: referenced with a ".." relative path, like require("../foo"), node blows up.
+[23:15] CIA-56: node: This patch un-blows-up that case. There still seem to be issues with
+[23:15] CIA-56: node: circularity, but this solves one of the more obnoxious ones. - http://bit.ly/7NmHUP
+[23:15] CIA-56: node: 03isaacs 07master * rc2454a0 10/ src/node.js : Inadvertently introduced a bug in how single-dot path parts are handled. - http://bit.ly/5OUhRO
+[23:15] CIA-56: node: 03isaacs 07master * r6301f18 10/ src/node.js : 
+[23:15] CIA-56: node: Bugfix: child modules get wrong id with "index.js"
+[23:15] CIA-56: node: Fix for bug brought up by nua in irc, where child modules get the wrong id
+[23:15] CIA-56: node: when loaded from a parent module with an id of index.js or index.addon. - http://bit.ly/8FYxjz
+[23:15] CIA-56: node: 03isaacs 07master * r0ea2f9e 10/ src/node.js : Remove two debug statements that are a bit much. - http://bit.ly/6jVkOP
+[23:16] jspiros has joined the channel
+[23:16] deanlandolt has joined the channel
+[23:17] erichocean: ryah: have you tried using v8 snapshots with node?
+[23:19] ryah: erichocean: i compile with snapshots
+[23:20] ryah: i haven't tried to get src/node.js to compile into a snapshot though
+[23:20] ryah: would be cool
+[23:20] erichocean: heh, yeah, that's what I was asking about
+[23:21] erichocean: I saw you were including the JS as C strings
+[23:23] sixtus42 has joined the channel
+[23:24] ryah: would help slightly with startup time
+[23:29] isaacs has joined the channel
+[23:37] sixtus42: omg 72 unread threads on the ml. did I miss something since I had to install a gmail rule?
+[23:38] ryah: sixtus42: not really
+[23:39] sixtus42: ryah: how are you doing?
+[23:40] ryah: sixtus42: vacationing
+[23:40] sixtus42: a merry xmas it is
+[23:40] ryah: sixtus42: how's the thesis?
+[23:42] sixtus42: ryah:  sign up for an account here --- https://svn.bpt.hpi.uni-potsdam.de/svnadmin/ --- and see for yourself - 80% done, non-linear with gaps though
+[23:43] sixtus42: ACTION is signing a work contract on monday
+[23:43] sixtus42: ryah: have you ever considered to turn node.js into a chrome plugin?
+[23:44] ryah: where? no
+[23:45] sixtus42: I keep a daily snapshot in a pwd protected svn, if you like you can take a peek.... need feedback
+[23:45] sixtus42: ;-)
+[23:46] sixtus42: ryah: btw, coming for 26c3?
+[23:46] ryah: sixtus42: i would like to at some point, no time now
+[23:46] ryah: no
+[23:46] ryah: unfortunately
+[23:46] sixtus42: ACTION is sad
+[23:46] sixtus42: ACTION has a bed to offer
+[23:46] staydecent has joined the channel
+[23:46] sixtus42: ACTION already has a ticket from the private presale
+[23:48] CIA-56: node: 03Ryan Dahl 07master * r0981e7f 10/ test/mjsunit/test-readdir.js : 
+[23:48] CIA-56: node: Fix test-readdir.js
+[23:48] CIA-56: node: Was broken because I added "throws_error.js" to the fixtures directory.
+[23:48] CIA-56: node: Problem appeared in bfa36136dac787793bc5106da57cccbb8db1ce14. - http://bit.ly/5ir32D
+[23:49] sixtus42: ryah: so with tls available, how hard would http://blogs.sun.com/bblfish/entry/foaf_ssl_creating_a_global be to implement? Want to call that as next project?
+[23:50] ryah: maybe after the networking refactor is complete
+[23:53] sixtus42: awesome

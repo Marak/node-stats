@@ -1,0 +1,791 @@
+[00:01] nodejs_v8 has joined the channel
+[00:01] RayMorgan_ has joined the channel
+[00:02] nodejs_v8 has joined the channel
+[00:09] ollie has joined the channel
+[00:13] pdelgallego has joined the channel
+[00:18] cloudhead has joined the channel
+[00:27] unomi has joined the channel
+[00:27] sudoer has joined the channel
+[00:31] mikeal has joined the channel
+[00:31] jespern has joined the channel
+[00:31] dandean has joined the channel
+[00:31] alex-desktop has joined the channel
+[00:31] mattly has joined the channel
+[00:32] joshthecoder has joined the channel
+[00:35] Tim_Smart has joined the channel
+[00:35] inimino: deanlandolt: isNaN in a testing library is probably a terrible idea...
+[00:35] deanlandolt: inimino: that's what /i/ said :D
+[00:36] deanlandolt: but i can't remember the nasty details
+[00:36] inimino: deanlandolt: if you have assert(isNaN( /* do some math here */ ))
+[00:36] deanlandolt: well, i also said /don't ever use isNaN -- and isaacs is probably right, it's not the end of the world
+[00:37] inimino: then it doesn't assert that it actually returs NaN, because it could return, e.g. a string, or a regex, or something
+[00:37] inimino: deanlandolt: but if you're not writing a testing library, it's fine
+[00:37] deanlandolt: yeah...isaacs was saying you could safely do typeof foo === "number" && isNaN(foo)...
+[00:37] Tim_Smart: nodejs_v8: isNaN
+[00:37] nodejs_v8: Tim_Smart: function isNaN() { [native code] }
+[00:37] inimino: yes
+[00:37] Tim_Smart: nodejs_v8: isNaN('test')
+[00:37] nodejs_v8: Tim_Smart: true
+[00:38] Tim_Smart: nodejs_v8: isNaN('123')
+[00:38] nodejs_v8: Tim_Smart: false
+[00:38] inimino: basically it's fine any time you know that typeof is 'number'
+[00:38] deanlandolt: i seem to remember another complaint...time to dig through email
+[00:38] jashkenas: isNaN: http://github.com/documentcloud/underscore/blob/master/underscore.js#L521
+[00:38] inimino: I don't believe there's any other significant issue with it
+[00:38] jashkenas: inimino's got it -- first make sure it's a number, then isNaN is what you want.
+[00:39] inimino: (and the behavior on non-numeric types is by design, though it does catch people by surprise, sometimes)
+[00:39] deanlandolt: well, per the es5 spec:
+[00:39] deanlandolt: As the ES5 spec (15.1.2.4) says, "A reliable way for ECMAScript codeto test if a value X is a NaN is an expression of the form X !== X.The result will be true if and only if X is a NaN."
+[00:39] inimino: that is indeed true
+[00:40] inimino: but outside of code written by and for ES-geeks, isNaN() is probably more likely to be understood :)
+[00:40] mahemoff has joined the channel
+[00:41] Tim_Smart: true === x typeof "number" makes more sense to me
+[00:41] deanlandolt: heh...just remembered the other oddity that (sorta) breaks isaacs' case...
+[00:41] deanlandolt: (and i know this is VERY silly)...
+[00:41] deanlandolt: var foo = new Number(10)
+[00:41] mikeal: if you pass undefined as either the port or hostname to http.createClient(), it should REALLY throw and exception :)
+[00:41] ashb: isNaN is safew if you've already done a typeof == "number" test
+[00:41] deanlandolt: typeof foo === "number" && isNaN(foo)
+[00:41] deanlandolt: err...
+[00:42] deanlandolt: sorry, i meant new Number
+[00:42] morgan has joined the channel
+[00:42] deanlandolt: boxed numbers break things
+[00:42] ashb: typeof foo == "object" tho
+[00:42] inimino: deanlandolt: well, yeah, boxed primitives should never be used and will break all kinds of things
+[00:42] ashb: depends on the expectation
+[00:42] deanlandolt: heh...i know...that's the point though
+[00:43] ashb: they are damn useful in a set of cases
+[00:43] deanlandolt: they're still numbers and they don't pass isaacs' proposed isNaN test
+[00:43] inimino: I'm of the opinion that using them is always a mistake
+[00:43] deanlandolt: aye, but perhaps just as much so as isNaN :D
+[00:43] inimino: but they're not really numbers anymore, they're objects :)
+[00:43] ashb: boxed Strings i find particularly useful
+[00:45] deanlandolt: inimino: fair enough...just dropping down into pedantism to better my argument ;)
+[00:45] ashb: inimino: btw how much have oyu been working on your PEG in the past few months?
+[00:45] inimino: ashb: tons
+[00:45] ashb: what's new?
+[00:45] inimino: ashb: but not a lot to show for it yet
+[00:45] jed has joined the channel
+[00:45] ashb: heh i know that
+[00:45] inimino: what's new is a new codegen which lays the groundwork for streaming
+[00:45] ashb: inimino: got a nother parsing project. its even simpler than my markdown cases
+[00:46] ashb: any error handling?
+[00:46] ashb: *better
+[00:46] inimino: but I need to make it smarter so that streaming can be automatic
+[00:46] inimino: not yet...
+[00:46] inimino: well, actually that's not quite true
+[00:47] inimino: but yeah, in practice it's true... there's nothing exposed in a nice user-friendly API yet
+[00:48] inimino: I'll probably blog about what I've done so far on the streaming stuff and then work on expanding the API a little
+[00:50] inimino: to make what's there now more usable
+[00:50] inimino: getting the streaming stuff really done right is going to take a bit of time
+[00:52] mikeal: why doesn't the http client include the message?
+[00:52] inimino: mikeal: it's an event stream
+[00:53] mikeal: but it should be parsed before the headers, and the headers are all parsed and in the response
+[00:53] mikeal: i mean, i can pull it out myself, but it's kind of annoying since the statusCode is before it and the headers are after and they are both parsed in to the response object for you
+[00:54] inimino: I'm confused
+[00:54] inimino: what do you mean by "the message"?
+[00:54] inimino: I thought you meant the entity body
+[00:54] mikeal: statusMessage
+[00:54] inimino: oh, you mean the text after the status code?
+[00:55] mikeal: sorry
+[00:55] mikeal: reasonPhrase
+[00:55] mikeal: it's called the "message" in all the Python http libraries
+[00:55] mikeal: yes
+[00:55] inimino: oh, I see
+[00:56] rektide: jesus christ, promises are gone?
+[00:56] rektide: frak me
+[00:56] mikeal: yeah, we've all been updating code for a few days :)
+[00:56] rektide: i didnt really understand where coroutines came in and made everything crazy
+[00:57] rektide: why promises had to go
+[00:57] mikeal: they aren't coroutines
+[00:57] mikeal: they are "continuables"
+[00:57] inimino: rektide: coroutines are why wait() had to go
+[00:57] mikeal: wait() was going to go anyway tho
+[00:57] mikeal: ry has been talking about removing that for a quite a while
+[00:57] inimino: yes
+[00:57] rektide: i dont have any wait()'s
+[00:58] deanlandolt: rektide: you can easily get promises back in your own code
+[00:58] mikeal: they invite abuse and bad things, and there were lots of annoying bugs
+[00:58] rektide: it is a little annoying erlang is the only runtime where sleeping a thread is a-ok
+[00:58] inimino: yeah, ryah released the exact code that was in Node somewhere, so if you liked existing node promises you can import them
+[00:59] mikeal: rektide: it's not a thread
+[00:59] mikeal: is a "process"
+[00:59] mikeal: and the entire VM and language are built to accomodate it
+[00:59] inimino: rektide: it'd be ok if we had threads ;-)
+[00:59] mikeal: erlang doesn't have threads either
+[01:00] inimino: well, it doesn't call them that
+[01:00] dnolen has joined the channel
+[01:00] mikeal: threads share memory, erlang processes don't
+[01:00] inimino: but they're close to what lots of people would call green threads
+[01:00] mikeal: anything you put in a process you have to pass messages to in order to communicate, you can't use shared memory
+[01:00] rektide: well, wait()
+[01:00] inimino: they can share memory, it's just not observable :)
+[01:00] mikeal: when you do that, bad things happen :)
+[01:01] mikeal: but erlang processes are way better than threads
+[01:01] mikeal: because they map over n cores
+[01:01] mikeal: x amount of processes will use between 1 and 32 cores depending on how many are on the box
+[01:03] mrd`: mikeal: pthreads do that too, or are you talking about some other threading model?
+[01:04] mikeal: pthreads don't use multiple cores
+[01:04] mikeal: nthreads do
+[01:04] mrd`: NPTL pthreads do.
+[01:05] mikeal: sharing memory over cores is a bad idea tho
+[01:05] davidjrice: yo yo,
+[01:05] davidjrice: anyone using node + fab + paperboy to serve assets?
+[01:05] mrd`: I'm not claiming it's not; I'm just saying threads are able to use multiple cores too.
+[01:06] mikeal: are you sure NPTL threads using multiple cores
+[01:06] mikeal: i think LinuxThreads do
+[01:06] mrd`: Yes.
+[01:06] mikeal: because they don't share a pid
+[01:06] mikeal: and are essentially implemented as separate processes
+[01:07] mikeal: With NPTL, all of the threads in a process are placed in the same thread group; all members of a thread groups share the same PID. NPTL does not employ a manager thread. NPTL makes internal use of the first two real-time signals; these signals cannot be used in applications.
+[01:07] davidjrice: getting performance like 15 / 16 seconds to download jquery
+[01:07] creationix has joined the channel
+[01:08] mikeal: i'm just scratching my head trying to figure out how they are going to use multiple cores while sharing a PID
+[01:08] mrd`: From the NPTL design paper: "Effective Use of SMP: One of the main goals of using threads is to provide means to use the capabilities of multi-processor systems.  Splitting the work in as many parts as ther are CPUs can ideally provide linear speedups."
+[01:09] mrd`: A pid specifies a group of threads.
+[01:09] davidjrice: 1 minute 2 seconds to load a 315kb page, 26 requests...
+[01:09] davidjrice: does node bottleneck on the file system level?
+[01:09] creationix: anyone know of a good js code highlighter, shjs is gpl3 and pygments has too much overhead from the python runtime
+[01:09] mikeal: right but the kernel usually keeps a system process to a single core
+[01:10] mikeal: davidjrice: node has a threadpool to access the filesystem so that you can make non-blocking calls to the filesystem
+[01:10] mrd`: mikeal: Not when there are multiple threads. :)
+[01:10] mikeal: there is a selection of synchronous file operations that you can do that will block if you need them
+[01:10] davidjrice: creationix: http://www.hiliteme.com/ ? or gist.github.com ? perhaps an api like that might be a good look
+[01:11] davidjrice: mikeal: okay, so I'm wondering how I get such poor performance!
+[01:11] creationix: davidjrice: I'm looking for something I can access from a node program, ideally I would be able to package it as a module
+[01:11] creationix: gist.github.com uses pygments
+[01:11] mikeal: so, Python and Ruby both use pthreads now
+[01:11] mikeal: and both don't map, ever, over multiple cores
+[01:11] mrd`: mikeal: Python at least is because of the GIL.
+[01:11] jashkenas: creationix: the issue with looking for an in-JS highlighter is that they're all quite DOM-bound.
+[01:12] mikeal: unless you use a special library that hacks it with a shared semephore and a forked interpreter
+[01:12] mrd`: mikeal: I'm not familiar with Ruby to say.
+[01:12] mikeal: also, if this is the case, I can't see how the majority of cases would be performant
+[01:12] creationix: jaskenas: hmm, then I wonder how I can speed up pygments processing time. Spawning a subprocess for every snipped of code is killing me
+[01:12] ashb: jashkenas: yeah - there's hilight.js, but its very tied to DOM
+[01:13] jashkenas: creationix: what's it for?
+[01:13] creationix: node-blog
+[01:13] ashb: ( http://softwaremaniacs.org/soft/highlight/en/ )
+[01:13] mikeal: i could see LOTS of threads being performant, but when you have just a few the overhead wouldn't be worth the optimization
+[01:13] creationix: right now it's using shjs in the browser, but I want to highlight server-side to make the page load faster
+[01:13] ashb: oh it has a bzr reop up now. thats new
+[01:14] mikeal: creationix: all the existing javascript libraries for syntax highlighting suck
+[01:14] rektide: i was relatively happy with codemirror
+[01:14] mikeal: the only one that kind of works is tightly coupled to bespin
+[01:14] mrd`: mikeal: http://www.ibm.com/developerworks/linux/library/l-posix1.html <-- first paragraph "And, on multiprocessor systems, threads are actually able to run simultaneously, just like two or more processes can."
+[01:14] rektide: http://marijn.haverbeke.nl/codemirror/
+[01:14] jashkenas: creationix: ran across this earlier today, but don't know anything about it: http://matt.might.net/articles/lexing-and-syntax-highlighting-in-javascript/
+[01:14] rektide: but again, stupidly tightly coupled the the dom
+[01:15] mikeal: you can't really fault them for using the DOM
+[01:15] mikeal: they started this before node was even around
+[01:15] ashb: jashkenas: he doesn't link to it tho :/
+[01:15] ashb: mikeal: no - but they could have done SoC better
+[01:15] jashkenas: speaking of node not being around -- what do y'all tell Windows users who want to try Node?
+[01:15] mikeal: haha, first header "Threads are fun"….. no they aren't
+[01:16] ashb: oh no - he just has a stupid add in the middle
+[01:16] creationix: jashenas: either help us port it or run a VM
+[01:16] jashkenas: Is there a second-best server-side JS implementation that you point them towards?
+[01:16] ashb: jashkenas: if they just want ssjs or a JS interpreter tell them to try flusspferd :)
+[01:16] isaacs has joined the channel
+[01:16] mikeal: windows is going to happen eventually
+[01:16] ashb: we support windows
+[01:16] mikeal: i don't think it'll be super fast
+[01:17] ashb: jashkenas: point windows users towards http://flusspferd.org/ until node gets win32 support ;)
+[01:17] jashkenas: ashb: are you planning on having flussperfd support the Node API? Or just CommonJS?
+[01:18] ashb: jashkenas: somewhere in the middle
+[01:18] ashb: jashkenas: part of the problem is we can't build an event loop in as tightly as we have people embeddeding it in games that have their own loop/event ideas already
+[01:18] jashkenas: interesting. thanks. I'll float the idea with the person who was asking and see if he wants to do the legwork.
+[01:18] cloudhead: I tell them to install linux
+[01:18] ashb: i've started playing artound with boost.asio (since we use boost a lot)
+[01:19] ashb: its just not core yet
+[01:19] ashb: i do have mdeium term plans to get evented into the core
+[01:19] ashb: but it needs a few abstraction layers to not break some of our users
+[01:20] mikeal: this is neat
+[01:20] bpot has joined the channel
+[01:21] ashb: what is?
+[01:24] RayMorgan has joined the channel
+[01:28] bryanl has joined the channel
+[01:32] Tim_Smart: What do you guys think about Riak?
+[01:33] Tim_Smart: has a http interface :o
+[01:34] jan____: Riak is awesome :)
+[01:36] Tim_Smart: Would be good for async stuff
+[01:36] jan____: unlike couch :)
+[01:37] davidjrice: heh
+[01:37] davidjrice: so, anyone using node-paperboy in production?
+[01:40] Tim_Smart: davidjrice: I tried it, but I decided that node isn't very good for serving static content
+[01:40] Tim_Smart: I'll probably use nginx for that stuff
+[01:41] davidjrice: Tim_Smart: have you put nginx in front of node?
+[01:41] Tim_Smart: yeah that's the idea
+[01:42] Tim_Smart: you can send X-Redirects as the response to dynamically point to static files as well
+[01:42] Tim_Smart: with nginx
+[01:42] davidjrice: interesting
+[01:43] Tim_Smart: Otherwise node is slower than apache at serving static content by a reasonably large margin
+[01:45] davidjrice: Tim_Smart: I hit > 1 min for 300k
+[01:46] inimino: davidjrice: it's not that slow
+[01:46] inimino: not even close...
+[01:47] Tim_Smart: Sorry the difference between apache and node.js was smaller than I remembered
+[01:47] inimino: node, I mean... I don't know about node-paperboy, but maybe something in your setup or testing is off?
+[01:47] Tim_Smart: from a while back http://gist.github.com/293015
+[01:47] Tim_Smart: I used paperboy for the test
+[01:47] inimino: it's a few percentage points either way
+[01:47] inimino: 300k in a minute is a sign of some sort of weird major malfunction
+[01:47] Tim_Smart: about 100 req/s difference
+[01:48] jashkenas: that's pretty incredible. I wonder what the comparative RAM footprints are on that benchmark.
+[01:49] charlenopires has joined the channel
+[01:50] brainproxy has joined the channel
+[01:50] spot__: Is there a clean command line argument parser/handler out there someone has written, or should I quickly roll my own?
+[01:51] jashkenas: spot__: there's this one. http://github.com/jfd/optparse-js
+[01:52] jashkenas: I have a much simplified 80-line version that I'm using for CoffeeScript, here: http://github.com/jashkenas/coffee-script/blob/master/src/optparse.coffee
+[01:52] spot__: jashkenas, thanks!
+[01:53] brainproxy has joined the channel
+[01:53] Tim_Smart: jashkenas: With Coffeescript, is it possible to quickly change the way it re-writes certain expressions? Or is a case of hacking at source?
+[01:54] brainproxy has joined the channel
+[01:54] jashkenas: Tim_Smart: I'm not sure what you mean? Want to take it over to #coffeescript?
+[01:54] Tim_Smart: yeah
+[02:11] binary42 has joined the channel
+[02:17] rektide: why oh why is this laptop's lighttpd not running? :/ blah
+[02:19] rektide: way to silently exit without throwing any kind of debug info
+[02:32] bryanl has joined the channel
+[02:42] bentomas has joined the channel
+[03:04] bentomas has left the channel
+[03:04] brapse has joined the channel
+[03:10] stephenlb:         <div FADER position:absolute -> 0,0 z-index 900> // for Modalness
+[03:10] stephenlb:         <div UI position:absolute -> 0,0 z-index 1000>
+[03:15] dandean has joined the channel
+[03:15] adamv has joined the channel
+[03:19] stephenlb: : /
+[03:19] stephenlb: srry bout that, must have pased wrong window.
+[03:22] rictic has joined the channel
+[03:24] cdorn has joined the channel
+[03:25] CIA-77: node: 03Ryan Dahl 07master * rdc04162 10/ doc/api.txt : Add not about nextTick and setTimeout(fn, 0) - http://bit.ly/bkaN6E
+[03:25] CIA-77: node: 03Ryan Dahl 07master * rf0f2d2e 10/ doc/api.txt : Fix readdirSync in docs - http://bit.ly/cBVvqZ
+[03:25] CIA-77: node: 03Rasmus Andersson 07master * rb57d946 10/ (4 files in 3 dirs): 
+[03:25] CIA-77: node: added fs.link, fs.symlink, fs.readlink
+[03:25] CIA-77: node: including sync versions and complete tests - http://bit.ly/bvHkJF
+[03:26] RayMorgan has joined the channel
+[03:39] hooopy has joined the channel
+[03:39] hooopy: hello?(!)
+[03:41] Tim_Smart: hi?!
+[03:42] hooopy: hello
+[03:47] hooopy: dang
+[04:00] RayMorgan_ has joined the channel
+[04:03] gf3 has joined the channel
+[04:07] dekz has joined the channel
+[04:11] sahnlam has joined the channel
+[04:11] bentomas has joined the channel
+[04:28] steadicat has joined the channel
+[04:36] chakrit has joined the channel
+[04:44] bpot has joined the channel
+[04:48] steadicat has joined the channel
+[04:49] dandean has joined the channel
+[05:02] Tim_Smart: gf3: I'll be chucking that IRCd code here http://github.com/Tim-Smart/nodirc
+[05:05] gf3: Tim_Smart: watched
+[05:05] Tim_Smart: :)
+[05:05] Tim_Smart: I'm deciding the db atm
+[05:08] kriszyp has joined the channel
+[05:23] rauchg has joined the channel
+[05:24] JoePeck: Tim_Smart: _Ray_ from ##javascript started a neat javascript irc bot
+[05:24] Tim_Smart: Yeah I know about that one, the v8 evaler?
+[05:24] JoePeck: yea
+[05:24] Tim_Smart: nodejs_v8: Object
+[05:24] nodejs_v8: Tim_Smart: function Object() { [native code] }
+[05:25] Tim_Smart: Yeah that is the one I made
+[05:25] JoePeck: I also have a Ruby one that worked with jsc, v8, spidermonkey, and rhino (it just spawned a process and ran their shells)
+[05:25] JoePeck: if you want code to look at... but I think your bot will be different
+[05:26] mikeal has joined the channel
+[05:26] Tim_Smart: Yeah I can get you the source if you want it
+[05:38] dnolen has joined the channel
+[05:47] mattly has joined the channel
+[06:03] steadicat has joined the channel
+[06:07] jspiros has joined the channel
+[06:07] mahemoff has joined the channel
+[06:24] bentomas has left the channel
+[06:34] RayMorgan has joined the channel
+[06:42] kennethkalmer has joined the channel
+[06:42] cmlenz has joined the channel
+[06:43] JimBastard has joined the channel
+[06:43] JimBastard: hey whats up Tim_Smart 
+[06:43] Tim_Smart: Yo JimBastard, not too much atm. Reading up about H.264 and Ogg Theora
+[06:50] mikeal: the next version theora is suppose to be great
+[06:51] Tim_Smart: Hopefully it knocks H.264 off its perch, I'm starting to really hate all its licensing crap
+[06:59] mikeal: yeah, being on some of the major browsers is kicking it in to gear
+[06:59] mikeal: it's in Chrome and Firefox now
+[07:00] mikeal: i don't think it's going to win tho
+[07:00] mikeal: i think h.264 will still dominate this generation of codecs
+[07:00] mikeal: but the next generation will go to something open
+[07:02] Tim_Smart: yeah, hopefully the 'next generation' is closer than expected :D
+[07:03] mikeal: theora is just too late to the embedded game
+[07:03] mikeal: there are some good chipsets now, but h264 chipsets are down to pennies
+[07:03] Tim_Smart: hmm yeah
+[07:03] mikeal: and apple just got the instructions in to the A4
+[07:04] mikeal: so it doesn't even need a seperate chipset
+[07:04] mikeal: but just the fact that you *can* buy theora chipsets is a big win
+[07:04] mikeal: it means the next time around their is a community that knows how to do this
+[07:04] mikeal: s/their/there
+[07:05] mikeal: and a next generation codec can be built much faster as an open source project then as a standard in a proprietary working group :)
+[07:05] Tim_Smart: Yeah ogg is based on a kinda bad code base apparentl;y
+[07:06] mikeal: vorbis is old
+[07:06] mikeal: there are some good people working on theora now tho
+[07:06] mikeal: before i left mozilla i talked to one of the developers at Mozilla who just does <video> stuff
+[07:06] mikeal: and he was saying there's some great work happening now
+[07:08] Tim_Smart: Hopefully it surfaces soon, before too much monopoly starts happening. People are afraid ogg will hit a patent wall though
+[07:09] gf3 has joined the channel
+[07:09] mikeal: well
+[07:09] mikeal: if someone was going to sue, they would have already
+[07:10] mikeal: Firefox distributed it to 300M+ users
+[07:10] mikeal: which is 300M+ infringments, that's a huge chunk of cash for anyone who had a decent claim
+[07:13] jed has joined the channel
+[07:13] aho: <mikeal> if someone was going to sue, they would have already <- nah. they always wait until the tech reached its (rule of thumb) peak market penetration
+[07:14] mikeal: IE and Safari aren't going to use it
+[07:14] mikeal: it's hard to imagine more market penetration than the browser :)
+[07:17] Tim_Smart: Well at the end of day, the better performer usually wins out
+[07:17] Tim_Smart: And H.264 is the better performer at this stage
+[07:19] mikeal: when you really break it down, Theora is about 10 times more efficient than Flash Video anyway
+[07:19] Tim_Smart: hmm didn't know that
+[07:19] mikeal: and i'm just happy that who ever does win, it won't be flash
+[07:20] Tim_Smart: Yeah well thats a given, the <video> element is the main concern
+[07:21] mikeal: someone did a post the other day
+[07:22] mikeal: Flash was using 100% CPU to play a video and the same video encoded with similar settings using Theora was only 10%
+[07:22] mikeal: i think this was with Firefox trunk tho
+[07:23] sudoer has joined the channel
+[07:27] kriskowal has joined the channel
+[07:32] gf3 has joined the channel
+[07:32] jan____: mikeal: re ogg & firefox: if a major distributor (say youtube) would start sending ogg, we'd see the suing.
+[07:33] gf3 has joined the channel
+[07:33] mikeal: actually
+[07:33] mikeal: since damages are based on what you lost in revenue
+[07:34] mikeal: and codecs are primarily sold per seat, not per use
+[07:34] mikeal: it's a bigger deal to distribute the code than files that are encoded with it
+[07:34] mikeal: s/code/codec
+[07:35] mikeal: there were weeks of lawyer meetings at Mozilla before they had the go ahead to do <video>
+[07:35] mikeal: i figured there would be at least one lawsuit
+[07:35] mikeal: i'm actually surprised there hasn't been
+[07:36] aho: it's pretty weird that there are still software patents
+[07:36] aho: it's obviously bat-shit crazy
+[07:37] mikeal: totally
+[07:37] aho: even bill gates said so
+[07:37] aho: (back in the days) :>
+[07:38] aho: then ms started to like sw patents... and now that they are trolled several times a year they start to dislike them again ;>
+[07:38] aho: oh the irony
+[07:52] unomi: many patents are just weird
+[07:52] unomi: and the worst thing is that if you have the money, you can just carpet bomb patents
+[07:53] brapse has joined the channel
+[07:54] aho: the usual strategy is to use data mining techniques in order to find cheap patents suitable for trolling
+[07:54] felixge has joined the channel
+[07:54] felixge has joined the channel
+[07:55] unomi: ibm holds some interesting 'gateway' patents for compression
+[07:55] mikeal has joined the channel
+[07:55] unomi: really sexy stuff, but the patents they have filed are somewhat misleading :p
+[07:55] unomi: but close enough that its difficult to file the 'real stuff'
+[07:58] unomi: they have a patent on using pRNG for compression, yet in their patent what they claim to be doing is comparing a pRNG stream to a data stream and sending the offsets
+[07:58] unomi: clearly that is not the optimal use ^^
+[07:59] unomi: yet its enough that once you get a datastructure for matching pRNG streams to datastreams you can still get hit by ibm
+[08:00] unomi: its a true shame, because that is a uhh, quantum leap ;)
+[08:01] Tim_Smart: Some poor genius's getting hurt for stupid reasons >.>
+[08:01] unomi: well, humanity is
+[08:02] unomi: for multicast scenarios, streaming media etc, it would open up less bandwidth saturated markets
+[08:02] unomi: not to mention that once you can do that, you can do it recursively. 
+[08:06] unomi: that is to say, ibms patent covers collecting the difference between a pRNG stream and a datastream, and then compressing that difference by standard methods, sending with it the seed
+[08:07] unomi: if you have a nice datastructure, and / or enough capacity then you would only need to send seeds, offsets + lengths 
+[08:09] unomi: compression is expensive, decompression is cheap. 
+[08:25] micheil has joined the channel
+[08:27] mahemoff has joined the channel
+[08:29] mikeal has joined the channel
+[08:31] olivvv has joined the channel
+[08:37] sveisvei has joined the channel
+[08:48] cmlenz has joined the channel
+[08:52] Tim_Smart: unomi: Definately
+[09:00] markwubben has joined the channel
+[09:06] aguynamedben has joined the channel
+[09:10] jed has joined the channel
+[09:21] paulca has joined the channel
+[09:30] tisba has joined the channel
+[09:38] markwubben has joined the channel
+[09:46] sveisvei has joined the channel
+[10:07] bru_ has joined the channel
+[10:28] hassox has joined the channel
+[10:33] brainproxy has joined the channel
+[10:38] mahemoff has joined the channel
+[11:15] BBB has joined the channel
+[11:19] jdee has joined the channel
+[11:21] jdee: hi all, is there a node module for mongodb that plays nice with the latest version of node?
+[11:41] spot__: jdee, the api is being changed almost every day. So I assume the module developers are constantly running to fix their code for the newest version
+[11:41] spot__: aka, unless someone here knows.. it should be soon :)
+[11:41] spot__: Speaking of modules, has anyone written a clean modujle to handle command line argument parsing?
+[11:41] spot__: no
+[11:42] spot__: not thinking right haha
+[11:42] spot__: I meant a module to parse a conf file
+[11:42] jdee: ok thanks. think i'm safer to make http calls from node to couchdb in the short term for my persistence needs?
+[11:42] spot__: jdee, you could.. depends on the load you plan to put on the server
+[11:43] jdee: just for learning right now, so performance is not the highest on the agenda. Is that how you would approach it though? http to couch?
+[11:43] jdee: from node
+[11:43] spot__: jdee, We have been working with node for a few weeks, and it's blazing fast, easy to use, etc. The one downfall is again it changes every few days, until they decide to stay with something. So assume that anything you write, youwill ahve to change often until they get it nailed down.
+[11:44] jdee: thanks spot. 
+[11:44] fwg: spot__: why not use json?
+[11:44] spot__: fwg, with couch?
+[11:44] spot__: I don't know, jdee is the one asking 
+[11:44] spot__: :)
+[11:44] spot__: OH
+[11:44] jdee: lol
+[11:44] fwg: ehm i mean for conf file
+[11:44] spot__: you mean the conf file
+[11:44] spot__: hahaha
+[11:44] spot__: sorry
+[11:44] jdee: lols
+[11:44] spot__: i'm sorry
+[11:44] fwg: :)
+[11:44] spot__: err tired
+[11:44] spot__: Yeah good idea
+[11:45] fwg: you can use JSON.parse then
+[11:52] sveisvei has joined the channel
+[12:08] micheil: jdee: (this goes for all), if a module is broken, it's generally okay to fix it for your purposes and then contribute patches back or ask them to pull your fork.
+[12:41] happyelephant has joined the channel
+[12:45] alex-desktop has joined the channel
+[12:50] dekz has joined the channel
+[12:53] jed has joined the channel
+[12:54] mahemoff has joined the channel
+[12:59] hecticjeff has joined the channel
+[13:00] bryanl has joined the channel
+[13:07] jdee has left the channel
+[13:19] spot__: Head to bed. Night everyone.
+[13:20] fwg: n8
+[13:23] gf3 has joined the channel
+[13:33] charlenopires has joined the channel
+[13:34] binary42 has joined the channel
+[13:37] tisba has joined the channel
+[14:04] cpojer has joined the channel
+[14:05] cpojer: yo
+[14:05] cpojer: anyone using mongodb with nodejs?
+[14:24] markwubben has joined the channel
+[14:24] cmlenz has joined the channel
+[14:25] davidsklar has joined the channel
+[14:25] cmlenz has joined the channel
+[14:26] n8o has joined the channel
+[14:30] dnolen has joined the channel
+[14:44] Connorhd has joined the channel
+[14:46] rolfb has joined the channel
+[14:52] xla has joined the channel
+[14:52] cloudhead has joined the channel
+[14:56] kjeldahl has joined the channel
+[14:56] pmuellr has joined the channel
+[15:01] pdelgallego has joined the channel
+[15:03] micheil has joined the channel
+[15:10] ashb: yet another case where boxed Strings are useful
+[15:10] ashb: being able to associate a line number with a string if oyu need it, but otherwise let it behave like a string for match etc.
+[15:12] cpojer has left the channel
+[15:14] bryanl has joined the channel
+[15:15] atcrabtree has joined the channel
+[15:32] Booster has joined the channel
+[15:49] kriszyp has joined the channel
+[15:49] steadicat has joined the channel
+[16:16] alexiskander has joined the channel
+[16:18] sudoer has joined the channel
+[16:21] sudoer has joined the channel
+[16:25] binary42 has joined the channel
+[16:30] adamv has joined the channel
+[16:34] brapse has joined the channel
+[16:34] creationix has joined the channel
+[16:38] gwoo has joined the channel
+[16:45] webben has joined the channel
+[16:45] deanlandolt has joined the channel
+[16:49] cloudhead: is there no way we can get better file errors than 'Error: No such file or directory' ?
+[16:49] cloudhead: like, I have 15 files, I don't know which one is failing
+[16:49] cloudhead: I went through the source, but it seems to be in V8
+[16:50] dnolen has joined the channel
+[16:51] pdelgallego has joined the channel
+[16:51] creationix: cloudhead: a quick hack would be to patch fs.readFile or whichever function you're using to modify the error message before passing it on.
+[16:51] creationix: don't think that's a good long term solution though
+[16:52] cloudhead: hmm
+[16:54] jcrosby has joined the channel
+[16:58] happyelephant has joined the channel
+[17:02] bpot has joined the channel
+[17:02] RayMorgan has joined the channel
+[17:02] unomi has joined the channel
+[17:04] felixge: ryah: I'd like to help refactoring the module loading
+[17:05] felixge: ryah: but I thought I'd check with you first to see if you are already on it
+[17:07] JimBastard has joined the channel
+[17:08] JimBastard: you going to nyc.rb tonight binary42 ?
+[17:08] rauchg has joined the channel
+[17:11] davidjrice: jan____: ping
+[17:13] tisba has joined the channel
+[17:16] binary42: JimBastard: Nope. Was going to but I'll be at 92Y in TriBeCa for Y30.
+[17:17] binary42: JimBastard: Were you going to swing by?
+[17:18] JimBastard: was thinking about trying to recruit some people to work on MrRegex and the tree-top parser
+[17:18] binary42: Ah. I see. Well, you should go and hang out but the best way to get people to look at something is a lightning talk at the regular meetings.
+[17:19] JimBastard: yeah ill probably wait until i have something more stable
+[17:19] binary42: (tonight is just the hack night ... was going to add redis support to remix-stash)
+[17:20] binary42: (but I'll have to make that wait)
+[17:32] stephenlb has joined the channel
+[17:36] kennethk_ has joined the channel
+[17:43] qFox has joined the channel
+[17:44] aguynamedben has joined the channel
+[17:51] dandean has joined the channel
+[17:52] adamv has joined the channel
+[18:02] RayMorgan_ has joined the channel
+[18:05] RayMorgan has joined the channel
+[18:06] Booster has joined the channel
+[18:11] brandon_beacher has joined the channel
+[18:12] dandean has joined the channel
+[18:17] aguynamedben has joined the channel
+[18:19] brainproxy has joined the channel
+[18:22] pdelgallego has joined the channel
+[18:23] happyelephant has joined the channel
+[18:25] rolfb has joined the channel
+[18:26] dnolen has joined the channel
+[18:29] rolfb has joined the channel
+[18:33] joshbuddy has joined the channel
+[18:38] mahemoff has joined the channel
+[18:40] felixge has joined the channel
+[18:40] felixge has joined the channel
+[18:40] maritz has joined the channel
+[18:42] charlenopires has joined the channel
+[18:43] mikeal has joined the channel
+[18:55] eikke has joined the channel
+[18:58] voodootikigod_ has joined the channel
+[19:03] brapse has joined the channel
+[19:07] RayMorgan has joined the channel
+[19:10] brainproxy has joined the channel
+[19:15] ashb: inimino: link to latest version of your PEG?
+[19:20] inimino: ashb: the most recent build is still the original one: http://boshi.inimino.org/3box/PEG/build/
+[19:20] ashb: k - thanks
+[19:20] ashb: this particular task will really be easier parsing with a PEG or some other generated form
+[19:21] inimino: cool
+[19:21] ashb: parsing EBNF otherwise sounds like a lot of work
+[19:21] inimino: oh, you're parsing EBNF?
+[19:22] ashb: yeah
+[19:22] ashb: http://pdoc.org/syntax.html
+[19:22] ashb: porintg that from ruby to JS
+[19:22] ashb: why? got something to help?
+[19:22] ryah: hi
+[19:23] inimino: ah...
+[19:23] inimino: ashb: that doesn't look quite like what I think of as EBNF
+[19:23] ashb: its not really EBNF
+[19:23] ashb: yeah i was just thinking that
+[19:23] ashb: i wonder why they call it that
+[19:23] inimino: right
+[19:23] inimino: no idea, maybe it stands for something else
+[19:24] inimino: it's kind of EBNF-like with the brackets and all
+[19:24] ashb: maybe those ruby/prototype people are just crazy
+[19:24] inimino: always a possibility :P
+[19:25] ashb: hmmm i still need to think of a way to distinguish a module from a namespace
+[19:25] creationix: ryah: hi
+[19:25] ashb: i guess module foo to match class foo
+[19:25] mattly has joined the channel
+[19:26] charlenopires_ has joined the channel
+[19:43] creationix has left the channel
+[19:44] creationix has joined the channel
+[19:46] unomi has joined the channel
+[19:50] n8o has joined the channel
+[20:07] Tim_Smart has joined the channel
+[20:08] JimBastard: good morning Tim_Smart  ! im at work work but around
+[20:08] JimBastard: feel free to drop me a PM if you need
+[20:08] Tim_Smart: OK np
+[20:21] gwoo has joined the channel
+[20:25] bpot has joined the channel
+[20:32] isaacs has joined the channel
+[20:35] tisba_ has joined the channel
+[20:36] kriskowal has joined the channel
+[20:48] abadr has joined the channel
+[20:55] ollie has joined the channel
+[20:57] drostie has joined the channel
+[21:00] teemow has joined the channel
+[21:09] CIA-77: node: 03Ryan Dahl 07master * rc5b149a 10/ deps/evcom/evcom.c : 
+[21:09] CIA-77: node: Add hack to get error event on socket timeout
+[21:09] CIA-77: node: See
+[21:09] CIA-77: node: http://groups.google.com/group/nodejs/browse_thread/thread/4898a1ed3b99dcf0 - http://bit.ly/behZCo
+[21:09] CIA-77: node: 03Ryan Dahl 07master * r4fd0225 10/ src/node_signal_handler.cc : Give signal handlers maximum priority - http://bit.ly/d9AKEL
+[21:14] joshbuddy has joined the channel
+[21:14] joshbuddy has joined the channel
+[21:16] figital_ has joined the channel
+[21:17] figital_: Do I need mod_v8 to use node.js?
+[21:17] figital_: i mean mod_v8cgi
+[21:18] ryah_Away: figital_: no
+[21:18] ryah: figital_: you need python
+[21:18] ryah: well, to build it
+[21:18] figital_: so it's going to be it's own http server?
+[21:18] ryah: yes
+[21:19] JimBastard: hell ya it is
+[21:19] figital_: in javascript?
+[21:19] JimBastard: hell yeah
+[21:19] figital_: I thought it just did template parsing ....
+[21:19] JimBastard: welcome to node.js
+[21:19] JimBastard: its amazing
+[21:19] JimBastard: try checking out www.howtonode.org or check out the modules page on the github
+[21:19] figital_: cool ... because I spent a ton of time compiling mod_v8 for apache and then it seemed sucky
+[21:20] figital_: ok THANKS ..... not sure why I didn't find that site already
+[21:20] brianm has joined the channel
+[21:20] JimBastard: http://wiki.github.com/ry/node/modules
+[21:20] JimBastard: node is really easy to get running
+[21:20] figital_: I'm not going to be building asynch things ...... so does that mean I just need v8?
+[21:21] JimBastard: you need v8 to run node.js
+[21:21] JimBastard: as node.js runs on top of v8
+[21:21] JimBastard: what are you trying to do?
+[21:21] figital_: sorry ... I meant v8cgi
+[21:21] rictic has joined the channel
+[21:21] figital_: replace middleware with javascript
+[21:21] figital_: ajax / db connectivity
+[21:21] figital_: "ssjs"
+[21:22] JimBastard: yeah, keep reading up on node.js
+[21:22] JimBastard: go through the documentation
+[21:22] JimBastard: check out howtonode
+[21:22] JimBastard: and check out the modules page
+[21:22] JimBastard: that should give you an idea of the current ecosystem
+[21:22] figital_: thanks mr. bastard !!
+[21:22] JimBastard: anytime
+[21:32] brianm has joined the channel
+[21:33] pdelgallego has joined the channel
+[21:33] teemow has joined the channel
+[21:33] figital has joined the channel
+[21:33] alexiskander has joined the channel
+[21:33] Booster has joined the channel
+[21:33] mikeal has joined the channel
+[21:33] unomi has joined the channel
+[21:34] felixge has joined the channel
+[21:34] felixge has joined the channel
+[21:37] brandon_beacher has joined the channel
+[21:44] isaacs has joined the channel
+[21:46] sahnlam has joined the channel
+[21:49] ryah has joined the channel
+[21:49] rictic has joined the channel
+[21:51] dnolen has joined the channel
+[21:51] ashb: inimino: whats the format of the error array again?
+[21:53] isaacs has joined the channel
+[21:54] inimino: ashb: there's a function to deal with it, I think...
+[21:54] ashb: oh?
+[21:55] inimino: ashb: yeah, rawFailDump in PEG_util.js
+[21:56] inimino: it just looks up the rule names and shows where the parse failed
+[21:58] ashb: including a very helpful debug print it looks like
+[21:58] bentomas has joined the channel
+[21:58] ashb: the ret.push('pos: '+i)
+[21:59] inimino: yeah
+[21:59] ashb: inimino: is there any information on what rule is expected next?
+[22:01] inimino: no, just what failed
+[22:02] ashb: tho i guess it does say give the rulename that failed which would be hte last fallback
+[22:03] inimino: yeah, if there'd been anything else it would have been tried
+[22:06] nodejs_v8 has joined the channel
+[22:06] figital: is node.js a potential replacement for apache/nginx?
+[22:06] rolfb has joined the channel
+[22:06] ashb: figital: is ruby a replacment for either of those?
+[22:07] figital: no
+[22:07] figital: i see
+[22:08] figital: so then what would make this scale?
+[22:10] mikeal: hold up
+[22:10] mikeal: yes, it is
+[22:10] figital: how about "node"
+[22:10] mikeal: you put Ruby behind a server
+[22:10] figital: it's threading stuff right
+[22:10] mikeal: because Ruby sucks at concurrency
+[22:10] mikeal: node.js is better than apache at concurrency
+[22:11] mikeal: so you want it on port 80
+[22:11] inimino: s/ at concurrency//g
+[22:11] ashb: not is also not a webserver
+[22:11] figital: node = node.js ?
+[22:11] ashb: *node
+[22:11] mikeal: inimino: haha
+[22:11] ashb: yes
+[22:11] mikeal: node is a platform
+[22:11] figital: what's the webserver then?
+[22:11] mikeal: the webserver is written in node
+[22:11] ashb: it has sockets stuff and HTTP parsers
+[22:11] mikeal: there is one shipped with node
+[22:13] figital: so if I run node as a service I can try to hammer that thing like I might apache?
+[22:13] kriskowal_ has joined the channel
+[22:14] figital: Just asking because I tried mod_v8cgi and it was wonky (totally loved v8cgi though).
+[22:14] mikeal: it'll handle concurrency significantly better than apache
+[22:15] mikeal: apache actually kinda sucks at handling concurrent connections compared to all of it's modern competitors 
+[22:15] mikeal: nginx, mochiweb, etc
+[22:15] bentomas: it depends on how you are measuring "kinda sucks"
+[22:15] hassox has joined the channel
+[22:15] bentomas: because apache puts each request in its own process/thread its memory usage isn't great
+[22:15] figital: i usually don't care ... as long as it works :) ... just want to work with SSJS
+[22:15] bentomas: as long as your server doesn't run out of memory, Apache is going to work great
+[22:16] figital: how different are the node mods from the v8cgi modules?
+[22:16] ashb: they are incompatible i'd imagine
+[22:16] ashb: the v8cgi ones certainly wont work with any of node's async=ness
+[22:17] ashb: wpure JS modules might work, might not
+[22:17] figital: what part of node would you say is of the same class as "v8cgi"?
+[22:17] ashb: the compiled ones almost certainly wont
+[22:17] gf3 has joined the channel
+[22:17] figital: ( so I correctly describe these tiers )
+[22:18] mikeal: most performance tests suck
+[22:18] figital: v8cgi = similar to "node.js http modules"?
+[22:18] bentomas: figital: I'd doubt it
+[22:18] mikeal: the case that you actually care about is "how fast are my requests returned" and "how many concurrent requests can I do before I pass my threshold"
+[22:18] mikeal: apache poops out pretty early 
+[22:19] mikeal: the cgi model is kind of a bad idea
+[22:19] figital: i'm cool with that ... just curious what layer is "v8cgi-ish"
+[22:19] mikeal: because it assumes that whatever is in the process you're passing the stdio cgi calls to doesn't have any way to do decent concurrency
+[22:19] mikeal: there is JSGI
+[22:19] bentomas: figital: I'm not sure there is a comparison.  When you write stuff for Node you write the whole server
+[22:20] mikeal: which is a specification commonjs is working on for a standard server to application connector
+[22:20] rhys__ has joined the channel
+[22:20] bentomas: I think I'll just let mikeal take over, he appears to know this stuff better than me :)
+[22:21] mikeal: but with node it's kind of a given that the server will be in node and the application will also be in node
+[22:21] figital: I get it ... just trying to get the lingo down .... v8cgi is just a dissimilar collection of v8 http modules
+[22:21] mikeal: because node isn't bad at either part of the equation 
+[22:21] charlenopires has joined the channel
+[22:21] ashb: v8cgi i think can run in non-cgi mode to
+[22:21] ashb: i dont actually use it mind
+[22:22] mikeal: CGI, WSGI, and Rake all understand that their platform sucks at handling concurrent connections on their own so the server will be in some other platform/language
+[22:22] ashb: thats not the only reason for Rake or WSGI
+[22:22] mikeal: which is why WSGI doesn't have a non-blocking mode
+[22:22] ashb: take something like Heroku
+[22:22] ashb: having an already standard interface helps there
+[22:22] mikeal: and eventler (coroutines for Python) and Twisted both either ditch or violate the spec
+[22:22] figital: well .... node was easy as shit to install so as long as the service stays up i think i'll be rewriting everything in that :) http://kevin.vanzonneveld.net/techblog/article/run_nodejs_as_a_service_on_ubuntu_karmic/
+[22:23] mikeal: ashb: that's the sole goal of WSGI
+[22:23] mikeal: middleware is not part of the WSGI specification
+[22:23] mikeal: Rake is differnet
+[22:23] mikeal: it does try to intentionally enable middleware
+[22:23] ashb: rake is also fail
+[22:23] ashb: for bieng the project and the spec of the same name
+[22:23] ashb: *being
+[22:23] bentomas has left the channel
+[22:24] mikeal: well, Python moves forward at the speed of a turtle
+[22:24] mikeal: so it's common for specification to be worked on instead of actual code and projects :P
+[22:24] mikeal: oh man, I'm fucking BITTER
+[22:25] ashb: heh - come from a python background then?
+[22:25] figital: thanks so much everyone for answering the noobage!!!!
+[22:25] ashb: inimino: ah so it says where it last finished parsing. okay.
+[22:25] bentomas has joined the channel
+[22:25] ashb: so i can atleast display error at "...^"
+[22:25] ashb: etc
+[22:26] bentomas: ryah: you around?  Quick patch: http://gist.github.com/312793  I'm not sure I call it a "bugfix" per se, but you can decide if you want it...
+[22:29] gf3 has joined the channel
+[22:29] dekz has joined the channel
+[22:31] inimino: ashb: yeah
+[22:41] Harrison has joined the channel
+[22:43] dandean has joined the channel
+[22:48] CIA-77: node: 03James Duncan 07master * rdf1c1e5 10/ (doc/api.txt src/node.cc): Add setgid,getgid - http://bit.ly/cZpsju
+[22:51] pdelgallego has joined the channel
+[22:52] kriskowal_ has joined the channel
+[22:53] around has joined the channel
+[22:58] kriszyp has joined the channel
+[22:58] jashkenas has joined the channel
+[22:59] jashkenas has left the channel
+[23:03] dekz has joined the channel
+[23:11] RayMorgan_ has joined the channel
+[23:14] aho has joined the channel
+[23:27] pdelgallego has joined the channel
+[23:36] cloudhead has joined the channel
+[23:43] ashb: inimino: http://gist.github.com/312863
+[23:44] cdorn has joined the channel
+[23:48] bentomas has left the channel
+[23:52] cloudhead has joined the channel
+[23:53] spot__: is JSON natively available (like process) or is it a child of sys, or somewhere else?
+[23:53] spot__: I ask because 'JSON' is showing as an empty object when inspected
+[23:53] ashb: does JSON.stringify exist?
+[23:54] ashb: its probably just non-enumerable
+[23:54] spot__: don't know.. i can check.. but JSON.parse does not exist
+[23:54] ashb: its not mandated until ES5
+[23:54] ashb: which last time i checked v8 doesn't fully support (no one does, they all have different ares)
+[23:54] spot__: stringify does exist
+[23:55] spot__: what is the established pattern for parsing json in node then?
+[23:55] orlandov: spot__: JSON.parse works for me
+[23:55] ashb: gonna say - one without the other would be interesting
+[23:55] orlandov: spot__: JSON shouldn't have to be required, you can just use it
+[23:57] spot__: orlandov: That's what I thought but I'm having trouble... however itdoes exist as a function so it must be something in my json itselc
+[23:57] spot__: *self
+[23:57] spot__: Thanks for the help
+[23:58] orlandov: spot__: forgive me if i'm wrong, but it's possible JSON is an object implemented in C++
+[23:59] spot__: orlandov, ok

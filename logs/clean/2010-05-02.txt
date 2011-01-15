@@ -1,0 +1,1164 @@
+[00:00] <kriskowal> or a duple of bytes written and characters used?
+[00:00] <_ry> kriskowal: i believe so
+[00:00] <kriskowal> how close do you think we are on the commonjs proposal for read/write?
+[00:00] <micheil> hmm.. so, if I have the first buffer, which is currently of length 1, and I do, buffer.write(seconddata)
+[00:00] <_ry> kriskowal: pretty close
+[00:01] <micheil> and seconddata.length = 8, then the first buffer's length will increase to 9
+[00:01] <micheil> but that doesn't happen when using buffer.copy
+[00:01] <_ry> micheil: what are you doing though?
+[00:01] <_ry> micheil: usually you don't want to do this
+[00:02] <micheil> I'm needing to add more data to that upgradeHead
+[00:02] <_ry> why?
+[00:02] <micheil> eg, if it gets sent as the headers, then a string of characters
+[00:02] <micheil> the server would interpret that as two writes
+[00:03] <micheil> so the first would go through the http parser, the second wouldn't
+[00:03] <micheil> or, if the socket doesn't recv all the data at once (or is this not likely to happen)
+[00:03] <_ry> i don't undersatnd
+[00:04] <_ry> if the packet ends in the middle of the upgrade header - the parser will recover
+[00:04] <micheil> http://gist.github.com/386773
+[00:04] <micheil> like that
+[00:04] <micheil> """ indicating packets recv'd by the server
+[00:04] <_ry> ok
+[00:05] <_ry> that's okay
+[00:05] <_ry> then upgradeHEAD is just empty
+[00:05] <_ry> in the second case
+[00:05] <micheil> actually, it isn't empty, it'd equal \r\n
+[00:05] <micheil> (it's a little tripped)
+[00:05] <_ry> \r\n isn't part of the upgradeHead
+[00:06] <_ry> \r\n\r\n ends the http headers
+[00:06] <_ry> at the end of the second \n begins the new protocol
+[00:06] <micheil> yeah
+[00:06] <micheil> and the last \r\n gets included in upgradeHead
+[00:06] <_ry> really?
+[00:06] <micheil> yeah
+[00:06] <_ry> that's an error then
+[00:06] <micheil> it has done for a few weeks, I assumed that was normal :P
+[00:07] <micheil> so what, in http.js: 
+[00:08] <micheil>       req.upgradeHead = d.slice(start + bytesParsed, end);
+[00:08] <micheil> should be:
+[00:08] <micheil>       req.upgradeHead = d.slice(start + bytesParsed+2, end);
+[00:08] <_ry> well - the fix needs to happen in http-parser
+[00:08] <micheil> although, it could be an issue with http_parser, which is maybe returning the wrong num bytes parsed
+[00:08] <micheil> yeah, okay
+[00:09] <micheil> so, in the given gist, if that were to be received, because the http_parser isn't expecting data, it'd finish the parsing, setting upgradeHead to ""
+[00:09] <micheil> I'm then wanting to change this to be the next 8 bytes recvd
+[00:10] mrjjwright has joined the channel
+[00:10] <_ry> micheil: i'm not sure if i believe you
+[00:10] <_ry> the \r\n is in the upgrade head?
+[00:11] <micheil> yes
+[00:11] <_ry> both or just the \n ?
+[00:11] <micheil> one sec, I'll get you actual data
+[00:13] <_ry> micheil: can you change the test so that instead of just sending the http grade header
+[00:13] <_ry> it also send the first part of a web socket packet?
+[00:13] <_ry> and then test that upgradeHead is equal to the first websocket packet?
+[00:14] <micheil> sure, I just want to show you this first..
+[00:14] <micheil> http://gist.github.com/386778
+[00:14] <micheil> 87 should == 6
+[00:15] <micheil> actually, wrong way, it's W
+[00:16] <_ry> are you just copy&pasting that into telnet?
+[00:16] <micheil> yeah
+[00:16] <tmpvar> JimBastard, whats good?
+[00:16] <micheil> (hopefully that's not introducing bugs)
+[00:17] <JimBastard> im over in the finance distract
+[00:17] <JimBastard> district
+[00:17] <JimBastard> lol
+[00:17] <JimBastard> getting a good distraction from server side JS
+[00:17] <tmpvar> getting distracted by finance?
+[00:17] <JimBastard> yeah
+[00:17] <JimBastard> doing some yayquery for a couple hours to decompress
+[00:17] <tmpvar> slick, you at a meetup or something?
+[00:17] <JimBastard> before i go back to hookio and brood
+[00:17] <JimBastard> naah im onsite
+[00:17] <tmpvar> oh, nice
+[00:17] <JimBastard> whats up
+[00:18] <tmpvar> finishing up the slides of doom
+[00:18] <_ry> last night i was walking around and saw this in an alley: http://www.youtube.com/watch?v=7IUL1zS7lmI
+[00:18] <tmpvar> haha, you were hiding around the corner there for a sec ;)
+[00:18] <JimBastard> lol wut ry
+[00:18] <tmpvar> (wtf is going on)
+[00:19] <_ry> sf is strange
+[00:19] <micheil> _ry: via test: http://gist.github.com/386781
+[00:19] <_ry> micheil: cool
+[00:20] <tmpvar> haha _ry
+[00:20] <tmpvar> thats when you throw fistfuls of quarters at them
+[00:20] <_ry> just heard some music in the alley and some people
+[00:21] <_ry> so i went down to look
+[00:21] <_ry> and it was exactly that
+[00:21] <_ry> micheil: btw - don't put end of line white space, please
+[00:21] <micheil> I'm not am I?
+[00:22] <_ry> your assert is surrounded by two lines of white space
+[00:22] <micheil> or do you mean on blank lines?
+[00:23] <micheil> righteo
+[00:24] <_ry> i think it's a textmate thing 
+[00:24] <micheil> yeah
+[00:24] <tmpvar> _ry, what do you use as an editor?
+[00:24] <micheil> just building a debug build to test something
+[00:24] <micheil> I suppose I should probably pull the remote changes into my local copy too.
+[00:25] <_ry> micheil: http://s3.amazonaws.com/four.livejournal/20100501/Screen%20shot%202010-05-01%20at%205.24.34%20PM.png
+[00:25] <_ry> vim
+[00:26] <micheil> woah. the test is returning different for the upgradeHead
+[00:26] <micheil> '\nWjN}|M(6'
+[00:26] <micheil> I don't believe it though.
+[00:26] <micheil> chat 10, is that anything?
+[00:26] <tmpvar> _ry, ive never really liked vi.. but recently ive had a few people really try to sell me on it.
+[00:26] <micheil> char
+[00:27] <micheil> yeah, \n
+[00:28] <_ry> micheil: but the test isn't failing for me there
+[00:28] <micheil> this is slightly confusing.
+[00:28] <_ry> i'm getting
+[00:28] <_ry> AssertionError: 1 == 2 at Stream.<anonymous> (/Users/ryan/projects/node/test/simple/test-http-upgrade.js:89:12) at Stream.emit (events:25:26) at IOWatcher.callback (net:347:55) at node.js:176:9
+[00:29] <_ry> tmpvar: vim is the only way to go
+[00:29] <_ry> tmpvar: hard to learn - but once you do it's very nice
+[00:29] <_ry> textmate is okay - but it's so ugly and bloated
+[00:29] <_ry> find myself using the mouse too much
+[00:30] <tmpvar> yeah, there are aspects to text mate that drive me nuts
+[00:30] <tmpvar> and gedit on linux is all sorts of frustrating
+[00:30] <_ry> just give me a full screen vim
+[00:30] <micheil> _ry: with http://gist.github.com/386789
+[00:30] <micheil> I get back \nWjN}|M(6
+[00:30] <_ry> micheil: is that different?
+[00:31] <micheil> yes
+[00:31] <micheil> it should just be WjN}|M(6
+[00:31] <_ry> (er a different patch than you just sent me?)
+[00:31] <micheil> er, no I don't think so
+[00:31] <_ry> i get: 
+[00:31] <_ry> ryan@mac% ./node test/simple/test-http-upgrade.js                                        [~/projects/node]  5:31PMAssertionError: 1 == 2 at Stream.<anonymous> (/Users/ryan/projects/node/test/simple/test-http-upgrade.js:89:12) at Stream.emit (events:25:26) at IOWatcher.callback (net:347:55) at node.js:176:9
+[00:31] <micheil> I got that the first time, I don't now
+[00:32] <micheil> I might be on a debug build
+[00:32] <micheil> etf.
+[00:32] <micheil> *wtf
+[00:32] <micheil> ECONNRESET now :(
+[00:33] <_ry> yeah :
+[00:33] gwoo has joined the channel
+[00:34] <micheil> just wating for make.
+[00:35] <micheil> doing a full debug make
+[00:36] <_ry> something strange is going on
+[00:36] <micheil> it is
+[00:37] <micheil> when testing over tcp, I do get \r\n as the upgradeHead
+[00:37] <micheil> ** over telnet
+[00:37] <micheil> _ry: sorry if I keep making typos, it's the painkillers, there's fscking slightly with my typing.
+[00:39] <micheil> _ry: but yeah, when I first started using the http libraries for websockets, I found that the upgradeHead was including extra stuff
+[00:40] <_ry> it maybe that we need to add a +1 
+[00:40] <_ry> but not +2
+[00:41] <_ry> (off by one is possible)
+[00:42] <micheil> okay, I had to change my test.. looks like http.Server doesn't like asserts within it
+[00:43] <micheil> if the assert throws, then http.Server dies with ECONNRESET
+[00:43] jedschmidt has joined the channel
+[00:43] <_ry> yeah
+[00:43] <_ry> okay
+[00:43] <_ry> in the 'upgrade' event?
+[00:43] <micheil> okay.. using +1 all tests pass
+[00:43] <micheil> yes
+[00:44] <micheil> just trying something..
+[00:44] <micheil> odd.
+[00:47] <_ry> yes
+[00:47] <micheil> aha!
+[00:47] <micheil> yeah, + 1
+[00:48] <micheil> where do you wnat to handle that adding of 1 to bytesParsed?
+[00:48] softdrink has joined the channel
+[00:48] <_ry> where upgradeHead is sliced out
+[00:48] <_ry> btw - it doesn't need to be put into req anymore
+[00:49] <micheil> hmm?
+[00:49] <_ry> just:
+[00:49] <_ry> var upgradeHead = d.slice(start + bytesParsed + 1, end);
+[00:49] <micheil> oh.
+[00:49] <micheil> okay
+[00:49] <micheil> any reason?
+[00:49] <_ry> i was jut putting it into req before in order to pass it to the user
+[00:50] <_ry> but now that we have it as an argument to the event - it's unnecessary
+[00:50] <micheil> okay
+[00:50] <_ry> but - now i want to know why we're not getting the proper stack trace
+[00:52] <micheil> _ry: what I was testing before was sending the req headers as one socket.write, and the upgradeHead as the second
+[00:53] <micheil> _ry: do you think this is a safe test:       assert.equal("WjN}|M(6", request_upgradeHead.toString("utf8")); ?
+[00:54] <micheil> or should I compare two buffers?
+[00:54] <_ry> that's fine
+[00:56] <micheil> okay
+[00:56] <micheil> just fixing up a few things, then I'll send you the patch files
+[00:57] <chuck> what's the best library/tutorial to do long running http requests (using callbacks I assume) on node.js?
+[00:58] <micheil> chuck: I'm not sure if there is one
+[00:58] <micheil> I haven't seen one in the forkqueue for howtonode
+[00:58] <micheil> nor on any blogs I follow
+[01:00] <tk> chuck: someone did port a CometD approach to Node... no idea how well it works though
+[01:01] <micheil> _ry: patch incoming.
+[01:02] JimBastard has joined the channel
+[01:02] <micheil> http://gist.github.com/386801
+[01:02] <_ry> chuck: node_chat is a decnet example, i htink
+[01:02] <micheil> (also included the fixes to the whitespace)
+[01:02] <_ry> pretty simple
+[01:04] <micheil> _ry: how would you like the upgrade event documented?
+[01:05] <micheil> because, in all the examples I've given people, I've had to give the thing of do both addListener("request") and addListener("upgrade")
+[01:05] <micheil> (the request event for standard http)
+[01:06] <_ry> micheil: right below "Event: 'request'"
+[01:06] <micheil> okay
+[01:17] phazm has joined the channel
+[01:19] binary42 has joined the channel
+[01:24] <micheil> _ry: hmm, "Emitted each time a client requests a http upgrade. The request argument is the same as in the request event, socket is the socket between the server and client, and upgradeHead"
+[01:26] <_ry> yeah - and that the connection is closed if 'upgrade' isn't listened for
+[01:27] <micheil> so, expalin the various args?
+[01:28] <chuck> I heard of someone writing a library that would simplify callback code to make it more maintainable
+[01:29] <_ry> chuck: http://github.com/creationix/step
+[01:29] <micheil> I always love these lines in docs: The `options` argument is optional
+[01:30] <micheil> necessary evil
+[01:30] <_ry> micheil: yeah - explain the args
+[01:30] <micheil> okay
+[01:30] JimBastard_ has joined the channel
+[01:31] <micheil> _ry: how's this look? http://gist.github.com/386814
+[01:32] <micheil> actually, copy paste fail there
+[01:32] <_ry> micheil: s/upgradeHeader/head/
+[01:32] <micheil> fixed
+[01:33] <_ry> add line break, etc
+[01:33] <micheil> "head is the body of the client's request"
+[01:33] <micheil> :/
+[01:33] <micheil> change it to body?
+[01:33] <_ry> it's the beginning of the new stream
+[01:34] <micheil> hmm.. not really, it's what's sent along with the headers
+[01:34] <micheil> or maybe I'm just thinking of it weird
+[01:34] <micheil> "head is the first packet of the upgraded stream"
+[01:35] sprsquish has joined the channel
+[01:35] <_ry> sure
+[01:36] <_ry> something is really funky 
+[01:36] <_ry> throwing errors in 'upgrade' is not working as expected
+[01:41] <chuck> have any of you guys tried node.js on heroku yet?
+[01:41] <micheil> _ry: where would you like docs for net.Stream#ondata?
+[01:41] <_ry> micheil: i dont want docs for that - it's private
+[01:41] <micheil> yeah, but users of upgrade will need to know the arguments
+[01:41] sprsquish has joined the channel
+[01:42] <micheil> (d, start, end)
+[01:42] <_ry> they can just use 'data'
+[01:42] <micheil> hmm..
+[01:42] <micheil> that enforces an encoding though
+[01:42] <micheil> or, rather, returns a string
+[01:42] <_ry> they'll get buffers
+[01:42] admc has joined the channel
+[01:42] <_ry> the data event gives out buffers
+[01:42] <micheil> oh
+[01:42] <_ry> as long as you don't setEncoding
+[01:43] <micheil> yeah
+[01:43] <micheil> I think we should make a note on it though
+[01:44] <micheil> "After this event is emitted, the socket will not have an `ondata` handler, meaning you will need to rebind that handler in order to receive data on that socket, by setting `socket.ondata` to a function. The `omdata` handler takes the arguments `data`, `start`, `end`"
+[01:44] derferman has joined the channel
+[01:48] mattly has joined the channel
+[01:50] <_ry> micheil: i don't want to mention ondata
+[01:50] <_ry> it's really just an optimization hack
+[01:50] <_ry> the 'data' event should be mentioned
+[01:53] <micheil> ok
+[01:53] <micheil> bb
+[01:53] <micheil> brb
+[01:56] micheil has joined the channel
+[02:01] <micheil> _ry: is the stream event on http.Server actually also the listen event?
+[02:09] <micheil> _ry: there we go, here's the patch for documentation: http://gist.github.com/386814
+[02:16] mrjjwright_ has joined the channel
+[02:16] <CIA-75> node: 03Micheil Smith 07master * raee226b 10/ (lib/http.js test/simple/test-http-upgrade.js): 
+[02:16] <CIA-75> node: Fixing the 1 byte off error in http.Server's upgradeHead
+[02:16] <CIA-75> node: (And fix up some style issues) - http://bit.ly/999mm1
+[02:16] <CIA-75> node: 03Micheil Smith 07master * r3db613e 10/ doc/api.markdown : Documenting http.Server#event:upgrade - http://bit.ly/a3dkbv
+[02:16] <CIA-75> node: 03dpb587 07master * ra1f23c1 10/ doc/api.markdown : Fix a couple mistypes in API doc - http://bit.ly/aXjAnS
+[02:18] derferman has joined the channel
+[02:22] <micheil> _ry: I think you pulled the wrong doc
+[02:22] <micheil> or not
+[02:22] <micheil> my local copies just fsckd.
+[02:28] <chuck> Are there any good node.js web frameworks that stay out of the way but make stuff like query parameters easy
+[02:28] <JimBastard_> chuck do you just want query params?
+[02:28] <micheil> not really..
+[02:28] <micheil> just request params node can handle
+[02:29] tmpvar has joined the channel
+[02:29] <chuck> JimBastard_, I'd like something like Sinatra (pretty simple and has routine things like query params built in)
+[02:29] <chuck> I want query params though, yeah
+[02:29] <tmpvar> too nice to stay inside tonight, outside beering on the balcony :)
+[02:30] <chuck> I'm using node-router
+[02:30] <JimBastard_> http://gist.github.com/386841
+[02:30] <JimBastard_> use express
+[02:30] <JimBastard_> or one of the routers
+[02:31] <JimBastard_> go to the wiki page on the github, theres a lot of them
+[02:37] hassox has joined the channel
+[02:41] softdrink has joined the channel
+[02:50] derbumi has joined the channel
+[02:53] <_ry>  micheil: i just changed it
+[02:54] <micheil> oh, okay
+[03:01] <tmpvar> tk, did you ever get dojo running on node?
+[03:03] bolson has joined the channel
+[03:04] <tk>  tmpvar novemberborn (twitter) had already done some work on it... apparently some core changes had to be done to get a few things working
+[03:04] <tk> tmpvar: but yah I had it loading
+[03:05] <chuck> it would be nice if node's http module had built in parameter support considering node already has built in url and query string parsing support
+[03:05] <micheil> chuck: not really.
+[03:05] <tmpvar> tk, cool ill hit him up
+[03:06] <tk> tmpvar: there is alink to it on the modules page :P
+[03:06] <chuck> micheil, why not? it's insane that I have to spend this much time to figure out how to use the built in url parsing stuff
+[03:06] <micheil> chuck: it's not that hard though, and does nginx or apache do the query string stuff?
+[03:07] <micheil> node is more like nginx then rails or php
+[03:07] mrjjwright has joined the channel
+[03:08] <chuck> micheil, ah, yes actually, nginx *does* handle query strings
+[03:08] <micheil> okay then
+[03:09] <micheil> but either way, point stands
+[03:09] <chuck> location = '/hello' { echo "hello, $arg_place!"; }     http://server/hello?place=world
+[03:09] <chuck> simple and elegant
+[03:09] <micheil> not at all.
+[03:10] <tmpvar> lol
+[03:10] <tmpvar> node is intended to be thin/light
+[03:12] keyvan has joined the channel
+[03:12] <chuck> and adding a params key to the request object would compromise that goal? ;-)
+[03:12] <chuck> query string parameters aren't really an obscure and uncommon thing to do
+[03:13] <tmpvar> means you'd have to parse it on every request
+[03:13] <tmpvar> even on the requests that you don't care 
+[03:13] <tmpvar> its just _that_ light
+[03:14] ditesh|cassini has joined the channel
+[03:14] <tmpvar> you should be in here when _ry is disecting profiles comparing it to erlang / worrying about the memory footprint
+[03:15] <tmpvar> its really meant to be as light as possible.  which is why there is such a large group of libraries to handle common features :)
+[03:16] derferman has joined the channel
+[03:16] PyroPete1 has joined the channel
+[03:21] mrjjwright_ has joined the channel
+[03:21] Dethe has joined the channel
+[03:25] steadicat has joined the channel
+[03:33] thotypous has joined the channel
+[03:34] <thotypous> hi
+[03:34] <thotypous> someone else having freezes with latest git? I had to revert 692f580a07c2787ed5db730b5eae8e9e1da43f12 otherwise no script would run
+[03:35] <thotypous> a friend had the same problem
+[03:36] <tmpvar> interesting, what os?
+[03:37] <thotypous> linux, mine is gentoo, theirs is fedora
+[03:37] Aria has joined the channel
+[03:37] <tmpvar> hrm
+[03:37] <tmpvar> 64 or 32 bit?
+[03:38] <thotypous> 32 bit
+[03:38] <tmpvar> hrm, I cant try to dupe unfortunately
+[03:39] <JimBastard_> tmpvar when is your presentation again?
+[03:39] <tmpvar> wed
+[03:40] <JimBastard_> nice 
+[03:40] <JimBastard_> maybe bbq tomorrow 
+[03:41] <tmpvar> yeah?
+[03:41] <tmpvar> that sounds fun
+[03:43] <tmpvar> tomorrow is prepare day, if we bbq later maybe ill present to ya and make you cry :P
+[03:44] <thotypous> can someone review this patch please? http://gist.github.com/386876  I'm just starting with nodejs code...
+[03:45] ditesh|cassini has joined the channel
+[03:45] joshbuddy has joined the channel
+[03:47] boaz has joined the channel
+[03:47] binary42 has joined the channel
+[03:48] <tmpvar> thotypous, where is SSL_get_verify_result ?
+[03:48] <thotypous> at SecureStream::VerifyPeer: long x509_verify_error = SSL_get_verify_result(ss->pSSL);
+[03:49] <tmpvar> (im guessing its in openssl) -- do your changes pass the tests?
+[03:49] <thotypous> yes
+[03:51] <tk> yay, starting to feel.... normal again
+[03:51] mumrah_ has joined the channel
+[03:51] <tmpvar> thotypous, looks decent, I'd make sure that all of your indentation is 2 spaces
+[03:51] <mumrah_> is there a roadmap detailed somewhere?
+[03:52] <thotypous> tmpvar: thanks :)
+[03:52] <tmpvar> Ryan posted a sort of roadmap for 0.2 on the ml recently, let me find
+[03:52] <mumrah_> i'm wondering if there's a major release coming up
+[03:53] <mumrah_> also, what's the policy for api changes
+[03:53] <tmpvar> mumrah_, http://groups.google.com/group/nodejs/browse_thread/thread/9c7d79e22ce02a57#
+[03:53] <mumrah_> thanks
+[03:53] <tmpvar> 0.2 should solidify the api from what I understand
+[03:53] <tmpvar> (for the most part atleast_)
+[03:54] <mumrah_> ok
+[03:55] <mumrah_> so in the future, minor version numbers won't break backwards compatability?
+[03:57] <tmpvar> for the most part yet, I mean it is 0.2 so im sure there will be *some* changes but hopefully nothing major
+[03:57] <tmpvar> best thing to do is join up on the mailing list and voice your opinion :)
+[03:58] <tmpvar> s/yet/yes
+[04:00] <JimBastard_> someone should make a BIG CANVAS app for nodejs. it would be infinite scroll canvas that anyone could draw and edit on. you could use mrdoobs engine, or one of the many drawing engines. that would be bad ass. 
+[04:00] <JimBastard_> i'll give you 10 internet points
+[04:00] <mumrah_> shit
+[04:01] <mumrah_> what can i redeem with said points?
+[04:01] <_ry> mumrah_: api is mostly going to be what it is now
+[04:01] <_ry> no major changes planned
+[04:01] <JimBastard_> id have to talk to my friends who run the internet money bank
+[04:01] <_ry> just working out bugs
+[04:01] <JimBastard_> they actually owe me a lot of internet money
+[04:02] <mumrah_> are there plans for integrating some libraries as builtin modules?
+[04:02] <mumrah_> namely, websockets?
+[04:03] <tmpvar> JimBastard_, you mean on the desktop or no?
+[04:03] <JimBastard_> no 
+[04:03] <JimBastard_> web
+[04:03] <tmpvar> ah
+[04:03] <JimBastard_> canvas maybe
+[04:03] <JimBastard_> html5
+[04:03] <JimBastard_> there is code do to it
+[04:03] <JimBastard_> im just soo >.<
+[04:03] <tmpvar> i have infinite scrolling working in canvas.. but its not much of a drawing app
+[04:03] <mumrah_> i guess i could reframe that question, is there any notion of offering something higher level than http 
+[04:03] <tmpvar> mumrah_, via modules, yes
+[04:04] <mumrah_> core modules? or 3rd party
+[04:06] <tmpvar> 3rd party, from what I understand node is meant to be minimal/tight/light
+[04:06] <tmpvar> (which is why im here, heh)
+[04:06] <mumrah_> word
+[04:07] <Aria> We can always work together to make a nice "standard" library if we need it ;-)
+[04:07] <tmpvar> exactly!
+[04:07] <tmpvar> or anything else for that matter
+[04:07] <mumrah_> is there anything like Pypi for javascript?
+[04:07] <Aria> (I'd love to see that happen -- good protocol implementations, at least.)
+[04:07] <tmpvar> mumrah_, there are a few things in the works: npm, kiwi, seed?
+[04:09] <mumrah_> i mean something like a defacto repository of vetted 3rd party libraries
+[04:09] <tmpvar> ah, i guess seed is meant to be universal to commonjs modules
+[04:09] sudoer has joined the channel
+[04:10] <tmpvar> http://wiki.github.com/ry/node/modules -- vetted is hard to define.  It's really a case by case basis as with anything else
+[04:11] <mumrah_> indeed ^_^
+[04:11] mikeal has joined the channel
+[04:12] <mumrah_> oh wow, ^_^ translates into an emo japanese emoticon in Colloquy 
+[04:12] <mumrah_> that's freaky
+[04:13] JimBastard_ has left the channel
+[04:13] keyvan has joined the channel
+[04:20] joshbuddy has joined the channel
+[04:20] darkf has joined the channel
+[04:23] mumrah_ has left the channel
+[04:24] nwhite has joined the channel
+[04:24] sh1mmer has joined the channel
+[04:27] mape has joined the channel
+[04:33] <kriskowal> mumrah_ seed.js, tusk's catalog.json
+[04:34] <kriskowal> slightly older, JSAN
+[04:34] <kriskowal> well, much older.
+[04:45] enherit has joined the channel
+[04:46] joshbuddy has joined the channel
+[04:46] joshbuddy has joined the channel
+[04:52] nwhite has joined the channel
+[04:53] sh1mmer has joined the channel
+[04:54] sudoer has joined the channel
+[05:00] JimBastard_ has joined the channel
+[05:00] <JimBastard_> this is awesome, scott is writing a spammer bot to spam http://chat.nodejitsu.com/
+[05:00] <JimBastard_> so we can stress test the UI under heavy conditions
+[05:04] mattly has joined the channel
+[05:07] JimBastard_ has joined the channel
+[05:07] <JimBastard_> does anyone remember the name of the guy who had the javascript gaming engine for doing the retro ascii games?
+[05:15] keeto has joined the channel
+[05:15] Me1000 has joined the channel
+[05:16] spoob has joined the channel
+[05:19] <Me1000> I'm trying to server up static images but something isn't quite right... because this is what I get for anything other than plaintext http://cl.ly/nvl
+[05:26] <tk> Me1000: make sure there arent any extraneous spaces or linebreaks anywhere at the end (bad relation but this result is a common thing from PHP users that have extraneous lines after or before the <?php ?> tags in a file that generates images for web output
+[05:29] <Me1000> none that I see, this is just a gif file from the fs, 
+[05:30] <Me1000> it write the headers then ends with the FS data that is read.
+[05:31] <thotypous> more patches.. the night today is productive :)
+[05:31] <tk> thotypous: interesting phrasing :P
+[05:32] <Me1000> this is the function that is serving everything https://gist.github.com/208d33f3b5e73bb7a4c1
+[05:34] <thotypous> http://gist.github.com/386928
+[05:34] <tk> Me1000: shouldnt you be using respose.write(data) not response.end(data)?
+[05:35] <thotypous> argh, forgot the identation
+[05:36] <Me1000> tk: I get the same thing, (with and without the response.close(); at the end) 
+[05:37] JimBastard__ has joined the channel
+[05:37] <JimBastard__> crap im trending on github again lol
+[05:38] <thotypous> now let's subscribe to the mailing list and post the patches :D
+[05:51] keyvan has joined the channel
+[06:05] sudoer has joined the channel
+[06:08] piranha has joined the channel
+[06:10] mikeal has joined the channel
+[06:11] nwhite has joined the channel
+[06:18] saikat has joined the channel
+[06:19] damien_ has joined the channel
+[06:23] damien_ has left the channel
+[06:27] maritz has joined the channel
+[06:29] joshbuddy has joined the channel
+[06:36] admc has joined the channel
+[06:41] SamuraiJack has joined the channel
+[06:49] SamuraiJack_ has joined the channel
+[06:50] drostie has joined the channel
+[06:54] qFox has joined the channel
+[07:02] saikat has joined the channel
+[07:03] steadicat has joined the channel
+[07:04] <phazm> how would I make this script call google.com every second? I tried a setInterval, but it didn't work (also didn't error, so not sure what happened)
+[07:04] <phazm> http://nodejs.org/api.html#http-client-167
+[07:05] <phazm> so basically, I want to spit out the 'chunk' of google every second (with a new request each time)
+[07:06] <drostie> would anybody be interested in a templating language that's designed to compile into require()-able .js files?
+[07:07] <drostie> I've been working on such a thing in python, but I want to know if I should be thinking of any special features :D
+[07:09] nwhite has joined the channel
+[07:15] MattJ has joined the channel
+[07:17] mrjjwright has joined the channel
+[07:20] <phazm> nm, got it
+[07:25] jansc has joined the channel
+[07:25] cainus_ has joined the channel
+[07:35] k3yvn has joined the channel
+[07:38] JimBastard_ has joined the channel
+[07:38] <JimBastard_> ryan[WIN] ping
+[07:41] <JimBastard_> lets make http://www.diod.es/ryanwin/jzzzt/src/index.html multiplayer
+[07:41] <JimBastard_> and do some websockets
+[07:44] JimBastard__ has joined the channel
+[07:45] teemow has joined the channel
+[07:51] bolson has joined the channel
+[08:09] thotypous has joined the channel
+[08:14] rictic has joined the channel
+[08:24] rictic has joined the channel
+[08:25] hassox has joined the channel
+[08:36] cruxst has joined the channel
+[08:45] rictic has joined the channel
+[08:47] N` has joined the channel
+[08:53] sveimac has joined the channel
+[09:12] hassox has joined the channel
+[09:19] sveimac has joined the channel
+[09:28] felixge has joined the channel
+[09:28] felixge has joined the channel
+[09:36] sveimac has joined the channel
+[09:49] <drostie> okay, here's what I'm thinking of with the Node-specific templating language that I want to design. Anyone here have any input on something they'd like to see?
+[09:49] <drostie> http://pastebin.com/CvAPCRqb
+[09:51] tlrobinson_ has joined the channel
+[09:52] <drostie> I'm thinking for example of having a template inheritance system, so that you would say '% implements "template_base.html"' with that base defining certain named '% block "name" ::' regions.
+[09:52] <drostie> also those calls to markdown() should probably become asynchronous somehow.
+[09:52] <tk> drostie: almost looks like a Djangos Templates...
+[09:54] <mape> extends
+[09:54] <drostie> tk: yep, some inspiration drawn from there. :D
+[09:55] <tk> drostie: you know there isa JS impl of DTL? :P
+[09:56] <tk> actually I heard mention of making it vanilla JS (currently its part of DojoX in Dojo)
+[09:58] <drostie> sounds cute, but I never quite liked django's templating system. I mean, I think what I'm secretly envisioning is almost a macro language for javascript. ^_^
+[09:58] <drostie> django would have trouble with the '% template comment c ::' directive IIRC, since it's recursive.
+[09:59] <tk> well since its not in a tag that Django would even care about it, I dont see it having a problem, it just would ignore it :P
+[10:00] <tk> but, good luck, always curious to see new template systems
+[10:00] <drostie> no, I mean, you couldn't express the same idea within django without defining your own template tag.
+[10:02] <drostie> thanks ^^;;
+[10:02] <tk> and with that, I'm off to bed... and avoiding this idiot looking for handouts
+[10:04] <tk> idiot doesnt understand that he is using googles Urchin js code... and is asking how to do something like the google urchin examples show...
+[10:05] <tk> and gone, have a good one
+[10:22] zol has joined the channel
+[10:24] teemow has joined the channel
+[10:33] enherit has joined the channel
+[10:34] kjeldahl has joined the channel
+[10:42] awenkhh has joined the channel
+[10:46] teemow has joined the channel
+[10:52] sveimac has joined the channel
+[11:10] teemow has joined the channel
+[11:13] hassox has joined the channel
+[11:16] boaz has joined the channel
+[11:17] <sveimac> drostie: I think a template language should be extenable in every little bit, hookins should be possible somewhat in  a way that scales. 1 template that solves alot of problems isnt possible without overrRRrrrRrride capabilities
+[11:17] <sveimac> extendable*
+[11:18] <sveimac> drostie: so, some kind of abstraction of rules and priotity of these rules would be nice
+[11:20] <drostie> heh, I like that I'm being encouraged to make a full macro language for javascript which just /happens/ to do templating really well. :P
+[11:21] <drostie> it's as if we were satisfying that axiom about every language progressing toward lisp in our own little way. :D
+[11:23] <sveimac> ACTION wikied "axiom"
+[11:23] <drostie> maxim is a better word I suppose.
+[11:24] <sveimac> Well, I dont know if it suits your goal, buts its missing in the js-space at least 
+[11:24] maushu has joined the channel
+[11:25] <drostie> sveimac: ah, found it. Greenspun's Tenth Rule. :D
+[11:26] <sveimac> drostie: hehehe
+[11:27] <sveimac> "Sorry, Han-Wen, but there aren't 9 preceding laws. I was just trying to give the rule a memorable name."
+[11:33] awenkhh has joined the channel
+[11:47] cainus_ has joined the channel
+[12:04] teemow has joined the channel
+[12:12] derbumi has joined the channel
+[12:13] <micheil> hey, JimBastard, you about?
+[12:21] rolfb has joined the channel
+[12:24] \0xff has joined the channel
+[12:24] felixge has joined the channel
+[12:24] felixge has joined the channel
+[12:25] \0xff has left the channel
+[12:42] jedschmidt has joined the channel
+[12:47] felixge_ has joined the channel
+[12:47] felixge_ has joined the channel
+[12:48] <micheil> just tagged the original version of my node-websocket-server implementation, but I've also pushed the development branch up, which shows a good usage of the new upgrade event on http.Server
+[12:48] <micheil> for those interested, here's the git repo, http://github.com/miksago/node-websocket-server/tree/development
+[12:50] spoob_ has joined the channel
+[13:07] creationix has left the channel
+[13:21] <rolfb> is it possible to put Node behind a Rack authentication layer?
+[13:28] <rolfb> like Warden?
+[13:32] keeto has joined the channel
+[13:34] technoweenie has joined the channel
+[13:39] keyvan has joined the channel
+[13:53] teemow has joined the channel
+[14:01] <micheil> rolfb: try it and find out
+[14:02] <micheil> then write a blog post or something on the mailing list about it.
+[14:02] <rolfb> micheil: but i neither blog nor use mailing lists
+[14:02] <rolfb> :P
+[14:03] <rolfb> but i get your point
+[14:03] <micheil> well, if it helps you, it's bound to also help someone else.
+[14:04] <micheil> although, I should stick to my word and write up stuff about the new upgrade header event
+[14:04] skampler has joined the channel
+[14:15] <micheil> anyone know how to use object.defineProperty to add a custom setter method?
+[14:19] <N`> do you want this: object.__defineSetter__(attr, function(val) { /* Do something with val */ }); ?
+[14:20] <felixge_> ACTION meh, writing parser is tricky
+[14:24] <micheil> N`: what do you do to set the value?
+[14:26] <N`> it depends of how you want to use it
+[14:26] <micheil> I have Connection.prototype._state
+[14:27] <micheil> I'm just wanting to write a setter around _state to allow it to be emitted
+[14:27] <micheil> So when Connection.prototype._state = 1; we get an emit of that
+[14:28] boaz has joined the channel
+[14:28] ditesh|cassini has joined the channel
+[14:29] <N`> in that cas, I think you should save it as __state (with 2 underscores) and also define a getter
+[14:32] ditesh has joined the channel
+[14:41] <micheil> okay, cool, I've got it working now.
+[14:42] <N`> :)
+[14:42] <micheil> now I have readyStateChange events for node-websocket-server
+[14:43] <micheil> :D
+[14:46] <pkrumins> what's new in node?
+[14:46] <pkrumins> been away for a day or so.
+[14:48] <micheil> pkrumins: the http upgrade event?
+[14:48] <JimBastard> syo micheil 
+[14:49] <micheil> so if a client requests a HTTP Upgrade (Upgrade: protocol / Connection: Upgrade), then the http.Server will emit an event similar to "request" called "upgrade" which will give you access to the request, socket, and first packet (if one is sent)
+[14:49] <micheil> JimBastard: was going to ask if you had time to do a code review?
+[14:50] <micheil> (or atleast, I think that was the thing)
+[14:50] <JimBastard> of what? i just woke up 
+[14:50] <JimBastard> im in EST
+[14:50] <micheil> of http://github.com/miksago/node-websocket-server/tree/development
+[14:51] <micheil> yeah, no worries, my timezones are currently out a fair bit.
+[14:51] <JimBastard> ill have to look later, back to zzzz
+[14:51] <micheil> JimBastard: you should like, I think.
+[14:52] <pkrumins> micheil: interesting, what does it do?
+[14:53] <micheil> it's a websocket server, which is fully evented
+[14:53] <micheil> or do you mean the upgrade event?
+[14:53] <pkrumins> i mean the upgrade event.
+[14:53] <micheil> oh, it just allows you to catch and handle http upgrade events
+[14:53] <pkrumins> micheil: also talking about websocket server, isn't Guille's one better? (the Socket.IO-node)
+[14:53] <micheil> heh, probably not.
+[14:54] <pkrumins> oh i see.
+[14:54] <micheil> this is a raw websocket server, nothing extra
+[14:54] <pkrumins> oic
+[14:54] <pkrumins> looking into it
+[14:54] <micheil> it's also aiming to be 100% compliant with the websocket protocol
+[14:55] <pkrumins> micheil: any ideas if websocket can transfer binary data?
+[14:55] binary42 has joined the channel
+[14:55] <pkrumins> micheil: i mean without closing it, repeatedly.
+[14:55] <pkrumins> micheil: like send 5 image/png's
+[14:55] <micheil> well, spec says all data is sent in utf8 
+[14:56] <micheil> so, unless you write an encapsulation, then no
+[14:56] <pkrumins> hmm, too bad
+[14:56] <pkrumins> means if i need to stream a lot of small images, i got to use old GET for them
+[14:56] <micheil> pkrumins: maybe doing a base64 encode and decoding it at the other end?
+[14:56] <pkrumins> micheil: but you can't really do that, the other end is the browser. Unless you use <canvas>.
+[14:56] <micheil> I'm not sure how that would work out, but it'd be interesting to see someone try that.
+[14:57] <pkrumins> micheil: i am working exactly on this
+[14:57] <micheil> pkrumins: yeah, you can, I think.
+[14:57] <pkrumins> micheil: well you can do <img src="base64;..."> crap, but it doesn't work cross browser.
+[14:57] <pkrumins> i tried this already
+[14:57] <micheil> pkrumins: I'm sure I've seen an example of img tags created with javascript where they've piped in base64 data or raw Bin data
+[14:57] <pkrumins> micheil: interesting!
+[14:57] mrjjwright has joined the channel
+[14:58] <pkrumins> micheil: got a link?
+[14:58] <micheil> pkrumins: alternatively, you could use something like raphaël.js, which would allow you to use canvas cross browser (down to something like IE5)
+[14:58] <micheil> nup
+[14:58] <pkrumins> wow.
+[14:59] <micheil> yeah. the aussie who authors the library is rather uber smart.
+[14:59] <pkrumins> never heard of it, gonna try it!
+[14:59] <pkrumins> aussies are so smart
+[15:00] <micheil> btw, I'm also aussie, so thanks for the comp'
+[15:00] <pkrumins> :)
+[15:00] qFox has joined the channel
+[15:01] <micheil> next up for node-websocket-server.. writing the damn tests.
+[15:01] <pkrumins> hey i perhaps will join your effort
+[15:02] <micheil> feel free to fork, just work on a new branch off development
+[15:02] <pkrumins> oh yes.
+[15:03] <pkrumins> hmm, i can't find anything in raphael.js for base64 images
+[15:03] <pkrumins> reading http://raphaeljs.com/reference.html
+[15:04] <micheil> hmm..
+[15:04] <micheil> okay
+[15:05] <micheil> :/ I forgot to download raphael.. I'll have to make a note to get the source code.
+[15:05] <pkrumins> wget 'http://github.com/DmitryBaranovskiy/raphael/blob/master/raphael.js?raw=true'
+[15:05] <pkrumins> ;)
+[15:06] <micheil> pkrumins: I can't open up any new connections atm
+[15:06] <pkrumins> why not?
+[15:07] <micheil> pkrumins: very long story. basically the router I access the net through locks all new outbound connections after midnight
+[15:08] <micheil> although, irc persists so I can still use it
+[15:11] <pkrumins> oh.
+[15:12] <KungFuHamster_> you need a vpn/proxy
+[15:13] shrughes has joined the channel
+[15:13] <micheil> KungFuHamster_: possibly, I need to look into setting one up
+[15:14] <spoob_> I'm aussie, and it's the russians and finlanders that we think are smart
+[15:15] <spoob_> dunno what it is, but every one of those bastards are math geniuses
+[15:15] <micheil> spoob_: hmm.. yeah, russians due to the FID or whatever they are
+[15:15] shrughes has left the channel
+[15:15] <micheil> and finnish, def. Hakon.
+[15:15] <pkrumins> setting up proxy is as easy as creating one ssh connection
+[15:15] <micheil> spoob_: and also some chinese / japanese
+[15:15] <pkrumins> a socks5 one
+[15:16] <micheil> pkrumins: I'll look into it, thanks for the info :)
+[15:16] kriszyp_ has joined the channel
+[15:16] <spoob_> as far as base64 goes, you might want to check out how Cappuccino used them. They're using it in a cross-platform way, so either they've cheated horribly or they've figured something out
+[15:16] <pkrumins> micheil: ssh -N -D local_port <server host>
+[15:17] <pkrumins> that will create a socks5 proxy on localhost:local_port, and will go through <server host>
+[15:17] <micheil> spoob_: that was it!
+[15:17] <pkrumins> actually i wanted to blog about it, because a lot of people don't know this simple technique.
+[15:17] <micheil> pkrumins: then blog about it! :D
+[15:18] <spoob_> a lot of people don't read his blog :)
+[15:19] <pkrumins> 11k do :)
+[15:19] <spoob_> that's a decent number :)
+[15:19] <micheil> pkrumins: link me.
+[15:19] <pkrumins> www.catonmat.net
+[15:19] <spoob_> yeah, I've read one of your articles recently
+[15:19] <micheil> I recall the name, but nothing else about it.
+[15:20] <spoob_> oh yep, that's the one
+[15:20] alex-desktop has joined the channel
+[15:20] <pkrumins> probably nodejs proxy article.
+[15:20] <pkrumins> but could be a different one.
+[15:20] <micheil> I wish I could rollup windows on os x like I could on ubuntu
+[15:21] <spoob_> yes, it was the nodejs proxy one
+[15:21] mau has joined the channel
+[15:23] mfeiri_ has joined the channel
+[15:32] colin__ has joined the channel
+[15:34] <colin__> felixge_: I've been looking at node-dirty for an application i'm working on, and have a few questions, are u around?
+[15:34] <felixge_> colin__: sure, go ahead
+[15:34] <felixge_> colin__: (i really want to finish up dirty, but the volcano gods got into the way )
+[15:35] <colin__> Well, I'm using the latest version of node and it looks like its not compatible with original dirty
+[15:35] <micheil> hmm.. just noticed that I accidentally made node-websocket-server a pure broadcast server
+[15:35] <colin__> process.mixin isn't supported for example
+[15:36] <felixge_> colin__: there is no version of dirty that is working with recent node at this point
+[15:36] Dethe has joined the channel
+[15:36] <colin__> ok, So i'm looking at your version 2 and it looks like you've moved away from storing docs in an array
+[15:36] <colin__> only in an object
+[15:37] webben has joined the channel
+[15:37] <colin__> Are you planning to write your own filtering method?
+[15:37] boaz has joined the channel
+[15:38] <felixge_> colin__: yes, I will add filter() back in
+[15:38] <felixge_> but it will be slower than before
+[15:38] <felixge_> however GET/SET will be ~100x faster
+[15:38] <felixge_> a tradeoff I'm willing to take
+[15:39] <colin__> right, so you're not going to be using native javascript Array.prototype.filter?
+[15:40] <felixge_> colin__: no
+[15:40] <felixge_> unless I can apply it to an object
+[15:40] <felixge_> but I don't see that working
+[15:40] <colin__> for my purposes, i won't be directly getting anything by id, but just filtering docs, would you recommend that i make a separate branch of dirty tailored for that purpose?
+[15:41] <colin__> i understand
+[15:43] technowe_ has joined the channel
+[15:44] sudoer has joined the channel
+[15:47] <felixge_> colin__: depends on how many records you plan on having
+[15:49] <colin__> felixge_: working on an application for real time analytics, should be able to handle many records
+[15:49] <colin__> each request would be a new record in dirty
+[15:50] <colin__> then maybe have a separate file(database) for each day or hour
+[15:51] <colin__> and compile these for aggregate viewing (day, week, month)
+[15:51] <drostie> felixge_: If you kept a parallel array of keys you could possibly move the map/filter stuff to native code, but deletes would be ugly.
+[15:52] <felixge_> drostie: deletes are very ugly :)
+[15:52] <felixge_> drostie: that's another reason to not support the dual array/object setup
+[15:53] <colin__> felixge_: I figured that was another reason for removing the array in v2
+[15:54] <felixge_> colin__: do you have any deletes?
+[15:54] <felixge_> colin__: sounds like you might not
+[15:55] <colin__> no, i won't have deletes
+[15:55] <colin__> felixge_: so, im not sure that i need the object version at all, prehaps for me only an array is needed
+[15:57] skampler has left the channel
+[15:57] mfeiri_ has joined the channel
+[16:03] joshbuddy has joined the channel
+[16:03] joshbuddy has joined the channel
+[16:04] <drostie> felixge_: ooh, MDC provides their own version of Array.filter on their doc pages. :D
+[16:08] <colin__> drostie:  Are you suggesting modifying MDC's version to filter objects?
+[16:10] <drostie> colin__: http://pastebin.com/5cHnXEvh
+[16:10] derbumi has joined the channel
+[16:11] <drostie> oh, missed a paren in the if statement. :x
+[16:12] <colin__> drostie: thanks, was thinking of trying to write something similar, appreciate it 
+[16:13] <micheil> this is really annoying. Throw statements within event callbacks don't throw.
+[16:13] <micheil> they just crash
+[16:14] <micheil> also, when a connection gets remotely closed, the writable status of the socket doesn't update to reflect this.
+[16:15] <micheil> oh, and there's no stack trace.
+[16:17] <drostie> colin__: http://pastebin.com/ewuYNspq fixed JSLinted and checked against the MDC's example :D
+[16:18] <micheil> _ry: was that issue I'm hacving the one you saw earlier on?
+[16:19] <colin__> drostie: wow, thanks a lot.
+[16:20] <drostie> felixge_: ^ an Object.prototype.filter() implementation for whenever you later need it. :D
+[16:20] <drostie> colin__: yeah, well, ten minutes is chump change. :D
+[16:21] <felixge_> drostie: well, the main problem is that v8 does not like (for var x in y) when you have millions of keys
+[16:21] <felixge_> -> it basically builds a map of all keys before it starts iterating, which leads to an initial delay
+[16:21] <drostie> really? hmm.
+[16:22] <colin__> felixge_: Thanks for the help as well, really excited to start working with node-dirty
+[16:22] <felixge_> colin__: well, I need to get a new working version released
+[16:22] <felixge_> but I mean the concept is pretty simple for anybody to implement
+[16:23] <felixge_> getting it optimized is what's taking me longer
+[16:23] mfeiri_ has joined the channel
+[16:23] <colin__> felixge_: i was able to get your latest version working without too much trouble with latest node
+[16:23] <micheil> felixge_: any ideas on sockets not updating their writable status if closed artibarily by a client?
+[16:23] <spoob_> i see node.dirty is still going... <wipes a tear> I was there when it was born here in #Node.js ;)
+[16:24] <colin__> haha
+[16:24] steadicat has joined the channel
+[16:24] <micheil> night chaps.
+[16:24] <spoob_> night fellow aussie
+[16:24] <micheil> wish I could work this writable issue out
+[16:25] <felixge_> micheil: no idea
+[16:25] <colin__> spoob_: i just listened to felixge_ interview about node-dirty and got me excited about it 
+[16:25] <micheil> aha!
+[16:25] <micheil> setTimeout(0) breaks writable
+[16:26] <micheil> setTimeout(1) and it works.
+[16:26] <micheil> or not.
+[16:27] javajunky has joined the channel
+[16:28] keeto has joined the channel
+[16:29] <micheil> now I've got it!
+[16:29] <micheil> if(socket.readable && socket.writable){
+[16:29] <micheil> before even attempting a socket.write()
+[16:31] <spoob_> what if you just do if (socket.writable)
+[16:31] <micheil> nup
+[16:31] <micheil> it's weird.. I'm not sure
+[16:31] <spoob_> sounds like a bug then
+[16:33] <micheil> spoob_: no way? total feature.
+[16:33] <micheil> ;p
+[16:34] <drostie> felixge_: I just tried to test this in chromium, but my associative array size was so large that it needed to push stuff into swap, and my encrypted swap system basically stalled the entire system. :D
+[16:34] <drostie> "whoopsie" ^_^
+[16:34] <micheil> ACTION just spent.. 1.5 hrs debugging this.
+[16:39] piccicato has joined the channel
+[16:40] piccicato has left the channel
+[16:43] sdavie has joined the channel
+[16:44] sdavie has left the channel
+[16:45] stvn1 has joined the channel
+[16:47] <micheil> now that that's sorted. to bed.
+[16:47] stvn1 has left the channel
+[16:47] charlesjolley has joined the channel
+[16:47] charlesjolley_ has joined the channel
+[16:48] stevendavie has joined the channel
+[16:48] sveimac has joined the channel
+[16:49] Me1000 has joined the channel
+[16:50] joshbuddy has joined the channel
+[16:50] joshbuddy has joined the channel
+[16:56] keeto has joined the channel
+[16:59] javajunky has joined the channel
+[17:04] <inimino> drostie: have you seen mustache/Mu?
+[17:05] <pkrumins> beyond me, guille's socket-io doesn't work
+[17:12] derbumi has joined the channel
+[17:19] <kkaefer> is there a way to implement a catchall getter/setter for an object?
+[17:19] <kkaefer> (in v8 js)
+[17:20] <ashb> no\
+[17:21] Me1000 has joined the channel
+[17:27] <pkrumins> to hell with socket-io.
+[17:27] <pkrumins> back to strophe and xmpp.
+[17:29] tisba has joined the channel
+[17:38] <pkrumins> ok, i take everything i said about socket-io back.
+[17:38] <pkrumins> it works now ;)
+[17:42] <SamuraiJack_> pkrumins: and what was it?
+[17:44] <phazm> #redis doesn't seem to be active at all -- I don't suppose any of you could help me set up a hash table to mimic a relational database?
+[17:45] <phazm> I'll be implementing it into node, fwiw :)
+[17:48] Yuffster has joined the channel
+[17:50] V1 has joined the channel
+[17:52] saikat has joined the channel
+[17:57] <Guest61319> 77 was fixed? Holy crap.
+[17:58] teemow has joined the channel
+[18:03] <pkrumins> SamuraiJack_: the first time SWFObject v2.2 in socket.io.js client was garbaged for unknown reason.
+[18:04] cloudhead has joined the channel
+[18:04] <pkrumins> SamuraiJack_: and now when i tried it again, i was not careful enough with directory structure and forgot to change 'localhost' in socket.connect() method to my development server 10.1.1.2.
+[18:05] <SamuraiJack_> I see.. I thought its something like not documented config option or other trick
+[18:06] <SamuraiJack_> ACTION is also looking on Socket.IO for possible future needs
+[18:06] <pkrumins> it seems really great, gonna report more in next few days.
+[18:06] <pkrumins> i just moved away from xmpp and strophe.
+[18:08] <SamuraiJack_> why?
+[18:12] <maushu> Shouldn't this be updated? "To use TLS, GnuTLS and libgpg-error are required. There are no other dependencies."
+[18:17] keyvan has joined the channel
+[18:18] <_ry> maushu: oops, yes
+[18:22] <maushu> Specially since http_old is gone.
+[18:22] <drostie> inimino: who is mustache/mu?
+[18:23] <drostie> ah, it's a templating engine.
+[18:25] <phazm> What would be the most efficient way to modify http://nodejs.org/api.html#http-client-167 to poll google.com _every second_ and output the 'chunk' each time.  What I have now is a setInterval(...,1000); around the entire 'request' area
+[18:27] mrjjwright_ has joined the channel
+[18:28] <tlrobinson_> spoob_ pkrumins we use base64 data URIs on most browsers, and MHTML on IE < 8, except theres one version on vista or something where we have to fall back to individial images (so we feature detect support for base64 or mhtml)
+[18:28] jansc has joined the channel
+[18:33] <pkrumins> tlrobinson_: thanks for the feedback! is your software opensource so I could take a look at how you do feature detection for mhtml?
+[18:33] <pkrumins> tlrobinson_: or you just test if it's IE browser, and use mhtml then?
+[18:33] <pkrumins> actually i am not sure what mhtml is yet, only found that it's for IE today when i was searching for base64 solutions for IE
+[18:34] <tlrobinson_> yeah it's the cappuccino project spoob_ mentioned: http://cappuccino.org #cappuccino
+[18:34] <tlrobinson_> http://github.com/280north/cappuccino
+[18:34] <tlrobinson_> if you stop by #cappuccino the guy who wrote the datauri/mhtml stuff can help
+[18:35] <tlrobinson_> pkrumins: ^
+[18:36] <tlrobinson_> pkrumins: also: http://cappuccino.org/discuss/2009/11/11/just-one-file-with-cappuccino-0-8/
+[18:37] <pkrumins> click!
+[18:38] <thotypous> ugh openssl is driving me crazy http://gist.github.com/386930
+[18:43] isaacs has joined the channel
+[18:44] <V1> Are there any good user agent parsers for node available? I have searched and found: 0
+[18:44] <_ry> V1: i don't think so
+[18:45] <mape> should be easy enough to port?
+[18:45] <V1> I'm porting one already ;)
+[18:45] tlrobinson_ has joined the channel
+[18:46] <mape> hehe
+[18:47] <V1> I'm porting: http://code.google.com/p/ua-parser/ seems to be the best out there
+[18:49] <isaacs> anyone else having any issues around SSL PUT requests?
+[18:49] <isaacs> I'm getting "cannot call method 'start' of null"
+[18:50] <isaacs> it looks like it's setting the client's _writeWatcher to null before doing the _writeWatcher.start() on line 642 of net.js
+[18:51] <felixge_> _ry: I'm building a multipart parser that is heavily inspired by your http parser. But I think it won't be possible without some buffering, let me know if you have a second to bug you about it :)
+[18:52] <isaacs> seems to be triggered by request.end()
+[18:52] <felixge_> isaacs: you may wanna take a look as well :)
+[18:52] <isaacs> felixge_: i'd be happy to.
+[18:52] <pkrumins> anyone knows the safest way to base64 a binary buffer? i haven't yet gotten around to hacking it into node.js itself, but regular base64 methods expect a string, not binary data.
+[18:53] <isaacs> pkrumins: you could port something from base64 in c.
+[18:53] <felixge_> isaacs: https://gist.github.com/5b8667336227a9a0e9dc (cc _ry)
+[18:53] <isaacs> felixge_: var style ftw!!
+[18:53] <isaacs> i like it already!
+[18:53] <felixge_> I'm at S.PART_DATA right now, and I'm wondering how to deal with the point where the part ends and I hit the boundary for the next part
+[18:54] <felixge_> because I may get 10 bytes or so that look like the boundary but then one is wrong
+[18:54] <felixge_> so I think I'll have to buffer for as long as I don't know if the current sequence is a boundary or not
+[18:54] <isaacs> felixge_: i'd buffer until you know that it's not the boundary.
+[18:54] <felixge_> hm : |
+[18:55] <felixge_> damn
+[18:55] <isaacs> felixge_: if you *really* don't want to buffer, you could just compare c to boundary[ offset ]
+[18:55] <felixge_> I went through some trouble to avoid that (as you can see) :)
+[18:55] <isaacs> felixge_: and then, if it's different, then slice the boundary up to the offset, and emit that bit.
+[18:55] <isaacs> felixge_: since, at that point, when c !== boundary[offset], you know that it DID match the boundary up to that point.
+[18:55] <isaacs> felixge_: so you know what those chars were
+[18:57] <felixge_> isaacs: I'll still have to buffer since my chunks could be interrupted at the boundary
+[18:57] <felixge_> * in the middle of
+[18:57] <isaacs> felixge_: nope.  you just go into a "MATCHING_BOUNDARY" state, and then keep track of how far into the boundary you ar.e
+[18:58] <isaacs> felixge_: so, if the boundary is "abcdef", and i give you "--abc" then that would leave you in MATCHING_BOUNDARY with offset = 3
+[18:58] <isaacs> felixge_: when you get the next char, you know that it has to be "d" because that's boundary.charAt(3)
+[18:58] <felixge_> isaacs: right, but I'm loosing the reference to the 'buffer' (chunk) as soon as my write() function exits
+[18:58] <felixge_> (I'm not doing any memory copying or buffering)
+[18:58] <isaacs> felixge_: right, but that's fine.
+[18:59] <felixge_> isaacs: right, but if the char is not 'd'
+[18:59] <isaacs> felixge_: you don't have to care about that, because you're keeping the boundary itself (right?)
+[18:59] <felixge_> than I don't have the backreference to the beginning of the sequence
+[18:59] <isaacs> felixge_: you don't ned it
+[18:59] <felixge_> isaacs: ah, because I have the boundary
+[18:59] <felixge_> isaacs: so I'd just take it from there?
+[18:59] <felixge_> using the offset?
+[18:59] <isaacs> felixge_: if i give you "X" at that point, then you can say, "the earlier ones MUST have been abc..."
+[18:59] <isaacs> exactly
+[18:59] <felixge_> AH!
+[19:00] <isaacs> and you emit "--abcX" or whatever.
+[19:00] <felixge_> *genius*
+[19:00] <felixge_> :)
+[19:00] <felixge_> thanks man
+[19:00] <isaacs> wouldn't go that far ;)
+[19:00] <isaacs> np
+[19:00] <felixge_> well, I looked at it for a bit and didn't see that
+[19:00] <isaacs> hey, wanna work in base64 decoding in the same pass?
+[19:00] <isaacs> also, this would be awesome in multipart-js
+[19:00] <felixge_> not sure :)
+[19:00] <felixge_> I guess it would be possible
+[19:00] <isaacs> (that could be a later enhancement)
+[19:01] <felixge_> my main goal for the multipart parser is to handle file uploads and to use node buffers
+[19:01] <felixge_> I don't want it to work on the client site explictly
+[19:01] <isaacs> kewl
+[19:01] <felixge_> only in node
+[19:01] <felixge_> but I'd be open to add more features
+[19:02] <isaacs> kewl.  i would not mind making multipart-js node-only.  i mean, it's cool to support anything with js, but js is so lacking in the binary department, sending binary data in js is kind of a pita if you dont' have some kind of binary buffer type deal, and that binds you to a specific impl.
+[19:02] <isaacs> for a pure string-to-obj type decoding like xml, that's not a big deal, but multipart deals with files
+[19:02] <felixge_> isaacs: I guess you could port node's Buffer object to plain JS
+[19:03] <felixge_> isaacs: and use a string internally
+[19:03] <isaacs> felixge_: yikes...
+[19:03] <felixge_> not saying it's fun :)
+[19:03] <isaacs> felixge_: it'd be better to make node's Buffer a commonJS standard, and then expect narwhal and all the rest to support it.
+[19:03] <felixge_> but all you need to make sure is that each character in your string is 0<255
+[19:03] <felixge_> isaacs: heh
+[19:03] <felixge_> yeah
+[19:04] <isaacs> felixge_: hey, self[callbackSymbol].apply(this, args || []);
+[19:04] <isaacs> you really don't need to make the arglist variable, do you?  it looks like you always call it with three args
+[19:04] <felixge_> isaacs: 3 or 0
+[19:04] <isaacs> you could just do self[callbackSymbol](foo, bar, baz)
+[19:04] <felixge_> isaacs: there are a few things to optimize
+[19:04] <isaacs> felixge_: right, and if you get 3 args, it'd just be undefined, undefined, undefined, so that's fine
+[19:05] <felixge_> isaacs: I'll add some benchmarks and then decide what will be worth it
+[19:05] <felixge_> isaacs: good point I guess
+[19:05] <isaacs> sure
+[19:05] <felixge_> isaacs: in that case I'll add that right away
+[19:05] <felixge_> :)
+[19:05] <isaacs> felixge_: this gist makes me happy.
+[19:05] <isaacs> keep it up
+[19:06] <felixge_> isaacs: well, I just studied ryan's http parser and decided it's probably a smart way to go :)
+[19:06] <pkrumins> anyone knows how to get out of '...' in node-repl?
+[19:06] <pkrumins> the only way i have found is exit node by ctrl+c or ctrl+d
+[19:06] <isaacs> pkrumins: .break
+[19:06] <pkrumins> oh nice, thank you!
+[19:06] <inimino> isaacs: I made a CommonJS version of that pretty-printer
+[19:06] <isaacs> inimino: yay!!
+[19:07] mikeal has joined the channel
+[19:07] <inimino> just a minute...
+[19:08] <isaacs> ok, i definitely think i just found a bug...
+[19:08] <isaacs> it works when not using https, so i'm either doing https wrong, or there's something broken somewhere.
+[19:15] javajunky has joined the channel
+[19:17] <_ry> felixge_: cool
+[19:17] <_ry> felixge_: gtg now though 
+[19:17] <_ry> i think you should be able to do it with only buffering the boundary
+[19:19] <_ry> felixge_: also: http://en.wikipedia.org/wiki/Boyer%E2%80%93Moore_string_search_algorithm
+[19:19] <felixge_> _ry: that was for indexOf, right?
+[19:19] <felixge_> (I don't think I'll be needing that anymore)
+[19:20] awenkhh has joined the channel
+[19:23] <_ry> yeah
+[19:23] <thotypous> isaacs: sorry, didn't read the backlog; which issue did you have with https?
+[19:23] <isaacs> thotypous: hey, it's you, from the openssl gist.
+[19:24] <thotypous> isaacs: yes :)
+[19:24] <isaacs> thotypous: i applied your patch, and got a slightly different error, but it's still not working righg
+[19:24] <isaacs> thotypous: basically, try to send a request body over a secure connection.
+[19:24] <isaacs> thotypous: in master, i get: TypeError: Cannot call method 'start' of null at Client._writeOut (net:649:22)
+[19:25] <isaacs> thotypous: with your patch, i get: TypeError: Cannot call method 'flush' of undefined at Client.<anonymous> (http:671:20)
+[19:26] derbumi has joined the channel
+[19:27] <thotypous> isaacs: is nodejs the server or the client in your case?
+[19:27] <isaacs> thotypous: nodejs is the client
+[19:27] <thotypous> the server, right?
+[19:27] <isaacs> thotypous: the server is nginx
+[19:27] <thotypous> ah ok
+[19:31] <isaacs> thotypous: here's the reduction: http://gist.github.com/387377
+[19:33] <thotypous> isaacs: thanks, I could reproduce it here, let's debug :D
+[19:33] <inimino> isaacs: http://boshi.inimino.org/3box/PanPG/js_pp/node/js_pp-20100502T192727.tgz
+[19:33] <isaacs> inimino: neat, i'll take a look today
+[19:34] <inimino> isaacs: don't run it on any large input, or it'll run out of memory
+[19:34] <inimino> 5k is fine, 50k is too big
+[19:35] <isaacs> inimino: sure, but these are js files we're talking about.
+[19:35] <isaacs> inimino: if they're 50k, you've got worse problems than the code layout
+[19:35] <inimino> well, yeah
+[19:35] <inimino> one of the files in the package is 50k ;)
+[19:35] <isaacs> thotypous: i'm gonna send it to the list, just to see if anyone knows it right off.  but you'll probably get there first :)
+[19:35] <inimino> but it's machine generated
+[19:35] <isaacs> inimino: yikes
+[19:36] <isaacs> though, i guess js IS a pretty big language
+[19:36] <inimino> yeah, it is
+[19:36] <isaacs> i wonder if the yui team is still looking for replacements to yui compressor..
+[19:36] <isaacs> .
+[19:36] <inimino> also there's probably still tons of bugs in the output, my idea is just to get it correct first, then add lots of options for formatting
+[19:36] <isaacs> they were before, but the "they" there was mostly me, because i hated its problems, hated its java, and was the project owner..
+[19:37] <inimino> s/probably/certainly/
+[19:37] <isaacs> inimino: awesome
+[19:38] <inimino> anyway if you can make sense of the code and fix some stuff let me know
+[19:38] <inimino> I'm probably not going to get back to it for a week at least
+[19:38] <isaacs> inimino: yeah, it might be slow going for me, too.  but this is definitely on my todo list.
+[19:39] <isaacs> inimino: having a job really cuts into my velocity
+[19:39] <inimino> alright
+[19:39] <inimino> hehe, yeah
+[19:46] <thotypous> isaacs: got it!
+[19:46] <isaacs> orly?
+[19:46] <isaacs> thotypous: what's the fix?
+[19:47] <thotypous> isaacs: you need to create the client like this: var client = require("http").createClient(443, "registry.npmjs.org", true)
+[19:47] <thotypous> the 3rd argument is "https"
+[19:47] <isaacs> weird.
+[19:47] <isaacs> ok
+[19:47] <thotypous> the Client itself takes care of setSecure
+[19:48] <isaacs> ahh...
+[19:48] <isaacs> that's a change, then
+[19:48] Aria has joined the channel
+[19:49] <isaacs> thotypous: that works! thanks :)
+[19:49] <thotypous> no problem :)
+[19:49] <isaacs> do you know offhand if there's  areason this isn't documented?  ie, is this still experimental?
+[19:51] rafaelmartins has joined the channel
+[19:52] maushu has joined the channel
+[19:54] rolfb has joined the channel
+[19:54] <thotypous> isaacs: I think it's experimental yet, but I'm not sure
+[19:55] <pkrumins> anyone remembers what was the file you had to serve on some nonstandard weirdo port to have flash-xhr working?
+[19:55] <pkrumins> no wait, it had to be on the webserver.
+[19:56] <hober> crossdomain.xml?
+[19:56] <hober> something like that anyway
+[19:56] <pkrumins> searching
+[19:57] charlesjolley has joined the channel
+[20:06] ewdafa has joined the channel
+[20:06] mrjjwright has joined the channel
+[20:09] Guest9202 has joined the channel
+[20:09] Guest9202 has joined the channel
+[20:12] thotypou1 has joined the channel
+[20:13] joshbuddy has joined the channel
+[20:13] <pkrumins> are there two ways to export things from nodejs modules? One seems to be to do `this.thing = thing`, the other is `exports.thing = thing`.
+[20:15] <inimino> pkrumins: you should always use exports, and the other thing is a non-standard extension and should probably go away
+[20:15] <inimino> `g commonjs modules 1.0
+[20:15] <gbot2> Modules 1.0 - CommonJS: JavaScript Standard Library - http://commonjs.org/specs/modules/1.0/
+[20:16] <inimino> (that's why)
+[20:19] felixge has joined the channel
+[20:21] sztanpet has joined the channel
+[20:24] <pkrumins> inimino: oic, thanks.
+[20:24] <pkrumins> inimino: saw the this.* in some modules, therefore i asked.
+[20:28] jedschmidt has joined the channel
+[20:30] keyvan has joined the channel
+[20:33] mfeiri_ has joined the channel
+[20:34] thotypous has joined the channel
+[20:34] ryan[WIN] has joined the channel
+[20:34] sveimac has joined the channel
+[20:35] teemow has joined the channel
+[20:40] awenkhh has joined the channel
+[20:43] mscdex has joined the channel
+[20:55] dgathright has joined the channel
+[20:55] keyvan has joined the channel
+[20:59] sudoer has joined the channel
+[21:08] kriskowal has joined the channel
+[21:09] derbumi has joined the channel
+[21:12] JimBastard__ has joined the channel
+[21:22] rolfb has joined the channel
+[21:45] dgathright has joined the channel
+[21:47] felixge has joined the channel
+[21:47] felixge has joined the channel
+[21:49] teemow has joined the channel
+[21:56] saikat has joined the channel
+[22:02] joshbuddy has joined the channel
+[22:03] bmizerany has joined the channel
+[22:05] <JimBastard__> whaddup bmizerany 
+[22:05] darkf has joined the channel
+[22:05] maritz has joined the channel
+[22:06] zol has joined the channel
+[22:10] javarants1 has joined the channel
+[22:16] javarants has joined the channel
+[22:17] arlolra has joined the channel
+[22:19] <JimBastard_> yo ryan[WIN] 
+[22:21] <javarants> anyone on here know how to write (fab) apps? i'm struggling with one.
+[22:23] wil_ has joined the channel
+[22:24] captainbenis has joined the channel
+[22:25] <JimBastard> javarants i dunno, its hard for me to grok
+[22:25] <JimBastard> what are you trying to build?
+[22:26] <javarants> fab.mu —> use mustache.js templates in (fab)
+[22:26] <JimBastard> got code?
+[22:26] <javarants> the asynchronous aspect of it i think is really tripping me up
+[22:26] <javarants> that, and writing (fab) is beyond my javascript skills
+[22:27] <javarants> i got it to work sychronously using Mu.render just fine
+[22:27] SvenDowideit has joined the channel
+[22:27] <JimBastard_> so the other one has a callback
+[22:27] <javarants> here is what i have for fab.mu so far: https://gist.github.com/562bd1405162fb9d2dcf
+[22:27] <JimBastard_> is jed jedschmidt ?
+[22:28] <javarants> i'd like this (fab) code to work
+[22:28] <javarants> https://gist.github.com/ba6fa8b5da1805a93018
+[22:28] <javarants> yeah, but he is in japan
+[22:28] <jedschmidt> JimBastard_: at your service.
+[22:28] <JimBastard_> ^^ javarants 
+[22:28] <jedschmidt> JimBastard_: well, for 5 more minutes. about to head to dinner.
+[22:28] <jedschmidt> checking out the gist...
+[22:28] <javarants> oh, hey jed. nice framework :)
+[22:28] <JimBastard_> thanks man
+[22:28] <JimBastard_> much appreciated
+[22:29] <javarants> jedschmidt: tried to base it on fab.tmpl but the listener stuff i think is beating me
+[22:29] <jedschmidt> javarants: cool.
+[22:29] <jedschmidt> hard to see without knowing what fab.mu does...
+[22:29] <javarants> the first gist is fab.mu
+[22:29] <jedschmidt> javarants: did you write that?
+[22:30] <javarants> jedschmidt: well, i tried
+[22:30] <jedschmidt> ah ,cool.
+[22:30] <jedschmidt> first, lemme fix the indenting.
+[22:30] <javarants> ah yeah, too bad most editors won't indent (fab) correctly
+[22:30] <jedschmidt> first off, you should't use with for debugging.
+[22:30] <javarants> ok
+[22:31] <jedschmidt> isaacs: told me that'd bite people in the ass.
+[22:31] <jedschmidt> i should have listened to you!
+[22:31] <isaacs> hahaha
+[22:32] <isaacs> yes, with() is the devil.
+[22:32] <isaacs> it's a smooth talker, though.  looks soooo nice.
+[22:33] <jedschmidt> wait, can i not make a private gist public?
+[22:33] <jedschmidt> do i have to start over?
+[22:33] brainproxy has joined the channel
+[22:34] <jedschmidt> can you hit this?
+[22:34] <jedschmidt> https://gist.github.com/2b1eca1c19ad099a408b/7879c2a96e23f9394f51aedb685b3923ccd655df
+[22:34] cloudhead has joined the channel
+[22:34] <javarants> when i do that i get that listen is undefined
+[22:34] <javarants> i think that is why i went back to using with
+[22:34] kjeldahl has joined the channel
+[22:35] <jedschmidt> just use fab.listen.
+[22:35] <javarants> ah
+[22:35] <tlrobinson> .join heroku
+[22:35] <jedschmidt> yeah, there's no magic.
+[22:35] <tlrobinson> oops
+[22:35] <jedschmidt> DAMN you tlrobinson!
+[22:35] mrjjwright has joined the channel
+[22:35] <jedschmidt> i wanna play with heroku too, boo.
+[22:36] <jwm> I'm going to launch a blog using node
+[22:36] <tlrobinson> bmizerany: get this man in the beta already!
+[22:36] <javarants> jwm: write one that reads wordpress mysql databases :)
+[22:36] <bmizerany> tlrobinson: heh.  we're working on it
+[22:36] <bmizerany> we'll let more in this week
+[22:36] <jwm> javarants: hehe
+[22:37] <jwm> javarants: then I'd have to connect to mysql!
+[22:37] <jwm> ew :)
+[22:38] <jedschmidt> javarants: you're shadowing `app`
+[22:39] <jedschmidt> javarants: on line 18. you should save it to another variable, or save your app to another.
+[22:39] <jedschmidt> javarants: give that a shot for now, and if it doesn't work find me here in an hour or so after dinner, okay?
+[22:39] <javarants> jedschmidt: cool. thx for the help.
+[22:40] <jedschmidt> javarants: one more thing: the fab API is going to change an awful lot again, so i wouldn't dig too deep yet if you can't get it working.
+[22:40] <jedschmidt> aight, i'm out.
+[22:40] jedschmidt has left the channel
+[22:40] <javarants> jedschmidt: will do
+[22:43] JamesBasteringto has joined the channel
+[22:43] sveimac has joined the channel
+[22:47] jedschmidt has joined the channel
+[22:47] <jwm> I'm wondering where that websocket guy went
+[22:47] freshtonic has joined the channel
+[22:50] bpot has joined the channel
+[22:52] <JamesBasteringto> micheil ?
+[22:53] <JamesBasteringto> jwm ?
+[22:53] mattly has joined the channel
+[22:55] <jwm> JamesBasteringto: maybe
+[22:55] <jwm> yeah
+[22:56] <JamesBasteringto> hes in au so the timezone is a bit off
+[22:56] <jwm> ahh ok
+[22:56] <JamesBasteringto> might be at class
+[22:56] <JamesBasteringto> hes on github
+[22:56] <jwm> I'm trying to think what would be a good domain for a blog
+[22:56] <jwm> hehe
+[22:57] <jwm> also I was wondering if his redis work is more stable now
+[22:57] <JamesBasteringto> www.theinternet.com/myblog.org/nodeisawesome
+[22:57] <JamesBasteringto> ?
+[22:57] <jwm> well when I was using websocket+redis 
+[22:57] <jwm> node would crash every so often
+[22:57] <JamesBasteringto> hrmm
+[22:57] <jwm> doesn't do it without redis enabled
+[22:57] <jwm> that was way back at 0.1.2x 
+[22:58] <jwm> that theinternet.com is disabled
+[22:58] <jwm> hehe
+[23:02] <jwm> I wanted to do a cool network/node-ish background on my desktop
+[23:02] <jwm> shutterstock has like every result in google images
+[23:02] <jwm> hehe
+[23:09] sudoer has joined the channel
+[23:18] charlesjolley has joined the channel
+[23:24] Azeroth__ has joined the channel
+[23:41] <maushu> BLOOD FOR THE BLOOD GOD! SKULLS FOR THE SKULL THRONE!
+[23:42] <phazm> could someone take a look at this and let me know if there is a more efficient way to handle this? http://pastebin.com/wxnuBgKe
+[23:47] BinaryPie has joined the channel
+[23:54] jedschmidt has joined the channel
+[23:57] er1c_ has left the channel
+[23:59] softdrink has joined the channel

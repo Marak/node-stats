@@ -1,0 +1,1345 @@
+[00:07] marienz has joined the channel
+[00:21] isaacs has joined the channel
+[00:23] darkf has joined the channel
+[00:36] technoweenie has joined the channel
+[00:41] technoweenie has joined the channel
+[00:43] tmpvar: hey guys, is there a way to send a string to stderr? ie: sys.err() or similar?
+[00:43] tmpvar: ah
+[00:43] tmpvar: RTFM nubsauce, process.stdio.writeError(data)
+[00:43] tmpvar: :)
+[00:50] technoweenie: so is kiwi the shit
+[00:50] orlandov: you tell us :)
+[00:51] technoweenie: not sure, i just saw node-redis-client is using it
+[00:59] tisba_ has joined the channel
+[01:05] technoweenie: is brian hammond in here
+[01:16] jashkenas has joined the channel
+[01:22] charlesjolley has joined the channel
+[01:26] mattly has joined the channel
+[01:28] ditesh|cassini has joined the channel
+[01:42] technoweenie: hey how can you check if a js hash/object is empty
+[01:42] technoweenie: assert.equal({}, foo.bar) gives me AssertionError: {} == {} 
+[01:43] jashkenas: In Node, you can use Object.keys(obj).length == 0
+[01:44] jashkenas: But in the browser you're going to have to use a for-in loop, with hasOwnProperty to check.
+[01:44] technoweenie: whoa
+[01:45] jashkenas: See _.isEmpty here: http://github.com/documentcloud/underscore/blob/master/underscore.js#LC491
+[01:45] technoweenie: thanks, is Object.keys node specific
+[01:45] jashkenas: It's ECMA5.
+[01:46] jashkenas: But isn't even in current Safari yet, much less IE.
+[01:47] pjb3 has joined the channel
+[01:48] mattly has joined the channel
+[01:48] ditesh|cassini has joined the channel
+[01:49] ddollar: sorry for the newb question, but cant find a good way to search for it.. does javascript have the equivalent of * in ruby.. i have an array [1,2,3] and want to call a function with the elements as args   fun(1,2,3)
+[01:49] jashkenas: ddollar: yep.
+[01:49] jashkenas: fun.apply(context, [1, 2, 3])
+[01:49] jashkenas: Where context will be the value of "this" within the function.
+[01:49] ddollar: excellent, thanks :)
+[01:49] isaacs: _ry: removing require.* cuts out about 300 LoC
+[01:50] pjb3 has left the channel
+[01:50] isaacs: http://github.com/isaacs/node/commit/30f973512ec16acbb27107d5b37875185bf0f43b
+[01:51] isaacs: technoweenie: use assert.deepEqual
+[01:52] isaacs: node> assert.deepEqual({}, {}) // doesn't throw
+[01:52] technoweenie: oh sweet, thanks
+[01:56] RayMorgan has joined the channel
+[02:00] confounds has joined the channel
+[02:03] cloudhead has joined the channel
+[02:03] gf3 has joined the channel
+[02:07] _ry: isaacs: oo. :)
+[02:07] isaacs: _ry: now i'm trying to see how few lines i can manage to add by putting it back.
+[02:07] isaacs: because require.async is kinda nice.
+[02:07] isaacs: thing is, it's always the waitOnChildren bit that makes it a pita.
+[02:08] isaacs: the more i play with this, the more i think that require.ensure is actually the way to go.  way more reliable, and easier to do outside of the engine itself.
+[02:10] dgathright has joined the channel
+[02:13] deanlandolt: isaacs: http://github.com/kriszyp/web-modules
+[02:13] isaacs: deanlandolt: See what i'm sayin!!
+[02:13] isaacs: _ry: i think that settles it.
+[02:14] isaacs: _ry: let's kill require.async.  kriszyp's thing is better anyhow, and it's what commonjs is heading towards.
+[02:14] deanlandolt: isaacs: i agree with the first part, i don't know about the second :)
+[02:14] isaacs: deanlandolt: well, it doesn't have the problems that require.async raises.
+[02:14] deanlandolt: in any event, it'll play nice w/ commonjs require
+[02:15] deanlandolt: yeah -- this is definitely out of my pay grade, but i've been mulling over the web-modules stuff and i think i actually _understand_ it, which is a pretty good start
+[02:16] quirkey has joined the channel
+[02:16] mattly has joined the channel
+[02:17] isaacs: in any event, http://github.com/kriszyp/web-modules seems like the place where funky non-standard crazy bikesheddable interesting cleverness should be.
+[02:17] isaacs: nodejs should just have the boring simple stuff that works all the time.
+[02:17] deanlandolt: exactly
+[02:18] deanlandolt: web-modules will let you do the requisite overlays to make a package work w/ node or narwhal or whatever the hell else
+[02:18] _ry: oh if i could only go back in time
+[02:18] jashkenas: _ry: for what?
+[02:19] deanlandolt: jashkenas: to undo require IIUC...but i think that's crazytalk
+[02:19] _ry: i'd rather just have web-style "modules"
+[02:19] _ry: e.g. normal name spacing
+[02:19] jashkenas: _ry: ah. It's not too late.
+[02:19] deanlandolt: _ry: but that's all still possible -- nothing ventured and all that :)
+[02:20] isaacs: it seems to me that loading up a program from a bunch of files on the filesystem really works well, and is simple and easy to understand.
+[02:20] isaacs: and, if it's strictly a load-time operation, then there's really no hazard involved, because being slow there is no big deal.  it's still way faster than starting up most other systems.
+[02:21] deanlandolt: isaacs: but how's that differnet than require as it is? or are you arguing require-as-it-is is just fine, just no extensions?
+[02:21] isaacs: deanlandolt: exactly.
+[02:21] isaacs: require() == great.  require.async, require.ensure, require.uncached, all belong in userspace.
+[02:22] deanlandolt: no doubt
+[02:22] isaacs: just like how browsers give you <script>, but it's up to you if you want to load anything in crazy async ways post-load.
+[02:22] isaacs: yui and dojo and jquery have been doing async require for ages now, and they've all pretty much settled on something very much like require.ensure.
+[02:22] deanlandolt: require (the standard) + your setExports === pretty much all you need on the server
+[02:23] isaacs: deanlandolt: exactly.
+[02:23] isaacs: some times the best way to solve an edge case is to get rid of it.
+[02:23] jashkenas: amen.
+[02:23] isaacs: and the require.* functions are nothing but edge cases.
+[02:24] deanlandolt: yep...web-modules is a pretty good example of how to do it in userland...Wes- has been shouting from the rooftops for a year now that it's all feasible in userland
+[02:24] isaacs: yep
+[02:24] deanlandolt: but there's still the big ocap questions :)
+[02:24] isaacs: and davglass got yui3 running on top of node.
+[02:24] isaacs: pretty easily, in fact.
+[02:24] deanlandolt: yeah, i read the post...really cool shit
+[02:25] kriszyp_ has joined the channel
+[02:25] isaacs: kriszyp_: yo.  we're talkin up web-modules.
+[02:25] isaacs: http://github.com/kriszyp/web-modules
+[02:26] deanlandolt: kriszyp_: you haven't even really announced in and it's already on isaacs' lips...github's kinda cool that way :)
+[02:29] baconbits has joined the channel
+[02:29] deanlandolt: isaacs: any thoughts on a way to actually unify the file apis of commonjs and narwhal/commonjs?
+[02:29] deanlandolt: it's freakin' killing me -- shouldn't be this hard
+[02:29] isaacs: deanlandolt: i suggest that they both use node's api.
+[02:29] deanlandolt: err *commonjs meaning node
+[02:30] isaacs: deanlandolt: same answer ;P
+[02:30] deanlandolt: well yeah, sure...
+[02:30] deanlandolt: and i can emulate node's api with threads in rhino IIUC
+[02:30] isaacs: but let's get rid of the *Sync methods.  if you want async, you pass a callback.  if you don't, then don't.
+[02:30] isaacs: that's how it actually works under the hood anyhow
+[02:30] bronson has joined the channel
+[02:31] deanlandolt: that's what i was getting at
+[02:31] mattly_ has joined the channel
+[02:31] steadicat has joined the channel
+[02:31] deanlandolt: i'm taking perstore's memory store and doing a persistent-memory store and it'd be nice if i didn't have to fork the codepaths
+[02:32] malkomalko has joined the channel
+[02:32] mattly_ has joined the channel
+[02:32] deanlandolt: it's effectively felixge's dirty with a few improvements -- sorting, query-based filtering, blah blah blah...the only extra overhead woudl be a few extra fn calls because of the abstractions
+[02:32] deanlandolt: dirty should win in benchmarks, but only by a tiny amount :)
+[02:34] sh1mmer has joined the channel
+[02:37] technoweenie has joined the channel
+[02:39] mattly has joined the channel
+[02:41] RayMorgan has joined the channel
+[02:43] pjb3 has joined the channel
+[02:49] mrjjwright has joined the channel
+[02:52] pjb3 has joined the channel
+[02:56] jed has joined the channel
+[02:57] dysinger has joined the channel
+[02:59] dysinger has joined the channel
+[03:00] erichocean has joined the channel
+[03:01] erichocean: I'm having trouble capturing the data on stdin inside node.js. Here's a simple node.js "pipe" which clips the first bit of input data: http://pastie.org/906861
+[03:01] erichocean: any ideas?
+[03:05] mrjjwright has left the channel
+[03:07] deanlandolt: erichocean: what version are you on?
+[03:07] erichocean: I just updated to the latest one, and the code broke
+[03:08] erichocean: I'll check in once I get it compiling again
+[03:08] deanlandolt: from how long ago? my guess is you're being bit by the recent net2 integration
+[03:08] erichocean: from December
+[03:08] deanlandolt: heh...yeah, definitely...let me dig up some info
+[03:10] erichocean: process.stdio.addListener() doesn't work :-(
+[03:10] erichocean: TypeError: Cannot call method 'addListener' of undefined
+[03:10] deanlandolt: erichocean: from a quick glance of the ML it looks like it's now something like openStdin and fiends
+[03:11] deanlandolt: bleeding edge and all that :)
+[03:14] deanlandolt: here's the commit: http://github.com/ry/node/commit/cc053e7df7fb1bf44c094b62b8c33820b8497e35
+[03:14] deanlandolt: but nvm -- looks like process.stdout has remained unchanged
+[03:14] erichocean: no, it changed
+[03:15] erichocean: var stdin = process.openStdin() worked
+[03:15] deanlandolt: oh, no doubt...just not in that commit
+[03:15] erichocean: and then I could add listeners to stdin
+[03:15] erichocean: anyway, back in business. thanks!
+[03:15] deanlandolt: sure enough
+[03:18] derferman has joined the channel
+[03:24] technoweenie has joined the channel
+[03:29] creationix has joined the channel
+[03:34] steadicat has joined the channel
+[03:36] bronson has joined the channel
+[03:40] technoweenie has joined the channel
+[03:43] technoweenie: isaacs: http://github.com/technoweenie/dealer.js/blob/master/test/test.js
+[03:45] dnolen has joined the channel
+[03:46] sh1mmer has joined the channel
+[03:56] mattly has joined the channel
+[03:57] PyroPete1 has joined the channel
+[03:57] mattly has joined the channel
+[03:59] binary42 has joined the channel
+[04:01] dgathright has joined the channel
+[04:04] creationix has joined the channel
+[04:11] rockstar has joined the channel
+[04:11] rockstar has joined the channel
+[04:20] creationix: Is it possible to install several versions on node at the same time?
+[04:20] creationix: I seem to remember a change a while back to inline all the js into the node binary
+[04:20] creationix: couldn't I just rename the binary to something like node-33?
+[04:31] fizx has joined the channel
+[04:35] fizx has joined the channel
+[04:36] brianmario has joined the channel
+[04:47] pedrobelo has joined the channel
+[04:48] kenneth_reitz has joined the channel
+[04:48] creationix: tmpvar: Got part of the new engine up and running http://beta.howtonode.org/step-of-conductor
+[04:49] creationix: renders .dot files on the fly, I think that's cool
+[04:49] creationix: http://beta.howtonode.org/step-of-conductor/example1.dot
+[04:50] creationix: Diagrams will certainly help explain Conductor
+[04:52] Yuffster_ has joined the channel
+[04:52] dysinger has joined the channel
+[05:00] fizx has joined the channel
+[05:07] technoweenie: hey whats the status on socket.io?  will it one day work w/o a manual patch to node?
+[05:07] CIA-77: node: 03Vanilla Hsu 07master * r25adb2e 10/ src/node.cc : 
+[05:07] CIA-77: node: [FreeBSD] use /dev/null instead /dev/mem
+[05:07] CIA-77: node: Without this patch, Node needs to setgid kmem when run as normal user. - http://bit.ly/cNVw41
+[05:08] jed has joined the channel
+[05:10] _ry: creationix: sure, i install a few
+[05:11] _ry: --prefix is your friend
+[05:12] creationix: configure supports that?
+[05:13] sztanphet has joined the channel
+[05:13] creationix: sweet
+[05:13] piranha has joined the channel
+[05:15] _ry: creationix: ./configure --debug --prefix=$HOME/local/node-0.1.33/ && make install
+[05:15] _ry: is what i do
+[05:16] _ry: then i modify my path
+[05:16] creationix: thanks, 
+[05:16] _ry: do you use zsh?
+[05:16] creationix: no, just bash or dash
+[05:16] _ry: nm then :)
+[05:17] creationix: so _ry, I'm finally writing a blogging engine that actually serves the files using node
+[05:18] creationix: not just a static site generator
+[05:18] creationix: that way howtonode.org will be able to pull tagged versions of the articles to match old versions of node
+[05:19] _ry: cool - but shouldn't that also be static ? :)
+[05:19] _ry: static files are so great
+[05:19] _ry: it scales infinitely
+[05:19] creationix: true, but it's a real pain to re-generate the site after every change to the source
+[05:19] darkf: yep
+[05:19] creationix: the most hits I ever got was 5000 in a day
+[05:20] _ry: you'll take a serious response time hit though
+[05:20] creationix: my node based server can handle several thousand a second
+[05:21] _ry: best would be a way you could develop with dynamic generation
+[05:21] _ry: then write it out to static for production :)
+[05:21] creationix: I might add that in as a super "page caching" system
+[05:21] creationix: have nginx pull from the generated pages if they exist and fall back to the server if not (which will save the page it generates)
+[05:22] creationix: but I really need the dynamic generation for development, especially the dot file generation of the fly
+[05:22] _ry: okay
+[05:22] darkf: i just generate pages in the code
+[05:22] _ry: i mean, if anything you'll find bugs in node :)
+[05:22] _ry: so it's good
+[05:22] darkf: the one thing i wish i had was some templating system, even a simple replace
+[05:23] micheil has joined the channel
+[05:23] creationix: darkf: there are several
+[05:23] _ry: darkf: for node?
+[05:23] creationix: what are you looking for?
+[05:23] darkf: _ry: yeah
+[05:23] darkf: nothing too fancy
+[05:23] _ry: darkf: http://wiki.github.com/ry/node/
+[05:23] _ry: oops: http://wiki.github.com/ry/node/modules
+[05:23] _ry: i think there are some template things there
+[05:23] creationix: heh, node is the ultimate templating system
+[05:23] _ry: http://wiki.github.com/ry/node/modules#templating
+[05:24] creationix: I of course use my haml-js, I believe there is also tj's haml.js mustache, microtemplates, and a few others
+[05:24] darkf: ah thanks ;) I hope they're not overly complex, I just need something to replace some html in my header/nav/footer, the rest I can do in node
+[05:25] creationix: microtemplates or mustache is probably best then
+[05:26] darkf: look nice :) thanks
+[05:26] eyzn: i dont understand the need of these templates, i mean when im generating a website - i use html which is the dom in js
+[05:26] creationix: eyzn: not everything can be filled in client-side
+[05:27] eyzn: yes
+[05:27] creationix: especially if your client doesn't have js
+[05:27] eyzn: but i use php as backendinterface
+[05:27] darkf: ease of use
+[05:28] darkf: instead of having a bunch of <?= $foo ?> you can have {$foo} and handle it in the php
+[05:29] creationix: php itself is a templating language, very much like js micro templates
+[05:30] eyzn: i used smarty and flexy (from pear) and switched now to simple inlcude
+[05:30] creationix: _ry, you're right about the build problem.  I just pulled latest head and my compile failed (I'm on snow leopard)
+[05:30] steadicat has joined the channel
+[05:31] _ry: creationix: which build problem?
+[05:31] creationix: not sure, I'm assuming the one you just mentioned on the mailing list
+[05:31] creationix: http://pastie.org/907000
+[05:32] creationix: I'm trying a clean build now to see if it was just stale binaries
+[05:32] _ry: oh shit
+[05:32] _ry: oh right
+[05:32] _ry: yeah
+[05:32] _ry: make clean all
+[05:32] erichocean has left the channel
+[05:33] _ry: but that's not what i was talking about on the mailing list
+[05:33] creationix: oh, then nevermind :P
+[05:34] arnaudsj has joined the channel
+[05:34] arnaudsj has left the channel
+[05:34] _ry: god. c-ares is pretty annoyingly huge
+[05:34] blazzy: _ry: yup :)
+[05:34] blazzy: the configure step is particularly frustrating
+[05:34] _ry: hate autoconf projects
+[05:35] hassox has joined the channel
+[05:36] _ry: % wc -l configure.ac                                                    [.../node/deps/c-ares] 10:34PM
+[05:36] _ry:      876 configure.ac
+[05:36] _ry: meh
+[05:37] _ry: we can just cache the results from the 3 OSes we run
+[05:37] _ry: like chrome
+[05:39] bpot has joined the channel
+[05:39] RayMorgan has joined the channel
+[05:40] creationix: _ry, build works now btw, just needed a clean first
+[05:47] dysinger has joined the channel
+[05:48] _ry: so much to learn from chrome.
+[05:48] _ry: http://src.chromium.org/viewvc/chrome/trunk/src/third_party/libevent/README.chromium?view=markup
+[05:49] _ry: why fuck around?
+[05:50] blazzy: does it cache fully compiled libraries?
+[05:52] _ry: no - but it caches the config.h generated
+[05:53] _ry: ideally we could throw together a simple wscript to build c-ares
+[05:54] _ry: but trying to do all the defines it does would be too hard
+[05:54] _ry: so maybe just figure out what config.h is on our platforms...
+[05:55] _ry: i mean, i assume it just builds a bunch of object files and links them together
+[05:55] _ry: can't we do that easily?
+[05:56] _ry: then we'll have cute colored output too
+[05:56] _ry: :)
+[05:56] _ry:  ares_build.h.in  ares_config.h.in  <-- hmm
+[05:56] kenneth_reitz has joined the channel
+[06:07] tmpvar: creationix, just saw your msg. Looks great! on a side note/thought I think we should consider expanding on the A-Z paradigm into more human readable strings.. just a thought!
+[06:07] tmpvar: have a good night noders
+[06:07] creationix: night
+[06:09] charlesjolley: so can anyone tell me: is node replacing udns with c-ares?
+[06:10] creationix: I believe so
+[06:11] charlesjolley: sweet!
+[06:11] charlesjolley: no more LGPL problems.
+[06:12] creationix: _ry: is this correct, you're replacing udns to get rid of the LGPL problems?
+[06:13] bpot has joined the channel
+[06:16] _ry: creationix: partial
+[06:16] _ry: ly
+[06:18] charlesjolley: that's great _ry - I've been trying to get permission to use node.js and the lgpl was one my biggest problems.
+[06:18] charlesjolley: well not my problem.  but the lawyers and therefore mine. :)
+[06:21] _ry: charlesjolley: yeah. it will be nice to not have that potential problem.
+[06:21] kriskowal has joined the channel
+[06:21] _ry: but mostly it will be nice to not run getaddrinfo in the thread pool
+[06:21] derferman has joined the channel
+[06:23] charlesjolley: yeah better code is good progress too!
+[06:23] admc has joined the channel
+[06:28] _ry: yes
+[06:28] _ry: got c-ares building with wscript ^^
+[06:29] creationix: sweet
+[06:30] _ry: c-ares's configure script takes like 2 minutes to run
+[06:30] darkf: lol
+[06:30] darkf: ACTION hopes it all works under cygwin
+[06:30] _ry: well- it will take some creative linking
+[06:30] _ry: but it'll work
+[06:31] darkf: :p
+[06:31] _ry: so without udns everything but v8 will be on waf
+[06:31] _ry: which makes it really quite nice
+[06:31] _ry: of course v8 is about 90% of the build
+[06:33] creationix: isn't v8 cachable as long as you don't pull in new versions?
+[06:34] creationix: of course I'm sure a make clean will force a rebuild anyway
+[06:35] creationix: goodnight everyone, I released like 5 small projects today, I'm exausted
+[06:46] felixge has joined the channel
+[06:46] felixge has joined the channel
+[06:54] nsm has joined the channel
+[06:54] kjeldahl_ has joined the channel
+[06:55] kriskowal has joined the channel
+[06:57] kjeldahl_ has joined the channel
+[07:22] charlesjolley: gah.  I am writing to an HTTP request and I get "Error: Stream already opened" in Client.connect after sending maybe 94K of data.
+[07:22] charlesjolley: any idea what could cause this?
+[07:22] charlesjolley: worked before the net2 merge
+[07:24] charlesjolley: with NODE_DEBUG it looks like it happens when the readyState changes from 'opening' to something else
+[07:28] javajunky has joined the channel
+[07:28] cmlenz has joined the channel
+[07:29] teemow has joined the channel
+[07:29] derferman has joined the channel
+[07:34] _ry: charlesjolley: hmm - are you trying to reconnect?
+[07:34] charlesjolley: not intentionally
+[07:35] charlesjolley: the code is fairly straightforward: http://gist.github.com/358632
+[07:35] charlesjolley: I am uploading a file basically
+[07:35] charlesjolley: it pukes in line 50 - req.write(data, 'binary')
+[07:35] charlesjolley: my server log does not indicate it is receiving anything at all in fact.
+[07:35] piranha has joined the channel
+[07:44] charlesjolley: do I need to set a header other than Content-Length and Transfer-Encoding ?
+[07:44] derferman has joined the channel
+[07:46] _ry: blazzy: almost got the c-ares into deps/ in a nice way..
+[07:47] _ry: building on mac and linux
+[07:52] charlesjolley: _ry did something change about how we write binary data to an HTTP request?  I am reading from a file in chunks and then writing to stream.  seems like the only thing that could be causing this.  Maybe it's not escaping?
+[07:52] _ry: charlesjolley: yes
+[07:52] _ry: it's possible you're hitting a bug
+[07:53] charlesjolley: so simply reading a file using fs.read() and then writing it using request.write() should work right?
+[07:53] _ry: hm
+[07:54] _ry: should work
+[07:54] charlesjolley: oy ok...will keep digging. :/
+[07:54] _ry: yeah, let me know
+[07:54] _ry: afaik it should be working that way
+[07:54] charlesjolley: it was working till I updated node to the latest
+[07:55] charlesjolley: (well 24-hrs old, but latest has same issues)
+[07:55] _ry: what were you on before?
+[07:55] charlesjolley: 0.1.33
+[07:55] javajunky: ;) its probably fair to say there's been a few changes then ;)
+[07:55] charlesjolley: yep
+[07:56] _ry: yeah i mean the whole http and tcp implemenation have been gutted
+[07:56] _ry: but the api should be the same
+[07:56] javajunky: _ry: you still confident-ish about your mailing list post re pushing a new tag out today/tomorrow (I give up on timezone following ;) )  ? … it would be awesome to be able to republish some articles ;)
+[07:57] _ry: javajunky: feelin less confident 
+[07:57] _ry: not tonight for sure
+[07:58] charlesjolley: if I tweak just the JS in node do I need to make?  or can I just make install
+[07:58] javajunky: okey doke, no worries, just interested :)
+[07:59] mikeal has joined the channel
+[08:00] felixge has joined the channel
+[08:02] dysinger has joined the channel
+[08:05] _ry: charlesjolley: just make
+[08:05] _ry: charlesjolley: well, the javascript is compiled into the binary
+[08:05] charlesjolley: oh
+[08:06] charlesjolley: ok so far I have determined that the connection is just closing before it ever gets started for some reason
+[08:06] charlesjolley: but I don't see any reason why
+[08:06] charlesjolley: the debug proxy doesn't even log anything
+[08:09] TomY has joined the channel
+[08:10] TomY has joined the channel
+[08:12] charlesjolley: _ry I determined it is this one file that is causing problems
+[08:12] kjeldahl_ has joined the channel
+[08:15] charlesjolley: actually it looks like it might be any file over about 28K
+[08:15] charlesjolley: it just stops sending
+[08:15] charlesjolley: bummer
+[08:16] charlesjolley: it sends exactly 28960 bytes
+[08:16] charlesjolley: and then stops
+[08:17] _ry: charlesjolley: hm
+[08:18] charlesjolley: when I Ctrl+C it sends another 10000 bytes - ends with 38663 bytes sent
+[08:18] charlesjolley: and it does not depend on the file - just the large file size
+[08:21] charlesjolley: well I'm at my limit.  I'm not sure how to proceed debugging this
+[08:21] charlesjolley: and recommendations?   where should I poke around?
+[08:22] mcarter has joined the channel
+[08:33] _ry: charlesjolley: it's hard to say- i'll have a look at it tomorrow
+[08:33] hellp has joined the channel
+[08:33] _ry: probably something in lib/net.js
+[08:33] _ry: with the write() function
+[08:34] charlesjolley: ok well then I guess I'll check there then knock off if nothing jumps out at me.
+[08:34] charlesjolley: let me see if i can reduce this down...
+[08:35] CIA-77: node: 03Ryan Dahl 07master * re9a116f 10/ (83 files in 5 dirs): Include c-ares in deps/ - http://bit.ly/awPUq5
+[08:35] CIA-77: node: 03Krishna Rajendran 07master * rdc1f4eb 10/ (5 files in 3 dirs): c-ares based dns module - http://bit.ly/b93YJr
+[08:35] CIA-77: node: 03Krishna Rajendran 07master * r96df65e 10/ test/disabled/test-dns.js : Make test-dns.js use dns_cares. - http://bit.ly/an9BJB
+[08:36] _ry: ^--- !!!
+[08:39] javajunky: ooo exciting new dns
+[08:42] _ry: yes, very shinny
+[08:45] charlesjolley: _ry: I have a simple reduction of the problem
+[08:45] charlesjolley: where can i send it to you?
+[08:46] CIA-77: node: 03Ryan Dahl 07master * r888a494 10/ LICENSE : Update LICENSE file with C-Ares info - http://bit.ly/aBn3kR
+[08:47] _ry: charlesjolley: ry@tinyclouds.org
+[08:47] _ry: charlesjolley: better would be if you could work it into the test/pummel dir
+[08:48] charlesjolley: unfortunately I can't contribute code to node
+[08:49] _ry: okay- that's cool
+[08:49] hellp has joined the channel
+[08:51] charlesjolley: ok sent
+[08:51] charlesjolley: well I'm headed to bed then.
+[08:51] charlesjolley: ciao
+[08:52] _ry: thanks
+[08:57] dgathright has joined the channel
+[09:06] felixge_ has joined the channel
+[09:12] markwubben has joined the channel
+[09:14] maritz has joined the channel
+[09:16] xla has joined the channel
+[09:18] xla has joined the channel
+[09:24] dgathright has joined the channel
+[09:34] isaacs: i don't understand why folks can't contribute code to node...
+[09:34] isaacs: that seems so silly.  what company actually *prefers* their workers to not enjoy software development so much that they do it for fun?
+[09:35] isaacs: that's like the coach of a team not letting his players work out in the off season.
+[09:35] isaacs: ACTION does not grok
+[09:39] nsm has joined the channel
+[09:43] felixge_: isaacs: it's what happens when lawyers and management are more worried about covering their ass than making their co-workers happy ;)
+[09:43] isaacs: felixge_: it's not just about making them happy, though.  it's about making them effective.
+[09:43] felixge_: isaacs: oh I agree. But that's not even on those peoples radar
+[09:43] felixge_: they don't understand how giving something away for free can make you happy :)
+[09:43] isaacs: well... yeah... but..
+[09:44] isaacs: it's not about making employees *happy*
+[09:44] felixge_: (or potentially even make you money ... that's probably where you'd need to start the discussion with them)
+[09:44] isaacs: i'd want my people coding on open source because it makes them *good*
+[09:44] isaacs: like, as in, it makes them better at their jobs
+[09:44] felixge_: yeah
+[09:45] isaacs: it's not that it's a greedy or mean outlook, it's just a stupid outlook.  it's not greedy *enough*
+[09:58] botanicus has joined the channel
+[10:18] botanicus: Morning guys
+[10:18] botanicus: I don't understand one thing in sys.inherits()
+[10:19] botanicus: From Node.js source code: ctor.prototype.constructor = ctor;
+[10:19] botanicus: Ctor is the first argument of sys.inherits()
+[10:20] botanicus: And I don't have a clue what is it supposed to do? Am I supposed to have something special in the constructor method?
+[10:29] javajunky has left the channel
+[10:29] javajunky has joined the channel
+[10:32] malkomalko has joined the channel
+[10:42] hassox has joined the channel
+[10:53] derbumi has joined the channel
+[11:01] mape has joined the channel
+[11:01] kjeldahl_ has joined the channel
+[11:11] botanicus: OK I think I finally understand how to use sys.inherits. Can someone please take a look at my example http://gist.github.com/358753 and tell me if I'm doing something wrong or if there are better solutions for something ... cheers.
+[11:25] MattJ has joined the channel
+[11:27] teemow has joined the channel
+[11:43] alex-desktop has joined the channel
+[12:04] nefD has joined the channel
+[12:12] broofa1 has joined the channel
+[12:24] malkomalko has joined the channel
+[12:35] mcarter: Is there a way to use process.compile such that it doesn't crash the process on a SyntaxError?
+[12:38] kriszyp has joined the channel
+[12:46] blazzy: mcarter: the uncaughtException event maybe?
+[12:48] andrewhampton has joined the channel
+[12:50] sudoer has joined the channel
+[12:51] davidsklar has joined the channel
+[13:01] micheil: hassox: you about?
+[13:01] hassox: barely mate
+[13:01] hassox: sup?
+[13:02] micheil: yeah, do you know if there was a lib that came out from someone for Queue based buffers?
+[13:03] micheil: I've found an old repo of mine, and I'm wondering whether I should keep it: http://github.com/Miksago/Queue.js
+[13:03] hassox: I have no idea
+[13:03] micheil: k
+[13:03] hassox: tbh my finger has been off the pulse the last couple of months
+[13:04] micheil: no worries
+[13:04] micheil: I've been off doing rails / ruby dev
+[13:04] hassox: same
+[13:04] hassox: just started a whole swag of new projects at work and been getting into them pretty full on
+[13:07] micheil: yeah, I've been playing with mongomapper in a few pieces of client work, so really liking the env I've got.
+[13:10] micheil: oh cool, just came across a libev binding for ruby.. 
+[13:10] micheil: ACTION disappears
+[13:11] TheEnd2012 has joined the channel
+[13:13] tbassetto has joined the channel
+[13:14] dnolen has joined the channel
+[13:20] jherdman has joined the channel
+[13:23] gf3 has joined the channel
+[13:35] jbowman_ has joined the channel
+[13:47] nefD has joined the channel
+[13:49] quirkey has joined the channel
+[13:51] ditesh|cassini has joined the channel
+[13:51] alexiskander has joined the channel
+[13:54] chrismcg has joined the channel
+[13:58] inimino: mcarter: try/catch doesn't work with process.compile?
+[14:00] avidal has joined the channel
+[14:00] avidal: Heya.
+[14:01] avidal: So, I've been messing with writing a MUD server in node, and I had a quick question.
+[14:01] avidal: In a typical mud server, your main loop will process the sockets, and then tick an event manager for instance
+[14:01] avidal: But in node, I can't find a way to only poll the server connections manually
+[14:02] bronson has joined the channel
+[14:02] avidal: So the only other solution I can think of is to run through my event manager when I get socket activity
+[14:06] avidal: anyone know what i'm talking about?
+[14:08] mcarter: inimino, it sort of works, except for a SyntaxError it just crashes the process
+[14:08] mcarter: inimino, a ReferenceError on the other hand can be caught just fine
+[14:08] softdrink has joined the channel
+[14:11] javajunky: avidal, setInterval(fuction() { …do something with all known sockets}, 1000) ? 
+[14:11] javajunky: (clearly this is example code)!)
+[14:11] avidal: i'm dumb. i just realized that server.listen() is async itself
+[14:11] MattJ: Everything is async :)
+[14:12] avidal: so yeah, after server.listen(), i could do an interval to run 60 times a second
+[14:12] javajunky: yah
+[14:12] avidal: which ticks my event manager and processes everything else
+[14:12] voodootikigod_ has joined the channel
+[14:12] MattJ: Interested to see how your project goes, have been pondering something similar recently
+[14:12] ditesh|cassini has joined the channel
+[14:12] javajunky: fwiw I don't use setInterval, but recreate the setTimeout at the end of my function each time.. 
+[14:13] KungFuHamster: is there a better way to broadcast to all connected sockets other than just doing a for loop?
+[14:13] MattJ: The loop would have to be done at some level anyway
+[14:13] MattJ: and though I might be wrong, I don't know of such a thing in Node
+[14:15] binary42 has joined the channel
+[14:16] javajunky: I don't *think* so, because its not clear to me whether socket.write is async or not, I ended up writing code like : http://github.com/ciaranj/boardie/blob/master/lib/ws_server.js#L20 … I may remove the process.nextTick if it is.. I doubt there's much benefit. 
+[14:16] nsm has joined the channel
+[14:16] avidal: Yeah, this looks like it would work. I'll really have to wrap my head around callback based programming
+[14:18] mcarter: blazzy, thanks for the suggestion, but apparently the uncaughtException event doesn't do the trick either
+[14:21] rockstar has joined the channel
+[14:21] rockstar has joined the channel
+[14:23] N` has joined the channel
+[14:25] javajunky: avidal: um yes to work with node.js you'll definitely need to get your head around 'callback based programming' ;)
+[14:26] stevebiscuit has left the channel
+[14:28] avidal: javajunky: yeah yeah i know :P
+[14:35] stepheneb has joined the channel
+[14:37] hellp has joined the channel
+[14:42] Yuffster has joined the channel
+[14:43] nefD has joined the channel
+[14:47] confounds has joined the channel
+[14:55] nsm: ACTION is away: Off to real life
+[14:56] tekky has joined the channel
+[14:57] JimBastard has joined the channel
+[14:58] JimBastard: who linked hook.io on changelog! oofa
+[14:58] JimBastard: must finish v0.1 shit
+[14:59] avidal has joined the channel
+[15:03] micheil has joined the channel
+[15:07] rolfb has joined the channel
+[15:08] nsm: ACTION is back (gone 00:12:58)
+[15:11] tekky has joined the channel
+[15:12] callen has joined the channel
+[15:12] callen: is anyone aware of a fast Big Integer implementation in pure javascript?
+[15:12] callen: does commonjs or node have one?
+[15:13] JimBastard: not sure callen , i would think v8 had something?
+[15:22] pedrobelo has joined the channel
+[15:27] technoweenie has joined the channel
+[15:30] callen: JimBastard: that's what I thought, but I can't find it.
+[15:44] mattly has joined the channel
+[15:48] xla has joined the channel
+[15:48] xla has joined the channel
+[15:49] xla has joined the channel
+[15:51] inimino: mcarter: ah, odd, maybe you can use eval() instead in the meantime
+[15:56] RayMorgan has joined the channel
+[15:56] silentrob has joined the channel
+[16:00] CodeOfficer has joined the channel
+[16:04] technoweenie: hey fictorial the pub/sub stuff works great
+[16:04] fictorial: awesome -
+[16:04] technoweenie: i had to use some node 0.1.33 branch of the redis client
+[16:04] technoweenie: http://github.com/technoweenie/dealer.js if you're curious
+[16:04] technoweenie: does jacek becela hang out in here?
+[16:05] kriskowal has joined the channel
+[16:07] jgoulah has left the channel
+[16:09] sh1mmer has joined the channel
+[16:09] fizx has joined the channel
+[16:10] JimBastard: technoweenie: what do you plan on using dealer for?
+[16:10] technoweenie: not sure yet.  i extracted a lot of it from showoff-server
+[16:11] brapse has joined the channel
+[16:11] fizx has joined the channel
+[16:13] JimBastard: got ya
+[16:16] dandean has joined the channel
+[16:16] aryounce has joined the channel
+[16:19] devinus has joined the channel
+[16:19] devinus: just FYI in-case it hasn't been brought up, latest trunk doesnt compile in leopard
+[16:22] derbumi has joined the channel
+[16:25] bpot has joined the channel
+[16:26] technoweenie has joined the channel
+[16:32] fictorial: wow, dealer sounds just like my NodeRed project
+[16:33] indiefan has joined the channel
+[16:33] JimBastard: dealer does look kinda cool
+[16:33] _ry: devinus: make clean all ?
+[16:33] JimBastard: im definitely going to need something like it in a few months
+[16:36] confounds: fictorial: what did you use to create those charts in the NodeRed readme? looks good
+[16:36] fictorial: haha, dealer is very similar to NodeRed. I'm allowing for a more generic server with hooks and protocol extensions and such, but same core idea.  neat.
+[16:36] fictorial: confounds: OmniGraffle, and thanks
+[16:36] confounds: nice
+[16:37] fictorial: I live in OmniGraffle. I need visualization to get anything done else it's just random thoughts in my head.
+[16:38] isaacs has joined the channel
+[16:38] CIA-77: node: 03Vanilla Hsu 07master * r067f408 10/ (8 files in 4 dirs): add c-ares' freebsd support. - http://bit.ly/9i8lrU
+[16:39] confounds: i hear ya. i tried it out briefly but should give it another shot.
+[16:39] _ry: yeah, kind of forgot that we're supporting two archs..
+[16:54] steadicat has joined the channel
+[16:58] stephenlb has joined the channel
+[17:01] sh1mmer has joined the channel
+[17:02] RayMorgan_ has joined the channel
+[17:02] tilgovi has joined the channel
+[17:04] kevwil has joined the channel
+[17:06] dnolen has joined the channel
+[17:08] aho has joined the channel
+[17:08] devinus: _ry: nope, i can give you the report
+[17:08] bronson has joined the channel
+[17:08] devinus: _ry:
+[17:08] devinus: In file included from ../deps/c-ares/mac/ares_setup.h:90,
+[17:08] devinus:                  from ../deps/c-ares/ares_expand_string.c:18:
+[17:08] devinus: ../deps/c-ares/ares_rules.h:102: error: size of array ‘__cares_rule_01__’ is negative
+[17:09] charlesjolley: so - weird thing.  I turn on NODE_DEBUG
+[17:09] charlesjolley: and one or two of the debug()'s actually log
+[17:09] charlesjolley: most don't
+[17:09] charlesjolley: any idea why?
+[17:09] charlesjolley: specifically in lib/http & lib/net
+[17:10] charlesjolley: oh wow- something is actually eliminating the 'debug' messages mostly
+[17:11] charlesjolley: build option?
+[17:13] charlesjolley: ah- there is a --debug option on the wscript.  I guess that is what I pass to ./configure...
+[17:14] rolfb has joined the channel
+[17:19] mjr_: what's the solution to the missing debug messages?  I was running into that same issue the other day.
+[17:20] rolfb has joined the channel
+[17:20] sh1mmer has joined the channel
+[17:21] piranha has joined the channel
+[17:23] dgathright has joined the channel
+[17:24] indiefan_ has joined the channel
+[17:25] jan____ has joined the channel
+[17:25] _ry: are they actually getting sent? What if you dtrace?
+[17:25] _ry: (or strace)
+[17:26] derbumi has joined the channel
+[17:31] charlesjolley: mjr_ you need to ./configre --debug
+[17:31] charlesjolley: then build
+[17:31] charlesjolley: then run the node_g binary
+[17:32] mjr_: Oh, but some of the debug statements are still there in the non-debug version.
+[17:32] mjr_: Anyway, good to know.
+[17:32] charlesjolley: that and I think the code that tries to remove the debug() statements misses a couple
+[17:33] RayMorgan has joined the channel
+[17:33] charlesjolley: _ry: re not sending big assets.  From what I can tell, if Stream.prototype._writeOut() ends up shoving some of the data back into the writeQueue then it expects an IOWatcher to fire later on to let it know to try to write more data.
+[17:34] charlesjolley: but afaict the IOWatcher never invokes the callback (_doFlush)
+[17:34] _ry: charlesjolley: yeah
+[17:34] _ry: charlesjolley: hm
+[17:34] _ry: charlesjolley: I suspect something might happen as it reaches the end of the pool
+[17:34] _ry: it should probably enable IOWatcher and doesn't
+[17:34] _ry: or should probably unshift, but doesn't 
+[17:34] _ry: or both
+[17:35] charlesjolley: well I thought that too.  but the writeQueue definitely has the data unshifted into it
+[17:35] charlesjolley: in this case
+[17:35] charlesjolley: and it calls this._writeWatcher.start()
+[17:35] jan____ has joined the channel
+[17:35] charlesjolley: is that all that needs to happen?
+[17:37] _ry: charlesjolley: supposedly
+[17:37] _ry: charlesjolley: just a thought, are you listening for 'error' ?
+[17:37] charlesjolley: on the request object?
+[17:38] _ry: yeah
+[17:38] _ry: em
+[17:38] charlesjolley: yes.
+[17:38] _ry: try listening on req.connection
+[17:38] charlesjolley: no error is triggered
+[17:38] charlesjolley: ok
+[17:38] charlesjolley: just expect an error object?
+[17:38] _ry: yeah
+[17:38] _ry: you can just throw it or whatever
+[17:38] charlesjolley: no - no error event occurs
+[17:39] _ry: okay
+[17:39] joshbuddy_ has joined the channel
+[17:39] joshbuddy_ has joined the channel
+[17:39] charlesjolley: also no drain event occurs on req.connection
+[17:39] charlesjolley: are these IOWatcher's used elsewhere?
+[17:40] charlesjolley: I'm assuming it is really unlikely there is something wrong the IOWatcher / v8 binding itself
+[17:40] charlesjolley: this has got to be in the net code right?
+[17:40] dandean has joined the channel
+[17:43] _ry: I'm 99% sure the problem is in net.js
+[17:43] _ry: not in the binding or libev
+[17:44] _ry: charlesjolley: i think this is your same problem http://github.com/ry/node/issues#issue/77
+[17:46] charlesjolley: hm 18 days ago.  was that pre net2 merge?
+[17:46] charlesjolley: I saw something like that pre net2 but could work around it (by not using chunked mode)
+[17:49] charlesjolley: ok - got things working again.
+[17:49] charlesjolley: got to go.
+[17:52] cmlenz has joined the channel
+[17:58] brianmario has joined the channel
+[17:59] christkv has joined the channel
+[18:01] JimBastard: you ever get that feeling you want to quit your job
+[18:01] mape: When watching the boat that rocked
+[18:02] JimBastard: im tempted to take a long lunch and never come back today
+[18:02] mape: that and when working on client IE6 work
+[18:03] jherdman has joined the channel
+[18:04] nefD: i still keep a bookmark of that piece of js code that instantly crashes ie6
+[18:04] nefD: i like to call it "browser upgrade encouragement"
+[18:04] mape: hehe, those don't tend to make the client happy though :/
+[18:05] nefD: yeah, stupid picky clients
+[18:08] charlesjolley has joined the channel
+[18:13] cloudhead has joined the channel
+[18:14] javajunky has joined the channel
+[18:23] piranha has joined the channel
+[18:26] jherdman has joined the channel
+[18:34] kriskowal has joined the channel
+[18:34] botanicus has joined the channel
+[18:36] TheEnd2012 has joined the channel
+[18:37] admc has joined the channel
+[18:37] creationix has joined the channel
+[18:37] charlesjolley has joined the channel
+[18:40] mde has joined the channel
+[18:44] towski has joined the channel
+[18:51] jord has joined the channel
+[18:57] jamesduncan has joined the channel
+[18:59] bmizerany has joined the channel
+[19:03] lifo has joined the channel
+[19:03] _ry: devinus: ping
+[19:03] devinus: _ry: hey
+[19:04] _ry: devinus: could you do me a favor? download http://c-ares.haxx.se/c-ares-1.7.1.tar.gz, ./configure && make
+[19:04] dantalizing has joined the channel
+[19:04] devinus: _ry: sure
+[19:04] _ry: and send me three files: ares_build.h ares_setup.h ares_config.h
+[19:04] _ry: they will be generated in the build
+[19:05] _ry: you can email me at ry@tinyclouds.org
+[19:06] _ry: (or gist)
+[19:11] devinus: _ry: sent
+[19:23] _ry: devinus: what's the output of python -c 'import sys; print sys.platform'
+[19:23] aryounce has joined the channel
+[19:23] _ry: devinus: darwin?
+[19:23] JimBastard has joined the channel
+[19:23] isaacs: _ry: that reminds me, how would you feel about a node -c?
+[19:23] JimBastard: ahhh
+[19:24] JimBastard: freedom
+[19:24] devinus: _ry: darwin, yes
+[19:24] _ry: isaacs: would be great
+[19:24] _ry: isaacs: i think the arg parsing needs to be refactored though
+[19:25] isaacs: agreed.
+[19:25] _ry: to use parseopt
+[19:25] isaacs: well, what's there now isn't arg parsing.
+[19:25] isaacs: it's just "0 is node and 1 is the script"
+[19:25] mikeal: is that true if you do #!/usr/bin/node ?
+[19:27] _ry: isaacs: well slightly more than that, but yeah
+[19:27] isaacs: _ry: sure.  it also resolves against cwd
+[19:28] isaacs: _ry: ok, not going to dive into that, too much going on already.  but i think argparse.h and a -c option might be a good suggestion for one of those "to promote community yadda yadda project something" emails you send every so often.
+[19:29] _ry: well, in node.js - in node.cc it does a little more work. http://github.com/ry/node/blob/888a494ad814e73d8720bf9715916ec1397c3a49/src/node.cc#L1439-1516
+[19:30] technoweenie has joined the channel
+[19:32] JimBastard: does anyone know if adam or wynn from thechangelog.com hang out in here?
+[19:32] _ry: technoweenie: can you make github have code review
+[19:32] JimBastard: ohh nice i forgot, we can bitch @ technoweenie now instead of joining #github
+[19:32] JimBastard: ACTION **joy**
+[19:32] technoweenie: haha
+[19:32] _ry: technoweenie: rietveld-style
+[19:32] JimBastard: ;-)
+[19:33] technoweenie: the way i understand it, the compare view is the first phase of code review
+[19:33] _ry: yeah, it sucks
+[19:33] mikeal: it would be nice if you could make a pull request public and show the diff between branches and allow comments on it
+[19:33] mikeal: that would basically be code review
+[19:33] _ry: i want to actually have a system of uploading diffs and reviewing them
+[19:34] _ry: and then i can say 'no this sucks'
+[19:34] mikeal: then you lose all the commit info
+[19:34] _ry: and then tehy can upload a new one
+[19:34] technoweenie: yea i've advocated for public pull requests since pull requests were added
+[19:34] mikeal: if there were multiple commits
+[19:34] _ry: i don't care about commit info
+[19:34] _ry: i want line by line control
+[19:34] mikeal: the people who are submitting do
+[19:34] mikeal: i see
+[19:34] _ry: v8 works really well
+[19:35] _ry: they do super detailed code review for everything
+[19:36] mikeal: but they maintain one primary upstream
+[19:36] mikeal: it's not distributed among several key committers and their personal forks which make it in to another upstream
+[19:36] _ry: everyone uses git on v8
+[19:36] mape: Something like http://blogs.atlassian.com/devtools/2009/12/sneak-peek-sexy-sidebyside-diffs.html for github? All in the browser
+[19:36] christkv_ has joined the channel
+[19:37] technoweenie: well, the fork queue lets your review patches too, but i see what you mean
+[19:37] mikeal: pull requests, and to some extent the fork queue, encourage a model where you can send requests to another key contributor instead of always pinging the repo that releases
+[19:37] mikeal: the fork queue stopped working for me
+[19:37] _ry: check out this patch i'm trying to get into v8 http://codereview.chromium.org/1594017/show
+[19:37] _ry: this works very well
+[19:37] mikeal: for all my projects, I don't know why, but nothing applies anymore in any repo
+[19:37] _ry: i need this for node
+[19:38] _ry: the only commit history that matters in node is ry/master
+[19:38] mikeal: the thing I don't like about sending around diffs
+[19:38] _ry: unless someone actually forks the project and starts making their own releases
+[19:38] mikeal: is that after they get accepted, I can't pull or rebase the upstream
+[19:39] _ry: mikeal: you make a branch, you git your patch accepted
+[19:39] _ry: you delete the branch
+[19:39] mikeal: that works if I'm not deviating too far
+[19:40] technoweenie: yea you have to be careful to keep your patches focused on an individual feature or fix
+[19:40] _ry: i'm not accepting 10000 line changes :)
+[19:40] mikeal: of course not :)
+[19:40] technoweenie: otherwise you start developing some feature that depends on some bug fix that the owner rejected
+[19:40] _ry: but for example, rhys is working on openssl
+[19:40] _ry: which is a very big patch
+[19:40] _ry: i've got a branch for him 
+[19:40] mikeal: _ry: if instead of a diff you could use the branch compare and comment on each line
+[19:40] _ry: and i'll merge instead of cherry-picking it
+[19:41] mikeal: would that be enough?
+[19:41] drostie has joined the channel
+[19:41] _ry: no, i want patches, really
+[19:41] mikeal: that would require people to do a branch per bugfix
+[19:41] _ry: i don't care about other people's git historys
+[19:41] technoweenie: thats what you're supposed to do
+[19:41] javajunky: mikeal: that would be ideal ?
+[19:41] technoweenie: branch per bug fix or feature
+[19:41] javajunky: branching is 'cheap' in git 
+[19:42] mikeal: what *I* would like is public pull request + comments in a branch compare for the pull request, but what I want doesn't really matter in this case because the code is going through _ry
+[19:43] mikeal: i'm trying to find a solution that is likely to be implemented that would be satisfactory for _ry
+[19:43] mikeal: and i just don't see github implementing a system around patches that are uploaded diffs :(
+[19:44] _ry: there needs to be a concept of "i need this fixed/changed"
+[19:44] _ry: whch is independent of actual code
+[19:44] _ry: then patches can be attempted to fix that
+[19:44] mikeal: if pull requests were public I think you should be able to attach them to issues
+[19:44] _ry: there should be a history of the discussion of that fix
+[19:45] mikeal: so, the pull request is for a branch, if the branch changes the pull request shouldn't go away, it should reflect the changes and the discussion
+[19:45] _ry: rietveld is very well thought out
+[19:45] mikeal: right now a pull request is basically just a message sent to a user, it needs to be more, in my opinion
+[19:45] _ry: github should do it exactly
+[19:46] _ry: they should even suppor the same rest API so I can continue to use "git-cl"
+[19:46] mikeal: haven't used rietveld but I've seen a few talks about Mondrian
+[19:46] mikeal: which it's based on
+[19:46] mikeal: and I don't actually like it
+[19:47] _ry: the github model of "forking" is not good imo
+[19:47] mjr_: it does have a hilarious progress message though.
+[19:47] _ry: "forking" a project is a big deal. if I fork V8, then I'm saying I'm going to be releasing it.
+[19:48] mikeal: that's just not what fork means in git tho
+[19:48] _ry: making some 2 line change is not forking
+[19:48] _ry: yet github treats all branchs the same
+[19:48] _ry: when they clearly are not
+[19:48] _ry: branches
+[19:49] mikeal: you fork every time you clone a repo, you have the whole repo, it's basically a fork, a github fork is just a public clone with some network meta info
+[19:49] _ry: except all ry/master forks are trying to get merged back into ry/master
+[19:49] mikeal: _ry: a fork should never mean that they are releasing
+[19:49] bpot has joined the channel
+[19:49] mikeal: if they want to release
+[19:49] mikeal: then they should clone the repo and then push it to github under the same name so that they detach from your network
+[19:50] creationix: anyone want to give me some feedback on my new design for howtonode.org http://static.creationix.com/mockup/
+[19:50] mikeal: all forks in your network are expected to be working on the same project 
+[19:51] _ry: creationix: fancy
+[19:51] creationix: I'm afraid it won't look the best on IE, but according to my google analytics I don'tcare
+[19:52] creationix: :D
+[19:52] _ry: what github is great at is being able to link to specific commits and segments of code
+[19:52] mape: creationix: The opacity on the bg slows the rendering down quite a bit
+[19:52] xla: creationix: like the current one
+[19:52] _ry: almost everything else sucks :)
+[19:52] deanlandolt: creationix: fixed width fonts for code samples are probably better
+[19:53] creationix: mape: good point
+[19:53] creationix: deanlandolt: it's supposed to be fixed, what's your platform?
+[19:53] mikeal: github has amazing workflows for small and medium sized projects
+[19:53] jherdman has joined the channel
+[19:53] mape: creationix: And might want to move the JS to the bottom so they don't block (and you seem to have two prettify?)
+[19:53] deanlandolt: creationix: ff on windows it's var width
+[19:53] mikeal: the big project workflows just aren't complete
+[19:53] _ry: mikeal: i really disagree
+[19:54] deanlandolt: heh, fixed width in ie
+[19:54] xla: creationix: what's the intention to change the layout?
+[19:54] deanlandolt: creationix: at first glance everything looks good in ie except there's no background on the text
+[19:54] mikeal: _ry: you should look at how resig is using github for jquery
+[19:54] mape: creationix: Might also want to remove titles on the css files, I have bad experiences with having multiple ones
+[19:54] creationix: xla: partially to support the new side bar I'll be adding, and partially because I don't like the old design
+[19:54] mikeal: he keeps track of all the stuff people are doing in forks and comments on their stuff as they work
+[19:54] _ry: mikeal: they need to focus on patches not forks and branches
+[19:54] mikeal: instead of waiting for them to send a pull request
+[19:55] deanlandolt: heh...var width in chrome too
+[19:55] polyrhythmic has joined the channel
+[19:55] mikeal: which is much nicer for large changes because if they go down the wrong path he can get them to adjust it early
+[19:55] deanlandolt has left the channel
+[19:55] mikeal: instead of waiting for a giant diff that is fundamentally flaud 
+[19:55] deanlandolt has joined the channel
+[19:55] _ry: mikeal: that could easily fit into a rietveld-style system
+[19:55] xla: creationix: but the current one is clean and a pleasure to read
+[19:56] creationix: xla: I'll still rss for people who just want to read the articles.  I'm moving the syntax highlighting to server-side anyway so it will be pretty in rss
+[19:56] mikeal: _ry: the big difference between rietveld and github is that rietveld assumes the only way to get code in to the upstream is to submit to the upstream
+[19:56] _ry: mikeal: it's great to be able to discover what people are doing before they announce it. i like that feature
+[19:56] mikeal: ideally you wouldn't have to review every patch
+[19:56] _ry: no no no
+[19:56] mikeal: people could send requests to felixge and he could work on them
+[19:56] xla: creationix: hopefully pygments ;) the point about rss is true
+[19:56] mrjjwright has joined the channel
+[19:57] _ry: ideally all code is reviewed and accepted
+[19:57] mrjjwright has left the channel
+[19:57] xla: creationix: but IMHO the new design is far more distracting from the actual content
+[19:57] _ry: no one takes code blindly
+[19:57] mikeal: have you looked at the workflow for the linux kernel project?
+[19:57] _ry: yeah they have a mailing list where people upload patches
+[19:57] mikeal: that's only after they've been worked on for a long time
+[19:58] _ry: before it they discuss
+[19:58] mikeal: almost nothing goes directly to Linus, he has like 60 people who submit to him
+[19:58] mikeal: and everyone else is submitting to them
+[19:58] polyrhythmic: quick question: I'm about to get myself a small Xen VPS to start running node.js -- what's the best distro to get started with? Ubuntu, Debian, Fedora, or CentOS?  I'm only familiar with Arch and Ubuntu
+[19:59] mikeal: github is great for projects I abandon too :)
+[19:59] javajunky: node.js works fine on arch fyi (I'm doing that on my vps) 
+[19:59] mikeal: other people just kind of take over
+[19:59] _ry: mikeal: i'm find with having felix control a certain subsystem. but i want to review any merge with his branch that he proposes
+[19:59] creationix: xla: ok, just cleaned up the style a little, see if that's better
+[19:59] polyrhythmic: javajunky: I don't have the option for Arch on my VPS, unfortunately
+[20:00] xla: polyrhythmic: no problems with ubuntu and arch so far
+[20:00] javajunky: ok, I also know it works great on Ubuntu
+[20:00] mikeal: i'm not saying one workflow is right or wrong
+[20:00] polyrhythmic: thanks xla, javajunky, I'm fine with Ubuntu as long as there's no disadvantages
+[20:00] creationix: deanlandolt: found my problem, you don't have monaco and the fallback was mispelled
+[20:00] _ry: and linus approves subsystem merges too
+[20:00] _ry: everyone approves something
+[20:01] tekky has joined the channel
+[20:01] mape: creationix: btw might want to look into removing the redundant #container prefix that is present in the css, not important but redundant (I assume)
+[20:01] mikeal: yeah, but he's admitted there are people who's code he barely looks at
+[20:01] _ry: sure
+[20:01] xla: creationix: I think I have the biggest complains about the background image and the rounded corners, compared to the current styling this is too much and doesn't fit in the domain howtonode is addressing IMGO
+[20:01] mikeal: the crazy part is that a *lot* of people actually run the master from the subsystem owners
+[20:02] _ry: github presents this very naive view of open source software develop. that it just grows organically without human intervention. it never works that way.
+[20:02] _ry: people just merging here and there
+[20:02] mikeal: i won't disagree with that
+[20:02] mikeal: but i think they like to encourage the social aspect of that development to solve problems instead of management tasks
+[20:03] aho: creationix, slooooooooow scrolling in firefox
+[20:03] mape: probably the box-shadow
+[20:03] mikeal: i have to deal with apache crap all the time
+[20:03] mikeal: and it's nothing but process and rules and crap
+[20:03] aho: it's the fixed background in body
+[20:03] mikeal: it's just a series of barriers to getting code written
+[20:03] _ry: well apache has its head in its ass
+[20:03] mikeal: and getting code upstream
+[20:03] mikeal: it's the other end of the spectrum
+[20:03] aho: i just kicked it out with firebug... and as expected the scrolling behaves normal now
+[20:04] _ry: but that doesn't mean having control of code is a bad thing
+[20:04] creationix: aho: thanks, too bad my image doesn't tile
+[20:04] mikeal: i do think their needs to be a better code review tool in github
+[20:04] mikeal: there
+[20:04] JimBastard: are we talking about how awesome github is? i approve
+[20:04] JimBastard: yo guys
+[20:04] mape: aho: well rendering the box-shadow over the background
+[20:04] _ry: :)
+[20:04] JimBastard: github has post hook commits, just take the payload and build your own shit
+[20:04] mikeal: but i'm not convinced we need to throw away the history
+[20:04] mape: JimBastard: you quit?
+[20:04] JimBastard: yeah
+[20:04] mikeal: and that there isn't a better third option that fits well in to the github workflow
+[20:04] creationix: mape: how about disabling the shawdow, but keeping the fixed background
+[20:05] mikeal: i *really* want you to be able to point an issue at a branch
+[20:05] aho: ye, if you disable the box shadow it's also back to normal
+[20:05] _ry: mikeal: most changes are one patch. i don't want your typo commited into my branch.
+[20:05] mikeal: and say "this fixes it" 
+[20:05] JimBastard: i went out to lunch with my co-workers and at the corner of the street said, i think im gonna go somewhere else instead
+[20:05] JimBastard: then walked home
+[20:05] mikeal: and be able to comment in the ticket
+[20:05] _ry: fix the typos, make a new patch
+[20:05] mape: Hehe 
+[20:05] _ry: there's no reason to preseve that
+[20:05] technoweenie: ry: you make some great points... all i know is kyle and ryan are on it.  i just got here, so i dont know whats going on yet :)
+[20:06] JimBastard: everyone yell at technoweenie 
+[20:06] JimBastard: github is down
+[20:06] deanlandolt: wow JimBastard, you really are a bastard
+[20:06] deanlandolt: that's hysterical
+[20:06] technoweenie: well you can do a squash merge of the whole branch so it goes into master as one clean commit
+[20:06] mape: creationix: Personally I would alter the background, something that is more subtle but gives the same feeling if your are going for the colorful
+[20:06] technoweenie: JimBastard lives up to his name :)
+[20:06] technoweenie: ✓ all systems go as of 01:04 pm ?
+[20:06] JimBastard: deanlandolt: that reminds me, im definitely coming down for JsConf
+[20:06] JimBastard: i'm a nice guy i swear
+[20:06] deanlandolt: awesome
+[20:06] JimBastard: ^_^
+[20:06] mikeal: _ry: sure, part of the pull request should include a squash command that turns it in to one diff for merge, but why throw away the history during the discussion? why re-submit patches when you can just push a commit in to the branch you're discussing?
+[20:06] deanlandolt: i believe it...nothing better than a good quitting story though
+[20:07] rictic has joined the channel
+[20:07] creationix: mape: I like the dandelion because of how it spreads it's seeds (nodes) all over the place
+[20:07] mikeal: creationix is getting poetic on us
+[20:08] creationix: it's just a photo I took in my backyard the other day
+[20:08] mikeal: mjr_, _ry: you coming to my BBQ on Friday?
+[20:08] aho: creationix, the horizontal padding on the main column is also a little bit too small for my liking. usually 20 is enough for something like that, but with that high-contrast color nuke stuff in the background i'd pad it out a bit more
+[20:08] aho: (20px)
+[20:08] mape: creationix: Also thing it is the contrast with the vibrant background and the plain/flat content blocks (along with the green one)
+[20:09] creationix: it is 20, refresh
+[20:09] aho: "usually" .)
+[20:09] creationix: hmm, I guess my background it too bright then
+[20:09] aho: no
+[20:09] aho: it's too busy
+[20:09] aho: ;)
+[20:09] mjr_: mikeal: I'm planning on it.  Do you need any grilling equipment?  Maybe some open source grilling workflow management improvements?
+[20:10] mikeal: i want a tool that can diff branch of coleslaw recipes :)
+[20:10] mape: creationix: Things like 4px 4px 20px rgba(0, 0, 0, 0.5), 0 0 20px rgba(0, 0, 0, 0.3) inset on the box-shadow
+[20:10] mape: smooths it up a little
+[20:10] mjr_: creationix: I liked your original, minimal design better.
+[20:11] creationix: heh, the original wasn't mine
+[20:11] _ry: mikeal: yeah that'd be fine. i guess what i really want is to be able to open a "patch request" and then submit several diffs against origin/master. But it should be fixed diffs, not a named branch
+[20:11] _ry: because i want to comment on something static
+[20:12] _ry: then i want to say, 'no send me a new diff'
+[20:12] mape: creationix: Also float:right;margin: 0 0 20px 20px; on the image makes it easier to read, less white space in the top
+[20:12] _ry: and however they do that - maybe just a new commit on their remote branch
+[20:12] _ry: mikeal: btw it should all be doable from teh command line
+[20:12] _ry: 'git cl' is a great tool
+[20:13] aho: <mjr_> creationix: I liked your original, minimal design better. <- same here. except for that pain-red ;>
+[20:13] creationix: I definitely want green accents this time
+[20:13] _ry: mikeal: can i bring some friends to the bbq?
+[20:13] mikeal: _ry: definitely
+[20:13] mikeal: it's open
+[20:14] mikeal: bring whoever you like
+[20:14] _ry: okay cool
+[20:14] jbrantly: how many of you guys are in the bay area?
+[20:14] derbumi has joined the channel
+[20:14] aho: since you already go with year/month/day i recommend to use http://en.wikipedia.org/wiki/ISO_8601
+[20:14] mikeal: I think what I want is a public pull request that shows you the point in time the request for the branch was, then the comments, and then as you update the branch it's reflected in the view
+[20:14] aho: yyyy-mm-dd
+[20:14] aho: ftw
+[20:14] pedro__ has joined the channel
+[20:14] mikeal: when the review is done, you can just a squash button or something to get a branch diff
+[20:15] pedro__ has joined the channel
+[20:15] mikeal: jbrantly: lots :)
+[20:15] jbrantly: mikeal: apparently, sheesh :)
+[20:15] mikeal: there is a node-users list
+[20:15] _ry: okay. /me goes back to work
+[20:15] mikeal: broken down by timezone
+[20:16] jbrantly: mikeal: ah. I see now.
+[20:16] mape: creationix: http://mape.me/f/creationix.png
+[20:17] creationix: mape: ok, just rsynced my version too so you can see it
+[20:17] creationix: refresh
+[20:18] creationix: I'm thinking maybe a simple metal pattern for the background?
+[20:18] creationix: or a soft wood grain
+[20:18] mape: Hmm, I think photoshop tutorial straight away when I hear that
+[20:18] creationix: but very plain and repeating so I don't have to fix it's position
+[20:18] creationix: btw, I didn't know about the inset thing, that's cool
+[20:19] mape: Jup really handy
+[20:19] mape: also have gradients now with firefox and webkit so
+[20:19] creationix: _ry, sorry for hijacking the irc room, I wish irc conversations could be threaded 
+[20:19] JimBastard: its for howtonode!
+[20:20] JimBastard: creationix: did you make that?
+[20:20] creationix: yep
+[20:20] JimBastard: that looks pretty good man
+[20:20] mape: creationix: -moz-linear-gradient(top, #fff, #ddd); 
+[20:20] JimBastard: i would pick a diffirent typeface for the logo though, the bg image is kinda pimp
+[20:20] mape: might be handy for the green part to spice it up
+[20:20] aho: -moz-box-shadow:4px 4px 20px rgba(0, 0, 0, 0.5), 0 0 20px rgba(0, 0, 0, 0.3) inset, 0 0 0 1px rgba(0, 0, 0, 0.1);
+[20:20] aho: border:1px solid rgba(255, 255, 255, 0.1);
+[20:20] aho: extra edges
+[20:20] aho: :>
+[20:21] creationix: mape: do you know the webkit equivalent of the gradient
+[20:21] mape: -webkit-gradient(linear, 0% 0%, 0% 100%, from(transparent), to(#000));
+[20:21] mape: the vendor prefixes are getting annoying nowadays
+[20:21] polyrhythmic: is howtonode.js being served on Node?
+[20:22] polyrhythmic: *howtonode.com
+[20:22] polyrhythmic: *.org
+[20:22] polyrhythmic: :|
+[20:22] aho: http://i.imgur.com/WWsVR.png <- with those two extra "borders" (well one is a shadow)
+[20:23] mape: jup, the inset makes it closer to the default wordpress theme though, doesn't look bad but yeah
+[20:23] aho: i really like how all that css3 shizzle removes the need for all those tiny annoying layout graphics
+[20:24] mape: border images are neat
+[20:24] creationix: aho, I like the lip on the border
+[20:26] creationix: ok, updated, I've got a soft green gradient for the bg
+[20:27] aho: :)
+[20:27] mape: creationix: Nice :) The only thing that looks off now is the green block
+[20:28] mape: perhaps try a more muted green?
+[20:28] aho: scrolling speed is normal.. resizing the window is super slow (not much of a problem, i guess)
+[20:29] creationix: yeah, the side-bar part isn't done yet anyway
+[20:29] creationix: I have more to add to that
+[20:29] creationix: thanks mape and aho, you helped a lot
+[20:29] creationix: I've gotta run
+[20:30] mape: np :)
+[20:30] aho: :)
+[20:30] WALoeIII has joined the channel
+[20:31] brainproxy has joined the channel
+[20:33] devinus: _ry: did my configs help at all?
+[20:33] devinus: _ry: im in no rush, just wanted to point it out in case anybody cared
+[20:36] mape: Was thinking of looking at perhaps taking a go at improving the API-doc page, but saw it was using AsciiDoc so is there any reason to do something?
+[20:36] CIA-77: node: 03Herbert Vojcik 07master * rd36bb65 10/ test/simple/test-module-loading.js : Better require.async tests - http://bit.ly/dhIUny
+[20:36] CIA-77: node: 03Ryan Dahl 07master * reac3dc9 10/ lib/net.js : Bugfix: net.js flushing, _doFlush typo - http://bit.ly/chfUg8
+[20:36] CIA-77: node: 03Ryan Dahl 07master * r9ea8c9f 10/ (32 files in 12 dirs): Clean up c-ares platform includes, add support for a few more - http://bit.ly/9mMFNv
+[20:37] _ry: devinus: yeah, i just uploaded them
+[20:37] _ry: devinus: try again
+[20:38] _ry: mape: it uses markdown now
+[20:38] mape: <meta name="generator" content="AsciiDoc 8.5.1" /> ?
+[20:38] mape: Just copy paste leftover?
+[20:39] _ry: mape: http://github.com/ry/node/blob/53dd9fe200d7cd1d6f3e5c5a96891b778303be37/doc/api.markdown
+[20:39] devinus: _ry: ../deps/c-ares/ares_expand_string.c:18:24: error: ares_setup.h: No such file or directory
+[20:39] brapse has joined the channel
+[20:40] _ry: devinus: oops
+[20:40] devinus: :D
+[20:40] devinus: just glad i could test it
+[20:40] mape: Ah k, so if I took a stab at it and it was usable the template is easy to alter as long as the core output is the same?
+[20:40] CIA-77: node: 03Ryan Dahl 07master * rf56ff0d 10/ (6 files in 2 dirs): Add darwin-x86, linux-x86_64 c-ares headers - http://bit.ly/bIZ9P6
+[20:40] admc has joined the channel
+[20:40] _ry: devinus: ---^
+[20:41] devinus: _ry: nice, it works
+[20:41] _ry: devinus: good
+[20:41] devinus: _ry: c-ares is quite a bit larger than udns, what does it provide over udns ?
+[20:42] _ry: lots of stuff
+[20:42] _ry: for example it resolves /etc/hosts
+[20:42] devinus: i gather it's better licensed than udns too
+[20:42] _ry: you can't resolve 'localhost' with udns
+[20:43] devinus: _ry: i recall a conversation on the mailing list mentioning c-ares late in 2009, you also mentioned udp support. is udp still on the horizon ?
+[20:43] _ry: not the immediate horizon
+[20:44] devinus: awesome, just wondering
+[20:45] derbumi has joined the channel
+[20:49] mjr_: mape: I've been working on updating api.markdown to match the new API, as well as adding examples.
+[20:49] mjr_: I haven't touched it in about a week though, sadly.
+[20:49] jazgot has joined the channel
+[20:50] mape: Ah k, I was thinking of adding some features that made it easier to keep track where in the docs the current text is and what not
+[20:51] mjr_: also, creationix is working on his world domination doc viewer that does all things for all people.
+[20:51] creationix: :)
+[20:51] mjr_: how's that coming?
+[20:51] mape: Hehe perhaps adding features isn't needed then?
+[20:52] creationix: but not till the end of the month, I've got to finish the new howtonode.org and write my talks
+[20:52] creationix: mape: If you want you can update the existing reader at ry/node_docs to read the new ron-markdown in api.markdown
+[20:52] creationix: the current code reads markdown, but a slightly different format
+[20:54] mikeal: does anyone know of a commonjs module for markdown?
+[20:55] jherdman: mikeal: i believe TJ's got a very basic one on the go
+[20:55] mape: creationix: An nice, your new API-viewer is like the remy one for jQuery?
+[20:55] creationix: yep, but it's all my own code
+[20:55] creationix: just his css
+[20:56] creationix: mikeal: I just use showdown 
+[20:56] creationix: look in the lib folder of creationix/wheat
+[20:58] mape: creationix: Nice work on the doc viewer :)
+[20:58] creationix: thanks, it was a fun project
+[20:59] creationix: my favorite part is that it can render server-side or client side with the same core code
+[20:59] mape: Only thing I'm missing is left/right hotkeys for moving "up and down" in depth
+[20:59] creationix: someone just made a logo for howtonode.org, see what you think http://static.creationix.com/mockup/
+[20:59] creationix: mape, for sure
+[20:59] mape: Or down might be hard since then you would have to hook up/down as well
+[21:00] mape: and that might anger people
+[21:00] creationix: and I want to implement the filter feature
+[21:01] mape: creationix: Still the green one making the entire page go a little off, and perhaps the logo is a little to "simple" for all the gradients and what not?
+[21:02] mape: Like it a lot more with the simple no gradient/no round corners and the new logo
+[21:02] jazgot: actually, i think current minimalistic howtonode.org is way better
+[21:02] JimBastard_ has joined the channel
+[21:02] mape: feels less personal, which might be a good thing
+[21:03] jazgot: main focus on content, no distractions
+[21:03] creationix: I don't think the current one has any character
+[21:03] creationix: I mean, like I said earlier, there is rss if you just want the content pure and simple
+[21:04] darkf has joined the channel
+[21:04] JimBastard_: sauage egg burritos own, and so does working from home
+[21:04] creationix: JimBastart, yeah, well working from home with a wife who can cook is the best :P
+[21:04] jazgot: It has character of 50s gentleman. :)
+[21:05] mape: Depends on the wife 
+[21:07] mape: has there been any benchmarks on node vs say cherokee or nginx when serving static content? images/client-js/css and what not
+[21:09] creationix: I'm pretty sure node can't compete on static files
+[21:09] creationix: especially on large files
+[21:09] mape: Yeah I can imagine that might be an issue..
+[21:10] creationix: it's fast, just nothing like those
+[21:10] mape: So, how about running a nginx frontend with proxy to nodejs? kinda defeats the purpose?
+[21:10] mape: or perhaps it is just easier to just run static.domain.td 
+[21:11] softdrink: mape:  not unless you're proxying to different boxes
+[21:11] softdrink: or different processes across cores/cpus
+[21:11] mape: so all ok doing nginx frontend and then proxying to node.js on the same box?
+[21:12] creationix: that's how I do it
+[21:13] mape: I guess it doesn't really matter for most people though, more node.js that is nice rather then scaling for thousands of visitors
+[21:13] mrjjwright has joined the channel
+[21:13] creationix: nginx is evented
+[21:13] creationix: now node behind something threaded would be a bad idea
+[21:14] mape: Yeah
+[21:15] mape: Owell, really happy I finally found something backend I don't feel annoyed over
+[21:20] derbumi has joined the channel
+[21:26] nefD has joined the channel
+[21:29] nefD: hrmmmm.. so- using JSON.stringify.. is there a way for me to specify that keys should not be surrounded in quotes in the returned string? I tried finding docs for JSON.stringify without luck
+[21:29] keeto: nope.
+[21:29] keeto: JSON.stringify should return valid JSON.
+[21:29] keeto: and valid JSON requires keys wrapped by double-quotes.
+[21:29] deanlandolt: nefD: http://github.com/kriszyp/commonjs-utils/blob/master/lib/json-ext.js
+[21:30] nefD: ah. yeah, that does make sense
+[21:30] nefD: ultimately i'm using the resulting string in a jsonp response is why I'd need it without the quoted keys
+[21:30] deanlandolt: JSONExt.stringify is your best bet (w/ a corresponding JSONExt.parse) -- plus you get Date, Infinity, NaN, undefined and friends for free
+[21:31] nefD: *nod* cool, thanks muchly for the link
+[21:31] deanlandolt: nefD: yeah, JSONExt is a perfect fit for jsonp
+[21:31] fizx has joined the channel
+[21:32] deanlandolt: it gets eval'd anyway, and JSONExt will always pass back valid javascript, so you'll get all the native type goodness too
+[21:33] nefD: perfect, you're the man now dog!
+[21:33] nefD: i kinda wish my boss didn't through that meme around so much, so I could get it out of my head
+[21:34] deanlandolt: ha!
+[21:34] deanlandolt: i can just picture michael scott running around the office w/ that little ditty
+[21:36] dgathright has joined the channel
+[21:38] voodootikigod_: hey jokers
+[21:38] nefD: haha
+[21:38] voodootikigod_: if we made a node.js hack-day
+[21:38] voodootikigod_: free room
+[21:38] voodootikigod_: and drink/food available
+[21:38] voodootikigod_: friday before jsconf
+[21:38] voodootikigod_: would yall be interested?
+[21:38] MattJ: I suppose jsconf is in the US? :(
+[21:38] voodootikigod_: for this month yes
+[21:38] technoweenie: yea but i get in friday night :(
+[21:38] deanlandolt: JimBastard_: ^^
+[21:38] voodootikigod_: in 6 months its in EU
+[21:38] MattJ: Yay
+[21:38] MattJ: Whereabouts?
+[21:38] rtomayko has joined the channel
+[21:38] voodootikigod_: Berlin
+[21:39] MattJ: Hmm, I'll look into it, thanks :)
+[21:39] voodootikigod_: technoweenie: SCURVYCONF FOR YOU
+[21:39] deanlandolt: voodootikigod: would this be in georgetown w/ all the other training stuff?
+[21:39] voodootikigod_: yea
+[21:39] voodootikigod_: one of hte groups backed out
+[21:40] voodootikigod_: so I am stuck with a room
+[21:40] voodootikigod_: and food
+[21:40] voodootikigod_: and while i do love that
+[21:40] voodootikigod_: its a bit lonely
+[21:40] deanlandolt: ha...sounds terrible
+[21:41] voodootikigod_: would that work?
+[21:42] JimBastard: what did i do
+[21:42] JimBastard: dude
+[21:42] JimBastard: no hack day?!?!?!
+[21:42] JimBastard: node hack day
+[21:42] JimBastard: im soo excited i cant even type
+[21:42] deanlandolt: JimBastard_: i was just saying -- you may want to think about bumping up travel arrangements to dc
+[21:43] JimBastard: imonatrain
+[21:43] JimBastard: its cool my new job doesnt start full time for another week or two, im doing hook.io nonstop until jsconf
+[21:43] JimBastard: im definitely in
+[21:44] voodootikigod_: hackday
+[21:44] voodootikigod_: not no hackday
+[21:44] voodootikigod_: node hackday
+[21:44] voodootikigod_: nice
+[21:44] voodootikigod_: PERFECT
+[21:46] ddollar: back
+[21:49] mrjjwright has left the channel
+[21:57] kriskowal_ has joined the channel
+[21:58] lifo has joined the channel
+[22:00] pedro has joined the channel
+[22:00] chakrit has joined the channel
+[22:02] confounds has joined the channel
+[22:06] dysinger has joined the channel
+[22:06] kriszyp has joined the channel
+[22:08] joshbuddy has joined the channel
+[22:13] gf3 has joined the channel
+[22:24] joshbuddy_ has joined the channel
+[22:25] JimBastard_ has joined the channel
+[22:27] _ry: blazzy: are you around?
+[22:32] blazzy: _ry: what's up?
+[22:34] _ry: blazzy: nevermind - i was just testing out stuff - but i figured it out
+[22:35] _ry: blazzy: gethostbyname is useful because it does /etc/hosts resolves
+[22:35] _ry: the others just do dns
+[22:36] dandean: node --help states that you can pass arguments after the script.js.
+[22:36] dandean: I can't find any documentation about how to pass or use CLI arguments. Any pointers?
+[22:36] _ry: dandean: process.argv
+[22:36] dandean: ahhh. thanks _ry
+[22:40] xla has joined the channel
+[22:42] cloudhead has joined the channel
+[22:45] freshtonic has joined the channel
+[22:47] hassox has joined the channel
+[22:54] kriszyp_ has joined the channel
+[22:57] cloudhead: is there any way to override a function's 'name' attribute?
+[22:57] JimBastard_: ?
+[22:58] cloudhead: JimBastard_: to dynamically set a function name
+[22:59] cloudhead: there doesn't seem to be a way to do it without eval()
+[23:00] isaacs has joined the channel
+[23:03] sudoer has joined the channel
+[23:05] aryounce has joined the channel
+[23:07] CIA-77: node: 03Ryan Dahl 07master * rf13e2f9 10/ (lib/dns_cares.js test/simple/test-c-ares.js): Add a simple c-ares test, dns_cares.lookup() for easy resolv - http://bit.ly/9IRZss
+[23:07] CIA-77: node: 03Ryan Dahl 07master * r8f67104 10/ (3 files in 3 dirs): Check for ip address in dns_cares.lookup - http://bit.ly/9lDs6x
+[23:07] CIA-77: node: 03Ryan Dahl 07master * r33e774e 10/ lib/net.js : Use c-ares in lib/net.js - http://bit.ly/98DYQ3
+[23:09] mrjjwright has joined the channel
+[23:09] devinus has joined the channel
+[23:10] CIA-77: node: 03Ryan Dahl 07master * r970e902 10/ lib/dns_cares.js : Remove debugging statements from dns_cares - http://bit.ly/csnRKw
+[23:11] creationix: JimBastard: did you see hook.io get mentioned on changelog?
+[23:12] devinus has joined the channel
+[23:12] JimBastard: yeah i did creationix it was the bane of my existance today
+[23:12] JimBastard: as i panic'd 
+[23:12] Embwbam has joined the channel
+[23:12] JimBastard: then lol'd
+[23:12] JimBastard: :p
+[23:12] creationix: I thought you would
+[23:12] JimBastard: lots to do before jsconf!
+[23:12] creationix: they recruited me to cover node projects and said my first post should be hook.io
+[23:12] JimBastard: yeaaaaaaaa
+[23:12] Embwbam: What's the best way to test the throughput of my node app. Apache benchmark doesn't seem to be giving correct results
+[23:12] JimBastard: must get back to work!
+[23:13] JimBastard: thanks for the support, much appreciated
+[23:19] polyrhythmic: cloudhead: you want to change the name of a fn that's already defined?
+[23:19] pjb3_ has joined the channel
+[23:19] JimBastard_: cloudhead: sorry for disappearing
+[23:19] JimBastard_: you cant dynamically set it
+[23:20] JimBastard_: you create a name one with a new name
+[23:20] cloudhead: polyrhythmic: yea
+[23:20] cloudhead: cause I'm creating a constructor on the fly
+[23:20] JimBastard_: if you really need to you can do something like var myFN = function(){oldFN()};
+[23:20] JimBastard_: do you have a copy pasta cloudhead ?
+[23:21] polyrhythmic: can't you just var myFn = oldFn;  ?
+[23:21] JimBastard_: that too drrr
+[23:21] JimBastard_: >.<
+[23:21] JimBastard_: im a closure addict
+[23:21] polyrhythmic: heheh
+[23:21] cloudhead: well it's just really defining a function with a name, based on a string name
+[23:21] cloudhead: no that won't work
+[23:21] JimBastard_: cloudhead
+[23:21] cloudhead: it still won't have  anme
+[23:21] JimBastard_: var blah = {}
+[23:21] polyrhythmic: cloudhead: then set it as the property of its parent object
+[23:21] JimBastard_: blah['ahaha'] = function(){}
+[23:21] polyrhythmic: ^^ like JimBastard_ says
+[23:21] JimBastard_: ?
+[23:22] cloudhead: the function itself doesnt have a name though
+[23:22] JimBastard_: which one?
+[23:22] cloudhead: there's only one
+[23:22] cloudhead: function () {}
+[23:22] JimBastard_: give it one?
+[23:22] cloudhead: I can't
+[23:22] JimBastard_: var x = function() {}
+[23:22] cloudhead: that's what I'm saying
+[23:22] cloudhead: that doesnt give it a name
+[23:22] JimBastard_: sorry, im having a hard time seeing it without code
+[23:22] cloudhead: it's still anonymous
+[23:22] CIA-77: node: 03Ryan Dahl 07master * r0281e1a 10/ benchmark/http_simple.js : Fix benchmark script for testing both old and new version - http://bit.ly/8Yi9iv
+[23:22] JimBastard_: why cant you give it a namespace?
+[23:23] JimBastard_: im sure there is a easy solution to what you need to do
+[23:23] cloudhead: http://gist.github.com/359569
+[23:23] JimBastard_: peepin
+[23:23] broofa1: late to the discussion, but JimBastard, sounds like the issue is the difference between "function() …" and "function foo() …"
+[23:23] _ry: please test HEAD if you can
+[23:24] JimBastard_: well maybe you really want to use a contructor and the new operator?
+[23:24] _ry: esp if you have a web crawler written in node :)
+[23:24] broofa1: the first is anonymous, the 2nd is named.
+[23:24] broofa1: Is that the issue at hand?
+[23:24] JimBastard_: i think see broofa 
+[23:24] JimBastard_: so*
+[23:24] JimBastard_: i think so
+[23:24] polyrhythmic: cloudhead: I understand, but why do you need to name the function instead of referencing an anonymous function
+[23:25] cloudhead: because it's gonna be used as a constructor
+[23:25] JimBastard_: http://gist.github.com/359571
+[23:25] JimBastard_: like that?
+[23:25] JimBastard_: cloudhead are you familiar with how prototype works in JS? sorry if thats a dumb question
+[23:25] cloudhead: yea, except F is dynamic
+[23:25] broofa: cloudhead:  so?  Why is name important in the constructor?
+[23:25] cloudhead: I need it for later
+[23:25] cloudhead: the alternative is to set my own name property
+[23:26] cloudhead: like, functionName
+[23:26] broofa: you doing regex parsing of the toString() version of the function?
+[23:26] JimBastard_: >.<
+[23:26] cloudhead: no
+[23:26] broofa: (then… hmm… do functions even have a 'name' property???)
+[23:26] JimBastard_: friend's don't let friends abuse toString() + RegExp() + eval()
+[23:26] cloudhead: yea, functions have a name attribute
+[23:27] broofa: careful, JimBastard, that's an essential part of resig-style inheritance, which is the most performant way of supporting super-style references.
+[23:27] broofa: like it or not, it's a necessary evil sometimes.
+[23:27] JimBastard_: you can increase speed doing certain operations for sure, its just not something you want to use without really thinking about it
+[23:28] cloudhead: function F(){}; f = new F; f.constructor.name // 'F'
+[23:28] broofa: I'll be damned ...
+[23:28] broofa: var f = function() {}
+[23:28] broofa: undefined
+[23:28] broofa: f.name
+[23:28] broofa: ""
+[23:28] broofa: var f = function someFunction() {}
+[23:28] broofa: undefined
+[23:28] broofa: f.name
+[23:28] broofa: "someFunction"
+[23:28] cloudhead: yea
+[23:28] cloudhead: so I'd like to set that manually
+[23:28] broofa: readonly
+[23:28] cloudhead: dynamically, rather, but it's readonly yea
+[23:29] mjr_: You could use a different property on the function like WebKit's displayName.
+[23:29] cloudhead: yea, that's what I'm doing
+[23:29] cloudhead: but I wish I could just use 'name'
+[23:30] CodeOfficer has joined the channel
+[23:30] cloudhead: `new Function` should take a name parameter
+[23:30] cloudhead: but it doesnt..
+[23:30] ssteinerX has joined the channel
+[23:32] polyrhythmic: yeah cloudhead I just looked that up myself
+[23:33] cloudhead: yea, I was sure it did
+[23:33] kriskowal has joined the channel
+[23:33] inimino: JimBastard: weren't you working on some sort of "ajax history" thing?
+[23:34] creationix has joined the channel
+[23:43] maushu has joined the channel
+[23:48] polyrhythmic: well it looks like if you define a function with a name, the only way being to do function fnName() or var variable = function fnName(), the name is defined in the global scope, so you might as well eval() it
+[23:49] inimino: polyrhythmic: that is not the case
+[23:54] broofa: polyrhythmic:  "function bar() { function foo() {};}" defines 'foo' in the scope of 'bar'
+[23:54] creationix has joined the channel
+[23:54] jbrantly has left the channel
+[23:55] fizx has joined the channel

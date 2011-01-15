@@ -1,0 +1,552 @@
+[00:00] <Tim_Smart> isaacs: Can't get the global object into the sandbox >.<
+[00:00] <isaacs> Tim_Smart: huh?
+[00:01] <isaacs> you mean even evalcx(..., {global:global}) doesn't pass it in?
+[00:01] <Tim_Smart> ya
+[00:01] <isaacs> what do you see in hte sandbox?
+[00:02] <Tim_Smart> I'll quickly check
+[00:02] <isaacs> hmm, it says that this is true:  process.evalcx("global", {global:global}) == global
+[00:03] <isaacs> but this fails: process.evalcx("global.foo = 1", {global:global}); process.assert(global.foo = 1)
+[00:03] <isaacs> but this fails: process.evalcx("global.foo = 1", {global:global}); process.assert(global.foo === 1)
+[00:04] <Tim_Smart> http://gist.github.com/338332
+[00:05] <Tim_Smart> I'm just passing in basic stuff atm
+[00:05] <Tim_Smart> no depreciation function etc
+[00:07] <isaacs> so, you've got a global in there
+[00:07] <isaacs> and a GLOBAL
+[00:07] <isaacs> what's the problem?
+[00:07] teemow has joined the channel
+[00:07] <Tim_Smart> Yeah, I inserted those, except the properties aren't available
+[00:07] <isaacs> ah, yeah
+[00:08] <isaacs> looks like global objects are bound to the context.
+[00:08] <isaacs> maybe you could clone it?
+[00:08] <Tim_Smart> yup
+[00:08] <Tim_Smart> yeah, but it would also clone all the 'Function', Array etc
+[00:09] <isaacs> oh, no, that won't work, because evalcx only looks to own properties
+[00:09] <isaacs> and Object.create sets up the target as a __proto__ parent and returns the child
+[00:10] <isaacs> yeah, weird.  Object.keys doesn't return anything on global, either
+[00:10] <isaacs> like, ever
+[00:10] <isaacs> node> global.bar = 2
+[00:10] <isaacs> 2
+[00:10] <isaacs> node> Object.keys(global)
+[00:10] <isaacs> []
+[00:11] <Tim_Smart> yeah
+[00:11] jpoz has joined the channel
+[00:12] <isaacs> so, on the one hand, evalcx is great because you'd have no access to the global scope AT ALL.  otoh, evalcx is awful for the same reason
+[00:12] voodootikigod_ has joined the channel
+[00:12] <isaacs> imo, this belongs in userspace, then
+[00:12] <Tim_Smart> Yeah, I'm experimenting with keeping all node API's out of global
+[00:12] <isaacs> it's got benefits, but also some trade-offs
+[00:13] <isaacs> but you could do something like s = require("sandbox");  s.enter();  /* now stuff uses evalcx instead, no global access */  s.exit() /* back to regular node style */
+[00:13] <isaacs> so you could do s.enter(); evilAPI = require("evil");  s.exit();
+[00:14] <isaacs> so then, s.enter would just do registerExtension to make JS run in evalcx, and then s.exit would put it back the way it was
+[00:15] <isaacs> it'd be good to save the original function from require("module").extensionCache.compile first
+[00:15] <isaacs> er, require("module").extensionCache[".js"].compile
+[00:15] <isaacs> speaking of which... i should not be keeping the dots on the exts.
+[00:15] <isaacs> that's lame.
+[00:16] <isaacs> how would you feel about registerExtension("coffee", function)
+[00:16] <isaacs> instead of ".coffee"
+[00:19] <isaacs> oh, nvm, actually, that makes things simpler in only 2 places, but more complicated in lots of other places.
+[00:22] siculars has joined the channel
+[00:25] teemow has joined the channel
+[00:27] <Tim_Smart> isaacs: yay. Everything in node is now namespaced to GLOBAL
+[00:27] <Tim_Smart> instead of attaching everything to global
+[00:27] <Tim_Smart> meaning I can successfully Object.create on GLOBAL
+[00:32] eelco has joined the channel
+[00:33] dekz_ has joined the channel
+[00:39] <isaacs> Tim_Smart: wait, wut?
+[00:39] <isaacs> i thot global and GLOBAL were the same object
+[00:39] mrjjwright has joined the channel
+[00:39] <Tim_Smart> Yeah, because if you look at the top of node.js
+[00:39] <Tim_Smart> (src/node.js)
+[00:39] <isaacs> right
+[00:39] <isaacs> process.global.process = process;
+[00:39] <isaacs> process.global.global = process.global;
+[00:39] <isaacs> global.GLOBAL = global;
+[00:40] <Tim_Smart> I don't really think we should be inserting our API's into the global, so I'm namespacing them
+[00:40] <Tim_Smart> yup
+[00:40] <isaacs> so, what're you changing, exactly?
+[00:40] <isaacs> just doing GLOBAL instead of global?
+[00:45] <Tim_Smart> isaacs: global & GLOBAL will be a object shared by all modules
+[00:46] alexiskander has joined the channel
+[00:46] teemow has left the channel
+[00:48] burny has joined the channel
+[00:49] <Tim_Smart> actually, wait
+[00:49] <Tim_Smart> global should equal the 'module' global
+[00:49] <Tim_Smart> global.global should equal the 'all modules' global
+[00:58] softdrink has joined the channel
+[01:04] <Tim_Smart> isaacs: Hmmm I have made GLOBAL different to global
+[01:05] marienz has left the channel
+[01:05] <Tim_Smart> GLOBAL = shared context, global = module context
+[01:05] <Tim_Smart> I'm not sure I like it though
+[01:05] <isaacs> oic
+[01:05] <isaacs> yeah, that's a bit odd
+[01:06] <Tim_Smart> you can't go global.global as it ends up being circular
+[01:06] <Tim_Smart> So you have to create a different variable name
+[01:07] sh1m has joined the channel
+[01:07] <Tim_Smart> isaacs: This is something that should have been done from the beginning >.<
+[01:13] <Tim_Smart> isaacs: http://github.com/Tim-Smart/node/commit/9f3f09a9a8ac771776344d0288c0c6babdbc167e
+[01:22] hellp has joined the channel
+[01:24] markwubben has joined the channel
+[01:24] binary42 has joined the channel
+[01:26] jashkenas has joined the channel
+[01:29] aho has joined the channel
+[01:32] rtl has joined the channel
+[01:36] ditesh has joined the channel
+[01:41] Tim_Smart has joined the channel
+[01:43] joshholt_ has joined the channel
+[01:47] mfeiri_ has joined the channel
+[01:48] <_ry> does anyone know a some good pages with web design examples?
+[01:49] <jashkenas> um. http://cssbeauty.com/gallery/
+[01:49] <inimino> `g css zen garden
+[01:49] <gbot2> mezzoblue § css Zen Garden Design List - http://www.mezzoblue.com/zengarden/alldesigns/
+[01:50] <inimino> ...how is that not http://www.csszengarden.com/
+[01:51] <inimino> _ry: oh, there was some excitement earlier in the channel
+[01:51] <_ry> about what?
+[01:51] <inimino> some spam
+[01:52] <_ry> yeah. we need to get control of this channel.
+[01:52] <_ry> i applied with freenode
+[01:52] <_ry> :/
+[01:52] <_ry> never heard anything back
+[01:52] <inimino> ok, I applied today also
+[01:52] <inimino> they said it might be expedited since we had some excitement, but that's died down now
+[01:53] stepheneb has joined the channel
+[01:53] <_ry> inimino: you should be in charge of the #node.js op-getting effort :)
+[01:53] <_ry> i'm sure you just have to go into #freenode every couple days and complain :)
+[01:53] <inimino> hehe, I'll see what I can do :)
+[01:54] <Tim_Smart> _ry: Thoughts on http://github.com/Tim-Smart/node/commits/require-rewrite ?
+[01:54] <Tim_Smart> I have been discussing it with jashkenas and isaacs 
+[01:56] <_ry> i haven't looked yet
+[01:56] <_ry> Tim_Smart: there is someone else doing some work on that code
+[01:56] <_ry> let me find the link
+[01:56] <_ry> http://wiki.github.com/herby/node/whatsdifferentfromrysversion
+[01:57] <Tim_Smart> OK. Maybe he should get in contact with isaacs then
+[01:57] <_ry> Tim_Smart: i'm trying desperately to force net2 in today
+[01:57] <Tim_Smart> _ry: Ah. Good luck sir!
+[01:57] <_ry> and i probably won't be working on node next week
+[01:58] <inimino> :(
+[01:58] <_ry> well, i suppose i'll merge patches but i won't be doing dev
+[01:58] <_ry> (going to vancouver)
+[01:58] <Tim_Smart> Right, well I'll continue to rub against a few people, and see what their thoughts are
+[01:58] <inimino> oh, my city (I'm not there now though)
+[01:59] <inimino> have fun :)
+[01:59] <_ry> anyway - I'm happy about refactoring the module stuff. I just need it in consumable peices :)
+[01:59] <Tim_Smart> _ry: I'm sure everything can be rebased later :D
+[01:59] <Tim_Smart> It's all a mess atm
+[02:00] <_ry> it'd be great if the three of you could work on this together and co-review code
+[02:00] <_ry> i'll send an email to you guys
+[02:00] <Tim_Smart> cool thanks, saves me writing a message :p
+[02:02] mattly has joined the channel
+[02:08] alexiskander has joined the channel
+[02:18] charlesjolley has joined the channel
+[02:24] rictic has joined the channel
+[02:26] dgathright has joined the channel
+[02:33] eelco has joined the channel
+[02:38] <_ry> node just crashed my mac twice in a row...
+[02:39] <Tim_Smart> _ry: Ouch! I haven't had that happen yet
+[02:41] <_ry> yeah - it's pretty crazy - not sure what happened. it was during test/pummel/test-tcp-many-clients.js
+[02:45] <rictic> Besides using sys.debug, is there any way to ensure that something has finished writing to stdout?
+[02:50] <isaacs> so, Tim_Smart, don't use or trust any of my -wip branches, unless you are willing to suffer through a major cleanup later.
+[02:50] <isaacs> "wip" means "lots of sloppy ugly commits"
+[02:50] <Tim_Smart> :p Yeah I just poked around a bit
+[02:50] <isaacs> stuff shows up, disappears, shows up again
+[02:50] <isaacs> etc.
+[02:50] <Tim_Smart> That sandbox idea is a proof-of-concept
+[02:50] <isaacs> then that's a good place for it :)
+[02:50] <_ry> wtf. crashed again.
+[02:51] <Tim_Smart> isaacs: So I didn't really care what I based it on
+[02:51] <isaacs> sure
+[02:51] <isaacs> wip == poc
+[02:51] <isaacs> (not ===, but they coerce to the same value)_
+[02:52] <isaacs> ok, i'm out.  have fun.
+[02:52] joshholt1 has joined the channel
+[02:52] joshholt_ has joined the channel
+[02:54] <jashkenas> _ry: we can reliably crash or freeze it on OSX by logging a bunch with "puts"
+[02:55] <_ry> i'm crashing the entire machine
+[02:55] <jashkenas> this, for example, freezes after the first batch of output: http://gist.github.com/338434
+[02:55] <_ry> node crashing hardly surprises me :)
+[02:55] <jashkenas> like kernel panic? like restart?
+[02:55] <_ry> kernel panic 
+[02:55] <jashkenas> yikes.
+[02:56] 31NAAJ41B has joined the channel
+[02:56] 17SAAMKSL has joined the channel
+[02:56] <_ry> net2 fixes your crash
+[02:57] <jashkenas> sweet.
+[02:57] <_ry> it will be merged very soon now.
+[02:58] <_ry> does anyone want to try to see if they can repeat this crash?
+[02:58] <jashkenas> I'm game.
+[02:58] <_ry> pull the latest net2
+[02:59] <_ry> ./configure --debug && make 
+[02:59] <_ry> ./node_g test/pummel/test-tcp-many-clients.js
+[03:00] <jashkenas> ... building ...
+[03:02] <Tim_Smart> _ry: I'll give it a shot
+[03:02] <Tim_Smart> ACTION close all programs
+[03:02] <Tim_Smart> *closes
+[03:02] <_ry> somthing like this really shouldn't be possible
+[03:03] <jashkenas> pummeling now.
+[03:04] <jashkenas> How long does it go for?
+[03:04] <_ry> a minute many
+[03:04] <_ry> maybe
+[03:04] <jashkenas> It says: "okay!"
+[03:05] <jashkenas> Congratulations, your kernel really is fucked -- it's not Node.
+[03:06] <_ry> great...
+[03:06] cjk2121 has joined the channel
+[03:06] <Tim_Smart> I'll confirm in a minute
+[03:07] binary42 has joined the channel
+[03:10] pedrobelo has joined the channel
+[03:11] <jashkenas> open question -- how is process.compile supposed to be used if it can't even see "require" ?
+[03:12] <Tim_Smart> jashkenas: The module system currently uses it by wrapping the code in a function, then calling the function
+[03:12] <Tim_Smart> and passing in w/e as arguments
+[03:12] dgathright has joined the channel
+[03:13] <_ry> jashkenas: 10.6.2?
+[03:14] <jashkenas> _ry: yup.
+[03:14] <Tim_Smart> I'm testing on 10.6.2 atm
+[03:14] <Tim_Smart> Hash's, c's and periods's. Nice.
+[03:16] <Tim_Smart> _ry: "Okay!"
+[03:16] <_ry> okay! :/
+[03:17] <Tim_Smart> No kernel panic here :p
+[03:19] <jashkenas> ACTION thinks _ry's been doing too much kernel hacking in his sleep.
+[03:21] <_ry> maybe i should stop storing my magnets on top of my laptop
+[03:24] <Tim_Smart> jashkenas: What do you think about (sandbox thing) renaming 'sandbox' to local and LOCAL?
+[03:24] <Tim_Smart> matches up with global and GLOBAL that way
+[03:24] <jashkenas> nice. -- that's what I think.
+[03:26] eelco has joined the channel
+[03:44] JimBastard_ has joined the channel
+[03:45] <JimBastard_> he came , he saw, he got banned and unbanned from github. ladies and gentle i present you the 9th blunder of the world......JiiiiiiiiiiiiiiiiiiiiiiiimmmmmmmmmmBaaaaaaaaaaaaastard
+[03:45] <JimBastard_> its time to mind your manors and man your minors, Jim is in the building
+[03:49] cjk2121 has left the channel
+[03:50] <Tim_Smart> JimBastard_: Oh dear
+[03:50] <JimBastard_> i haven't slept since yesterday
+[03:53] <Tim_Smart> JimBastard_: Most people would probably recommend that you sleep right about now
+[03:54] <JimBastard_> naaah im gonna implement coroutines in node
+[03:54] <JimBastard_> can anyone explain to me what a coroutine is first
+[03:54] <JimBastard_> :p
+[03:55] <JimBastard_> maybe more docs
+[03:55] <KungFuHamster> well when two routines love each other very much...
+[03:55] <_ry> any last minute patches? i'm doing a release before merging net2 to master
+[04:04] creationix has joined the channel
+[04:07] <Tim_Smart> _ry: Not from me. But you could stick one of these on http://image57.webshots.com/157/8/6/24/411480624fFQaAw_ph.jpg
+[04:09] dekz has joined the channel
+[04:10] <CIA-77> node: 03Zoka 07master * rb29f787 10/ wscript : 
+[04:10] <CIA-77> node: Eliminate debug(x) statements from src/node.js and lib/*.js for release build
+[04:10] <CIA-77> node: http://groups.google.com/group/nodejs/browse_thread/thread/8f20bcef6d6d96b7 - http://bit.ly/cBkPI5
+[04:10] <CIA-77> node: 03Ryan Dahl 07net2 * rac684f3 10/ (lib/http.js lib/net.js src/node_buffer.cc src/node_buffer.h): Add legacy 'binary' encoding/decoding methods to Buffer - http://bit.ly/aPtTLf
+[04:10] <CIA-77> node: 03Ryan Dahl 07net2 * r025116f 10/ (8 files in 5 dirs): Move Buffer into own module - http://bit.ly/cGkDgX
+[04:10] <creationix> what's this I hear about net2 being done soon?
+[04:11] <_ry> http://nodejs.org/dist/node-v0.1.33.tar.gz get it while it's hot
+[04:11] <_ry> creationix: i'm merging it now
+[04:11] <JimBastard_> yaya
+[04:11] <_ry> it's not done
+[04:11] <_ry> but who cares :)
+[04:11] <JimBastard_> looking good _ry you the man
+[04:11] <creationix> _ry: awesome, we'll get to help finish it that way
+[04:11] <_ry> 0.1.33 will be the last release on the old stuff
+[04:12] <_ry> we'll have a couple releases of cleaning up net2
+[04:12] <_ry> then 0.2
+[04:12] <_ry> i'll probably bump to 0.1.90 next release
+[04:12] <_ry> (yeah , fuck semver)
+[04:13] <creationix> sweet, I'll update my live sites to net2 for some testing!
+[04:13] <jashkenas> _ry: don't see the tag on github...
+[04:14] <_ry> jashkenas: just waiting for the build bots to check it
+[04:16] <_ry> i suspect we're not going to have a release for a couple weeks after this
+[04:16] <_ry> while net2 stuff gets fixed
+[04:20] fictorial has joined the channel
+[04:24] <creationix> where's the link to the buildbot?
+[04:24] <_ry> http://buildbot.nodejs.org:8010/waterfall
+[04:25] <creationix> thanks
+[04:26] PyroPete1 has joined the channel
+[04:26] <Tim_Smart> FreeBSD isn't very good at ping pong :p
+[04:28] <CIA-77> node: 03Ryan Dahl 07master * r618296e 10/ (AUTHORS ChangeLog doc/api.txt doc/index.html wscript): bump version - http://bit.ly/biWDVd
+[04:28] <CIA-77> node: 03Ryan Dahl 07net2 * r663269f 10/ (lib/tcp.js src/node.cc lib/tcp_old.js): old tcp module is now tcp_old - http://bit.ly/9Lqg6i
+[04:28] <CIA-77> node: 03Ryan Dahl 07net2 * r139c91e 10/ lib/net.js : Support old 'binary' encoding in net.js - http://bit.ly/dwNip9
+[04:30] silentrob has joined the channel
+[04:30] <inimino> :D
+[04:30] <creationix> _ry: do you get to use node at Joyent, or do you work on other server stuff mainly?
+[04:31] <_ry> yes, node
+[04:33] <creationix> that's cool :)
+[04:36] [Pwner]John has joined the channel
+[04:44] <_ry> meh
+[04:46] derferman has joined the channel
+[04:56] <_ry> http://github.com/ry/node/commit/cc053e7df7fb1bf44c094b62b8c33820b8497e35
+[05:01] morgan has joined the channel
+[05:02] bh has joined the channel
+[05:02] <creationix> awesome, let it begin
+[05:03] RayMorgan has joined the channel
+[05:09] <Tim_Smart> Awesome. For anyone that complains about changing API's, "THIS IS NODE!"
+[05:09] <Tim_Smart> in a spartan voice
+[05:13] kriskowal has joined the channel
+[05:34] eelco has joined the channel
+[05:52] dgathright has joined the channel
+[06:00] andreavonhollen has joined the channel
+[06:10] <CIA-77> node: 03Ryan Dahl 07master * rc66a0a7 10/ lib/net.js : recvBuffer -> pool - http://bit.ly/9OOjRA
+[06:35] <micheil> @#$% Why do I always miss tim?
+[06:46] <CIA-77> node: 03Ryan Dahl 07master * r069099a 10/ test-net-server.js : Remove old test file - http://bit.ly/c2WPQp
+[06:52] morgan has joined the channel
+[06:56] OSInet has joined the channel
+[07:05] morgan has joined the channel
+[07:06] creationix has joined the channel
+[07:13] JimBastard has joined the channel
+[07:14] <creationix> alright, got my sites running on the new net2 code, everything seems to be working so far.
+[07:14] r11t has joined the channel
+[07:25] rednul has joined the channel
+[07:32] dnolen has joined the channel
+[07:33] _sh has joined the channel
+[07:38] morgan has joined the channel
+[07:40] <brainproxy> using faye and a simple stress test with node, I'm getting this kind of thing:
+[07:40] <brainproxy> öSyntaxError: Unexpected token ILLEGAL
+[07:41] <brainproxy> I'm thinking there is an array or something that's overflowing
+[07:41] <brainproxy> and something's getting stomped on
+[07:41] <brainproxy> but I'm pretty new at this and haven't had any luck finding it by trial and error yet :)
+[07:42] _sh` has joined the channel
+[07:57] qFox has joined the channel
+[07:57] <mattly> yet another rack-like: http://github.com/mattly/rabbit
+[07:58] dgathright has joined the channel
+[08:05] kennethkalmer has joined the channel
+[08:20] <JimBastard> is anyone running the v2 branch of node-dirty?
+[08:23] dgathright has joined the channel
+[08:24] <brainproxy> i just did a git pull
+[08:24] <brainproxy> and now I'm getting has not method 'split' errors :/  so I must be up to date in some fasion :D
+[08:24] <JimBastard> what did you pull
+[08:25] <brainproxy> i just did git pull, i guess of master
+[08:25] <JimBastard> >.<
+[08:25] <brainproxy> heh
+[08:25] <JimBastard> i see now
+[08:28] <Tim_Smart> brainproxy: net2 has been merged
+[08:29] <Tim_Smart> brainproxy: You might want to use the latest stable version until all the docs and things are synced up
+[08:29] <brainproxy> gotcha
+[08:29] <brainproxy> how do I switch the remote branch again?
+[08:45] <Tim_Smart> brainproxy: git checkout stable
+[08:46] <Tim_Smart> brainproxy: otherwise: git branch stable origin/stable && git checkout stable
+[08:46] <Tim_Smart> try the first one first
+[08:58] <brainproxy> Tim_Smart:  thanks, I fig'd it out, was just being lazy cause I'm tired
+[08:59] <brainproxy> I got stable built
+[08:59] <brainproxy> but I'm getting this now
+[08:59] <brainproxy> öObject #<a ServerResponse> has no method 'write'
+[08:59] <brainproxy> that's when usng it in comb with the faye node stuff from jcoglan
+[09:00] <brainproxy> I'm too tired to mess w/ it anymore at this point, but I'll revisit the issue tomorrow
+[09:06] Tim_Smart has joined the channel
+[09:08] <Tim_Smart> lawl. I create a 'cat' child process on net2, called exit() on it, and it took down my laptop
+[09:09] <brainproxy> nice
+[09:09] <brainproxy> :D
+[09:16] Tim_Smart has joined the channel
+[09:16] <Tim_Smart> lawl, owned my laptop again
+[09:17] <Tim_Smart> seems calling kill() twice in a row does it
+[09:19] neytema has joined the channel
+[09:38] hellp has joined the channel
+[09:51] neytema has joined the channel
+[09:52] Tim_Smart has joined the channel
+[09:53] javajunky has joined the channel
+[09:55] <konobi> Tim_Smart: maybe loosing the PID inbetween?
+[09:56] <Tim_Smart> konobi: Yeah something like that
+[09:56] <konobi> then it'll kill PID 0
+[09:56] <Tim_Smart> It kills the window manager instead >.>
+[09:56] <konobi> which be bad
+[09:56] <Tim_Smart> konobi: Yes it does
+[09:56] <Tim_Smart> so, it should add in a check or something
+[09:56] <konobi> "If pid is 0, sig shall be sent to all processes (excluding an unspecified set of system processes) whose process group ID is equal to the process group ID of the sender, and for which the process has permission to send a signal."
+[09:57] <Tim_Smart> looking at child_process.cc atm
+[10:01] <Tim_Smart> Yeah it doesn't check the pid
+[10:01] <Tim_Smart> lol
+[10:03] <CIA-77> node: 03Ryan Dahl 07master * rbfdc421 10/ src/node_child_process.cc : 
+[10:03] <CIA-77> node: Don't kill negative PIDs
+[10:03] <CIA-77> node: Fixes issue GH-79. - http://bit.ly/curURC
+[10:03] <_ry> Tim_Smart: --^
+[10:04] <Tim_Smart> _ry: Wonderful
+[10:04] <Tim_Smart> was just about to patch it
+[10:06] <Tim_Smart> _ry: I'm implementing web workers in a library, as close to spec as possible. Did some testing for the terminate method, and my laptop crashed >.<
+[10:07] <_ry> Tim_Smart: add a channel for sending fds
+[10:07] <_ry> the binding is already there
+[10:08] <_ry> don't use net.Stream for it though - make a special purpose one
+[10:08] <Tim_Smart> huh what?
+[10:08] <Tim_Smart>  lol
+[10:08] <_ry> recvMsg, sendMSG are what you need
+[10:08] <Tim_Smart> yup
+[10:08] <Tim_Smart> So where is this channel stuff implemented?
+[10:09] <_ry> src/node_net2.cc
+[10:10] <_ry> http://github.com/ry/node/blob/master/src/node_net2.cc#L982
+[10:10] <_ry> anyway. /me slees
+[10:10] <_ry> ps
+[10:11] <Tim_Smart> So I send the fd through stdoi? OK night.
+[10:16] pdelgallego has joined the channel
+[10:18] maushu has joined the channel
+[10:26] <maushu> Is the channel still not registered?
+[10:26] <maushu> inimino, you have failed me.
+[10:26] Gruni has joined the channel
+[10:28] neytema has joined the channel
+[10:34] <javajunky> hmm, so anyone got http working with net 2 yet ? ;) 
+[10:36] <Tim_Smart> javajunky: I just uses streams
+[10:36] <Tim_Smart> *it
+[10:37] <javajunky> Just looking at the code http://github.com/ry/node/blob/master/lib/http.js#L478 , what defines connectionListener ?
+[10:37] <Tim_Smart> http://github.com/ry/node/blob/master/lib/http.js#L488
+[10:38] <javajunky> doh!  I read that, didn't realise it was in the global scope , such a fool ;)
+[10:38] erikvold has joined the channel
+[10:39] <Tim_Smart> :p
+[10:39] <Tim_Smart> Currently playing with the new socket stuff, implementing web workers :D
+[10:39] <javajunky> it all looks good, I just wish my crashing errors were err, useful ;)
+[10:42] <Tim_Smart> javajunky: http://github.com/ry/node/blob/master/test/simple/test-http-server.js
+[10:42] <Tim_Smart> generally the tests have good enough examples ;)
+[10:42] <javajunky> \yeah I'm running a test case fine, just picking apart whats different ;) 
+[10:43] <javajunky> (but thanks)
+[10:56] javajunky has joined the channel
+[11:04] rnewson has joined the channel
+[11:04] rnewson has joined the channel
+[11:14] morgan has joined the channel
+[11:17] mau has joined the channel
+[11:27] <maushu> Everyone sleeping? xD
+[11:28] <maushu> Wait, net2 was merged?!
+[11:29] <maushu> Fire up teh machines!
+[11:29] <maushu> Let's crash and burn!
+[11:31] <Tim_Smart> rofl
+[11:31] <Tim_Smart> I'm about to sleep
+[11:31] <Tim_Smart> (GMT +12)
+[11:32] neytema has joined the channel
+[11:34] al3x_ has joined the channel
+[11:37] rnewson has joined the channel
+[11:37] rnewson has joined the channel
+[11:39] michaelk_ has joined the channel
+[11:47] neytema has joined the channel
+[11:55] <javajunky> ;) 
+[12:05] <javajunky> my first .net2 patch just hope its right
+[12:18] mfeiri has joined the channel
+[12:23] cedricv has joined the channel
+[12:26] hellp has joined the channel
+[12:38] <javajunky> good times, express.js now works with the merged net2 code.
+[12:47] mau has joined the channel
+[12:52] unomi has joined the channel
+[13:04] MattJ has joined the channel
+[13:24] voodootikigod_ has joined the channel
+[13:45] arlolra has joined the channel
+[13:50] xueyu has joined the channel
+[13:57] jashkenas has joined the channel
+[14:00] <KungFuHamster> so are there any changes or needed changes to http://nodejs.org/api.html because of this net2 stuff in 1.33?
+[14:02] rnewson has joined the channel
+[14:02] rnewson has joined the channel
+[14:15] QuietKnight has joined the channel
+[14:19] erikcorry|away has joined the channel
+[14:26] <micheil> KungFuHamster: yes, but the docs are written yet.
+[14:27] <micheil> KungFuHamster: you'll be safest using a current release
+[14:39] mjr_ has joined the channel
+[14:39] lifo has joined the channel
+[14:43] markwubben has joined the channel
+[14:50] alex-desktop has joined the channel
+[14:52] binary42 has joined the channel
+[14:57] <KungFuHamster> micheil, ok thanks
+[15:12] unomi has joined the channel
+[15:15] ithinkihaveacat has joined the channel
+[15:17] technoweenie has joined the channel
+[15:18] technowe_ has joined the channel
+[15:18] javajunky has joined the channel
+[15:20] rtl has joined the channel
+[15:26] technoweenie has joined the channel
+[15:28] arlolra has joined the channel
+[15:32] unomi has joined the channel
+[15:47] unomi has joined the channel
+[16:03] javajunky has joined the channel
+[16:24] derferman has joined the channel
+[16:35] blakemizerany has joined the channel
+[16:37] dnolen has joined the channel
+[16:37] ekiru has joined the channel
+[16:41] dnolen has joined the channel
+[16:58] Monk has joined the channel
+[16:58] <ekiru> fs doesn't have a function for recursively creating directories, does it?
+[17:00] Monk has joined the channel
+[17:01] <inimino> ekiru: I don't think so
+[17:04] cloudhead has joined the channel
+[17:05] sztanphet has joined the channel
+[17:07] rtl has joined the channel
+[17:17] Yuffster has joined the channel
+[17:18] Monk has joined the channel
+[17:23] <maushu> The Lovely Bones... what a great movie.
+[17:23] Monk has joined the channel
+[17:23] unomi has joined the channel
+[17:24] <maushu> Now I feel inspired to do something about it. This is why I hate being a programmer. There alot of things not artistically related! Drat it. 
+[17:24] <javajunky> ekiru: no, although there are a couple of aptches submitted on the mailinglist 
+[17:29] BRMatt has joined the channel
+[17:30] Monk has joined the channel
+[17:36] mrjjwright has joined the channel
+[17:41] juvenn has joined the channel
+[17:46] maushu has joined the channel
+[17:52] sztanpet has joined the channel
+[17:56] steadicat has joined the channel
+[17:57] dnolen has joined the channel
+[17:59] maritz has joined the channel
+[18:09] dgathright has joined the channel
+[18:27] quirkey has joined the channel
+[18:27] JimBastard has joined the channel
+[18:37] <mattly> Douglas Crockford writes CoffeeScript in his head and his fingers automatically compile it to Javascript as he types #crawfordfact
+[18:37] <crockbot> Douglas Crockford is the first reference listed in Wikipedia's JavaScript page, really.
+[18:37] <mattly> er shit
+[18:50] juvenn has joined the channel
+[18:50] juvenn has left the channel
+[18:51] [Pwner]John has joined the channel
+[18:52] indiefan has joined the channel
+[18:52] unomi has joined the channel
+[18:56] xla has joined the channel
+[18:57] aguynamedben has joined the channel
+[19:01] QuietKnight has joined the channel
+[19:03] maushu has joined the channel
+[19:03] <maushu> Segmentation fault
+[19:04] <maushu> AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAH
+[19:06] <maushu> This is not working. ;_;
+[19:06] pdelgallego has joined the channel
+[19:07] JoePeck has joined the channel
+[19:09] joshholt_ has joined the channel
+[19:10] <maushu> Has anyone been able to send a 300kb file with createReadStream through http?
+[19:12] <maushu> I don't know if Im doing wrong or this a net2 bug.
+[19:14] unomi has joined the channel
+[19:15] <maushu> http://pastie.org/private/eldr8lepxosxdc4otaamfg
+[19:16] <konobi> _ry: looking forward to monday?
+[19:32] mrjjwright has joined the channel
+[19:34] <KungFuHamster> if any of you talented programmers is bored, I'm somewhat of a newbie and I'm having trouble figuring out how to convert the simple tcp echo server example to broadcast to all other connected clients instead of just echoing... maybe write it up and post it to a pastebin or something? :)
+[19:36] kriskowal has joined the channel
+[19:36] sztanphet has joined the channel
+[19:37] binary42 has joined the channel
+[19:47] steadicat has joined the channel
+[19:50] r11t has joined the channel
+[20:11] Tim_Smart has joined the channel
+[20:12] mikeal1 has joined the channel
+[20:19] Monk has joined the channel
+[20:26] aguynamedben has joined the channel
+[20:34] stepheneb has joined the channel
+[20:39] unomi has joined the channel
+[20:44] maushu has joined the channel
+[20:44] <maushu> When node.js doesn't work like it should it makes me sad.
+[20:47] <QuietKnight> a sad panda?
+[20:47] <maushu> A sad panda.
+[20:48] <maushu> Is there a problem with 100kb files and streams?
+[20:50] <maushu> Thats weird.
+[20:50] <maushu> ACTION verifies the results again.
+[20:51] silentrob has joined the channel
+[20:51] silentrob has left the channel
+[20:55] <maushu> Wait... it can't be...
+[20:56] <maushu> HTTP PROTOCOL! BECAUSE OF YOU I'VE SEEN HELL!
+[20:58] r11t_ has joined the channel
+[21:02] r11t_ has joined the channel
+[21:04] <maushu> response.write of httpserver is async, right?
+[21:12] cpleppert has joined the channel
+[21:14] <maushu> Okay, so the file stream is reading all the bytes... yet the proxy keeps telling ~3500 bytes are missing.
+[21:15] rictic has joined the channel
+[21:20] <maushu> This is goddamn weird.
+[21:32] qFox has joined the channel
+[21:34] jherdman has joined the channel
+[21:55] javajunky has joined the channel
+[21:56] alexiskander has joined the channel
+[22:01] sveisvei has joined the channel
+[22:11] alexiskander has joined the channel
+[22:14] javajunky has joined the channel
+[22:34] mattly has joined the channel
+[22:34] javajunky has joined the channel
+[22:43] arlolra has joined the channel
+[22:49] mikeal1 has joined the channel
+[22:57] mrjjwright_ has joined the channel
+[23:01] mrjjwright has joined the channel
+[23:03] dnolen has joined the channel
+[23:07] siculars has joined the channel
+[23:08] RJ2_ has joined the channel
+[23:10] martyn___ has joined the channel
+[23:17] alexiskander has joined the channel
+[23:18] lifo has joined the channel
+[23:28] mikeal1 has joined the channel
+[23:34] pavelz has joined the channel
+[23:39] pavelz has joined the channel
+[23:41] tmpvar has joined the channel
+[23:50] pavelz has joined the channel
+[23:55] <tmpvar> woord

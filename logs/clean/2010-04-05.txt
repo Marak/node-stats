@@ -1,0 +1,1068 @@
+[00:03] technoweenie has joined the channel
+[00:10] mikeal has joined the channel
+[00:17] towski has joined the channel
+[00:24] <atmos> tmpvar: what runs that ?
+[00:24] <tmpvar> php for the moment /duck
+[00:26] <atmos> crazy, is it open source ?
+[00:26] kriszyp has joined the channel
+[00:26] <tmpvar> proof of concept mode atm.. but i dont mind sharing the source
+[00:27] <atmos> does it do any polling or whatever as the tasks run ?
+[00:27] <tmpvar> no polling, it hooks up to a github post-recieve hook
+[00:30] <tmpvar> something like http://gist.github.com/355847
+[00:33] <Connorhd> does anyone know of a module that supports SSL websockets yet?
+[00:34] <atmos> Connorhd: nope, do share if you find one
+[00:34] <atmos> is it just an ssl request or an https request ?
+[00:36] <tmpvar> holy shit, I now have a new project for when I fly out to AZ http://philip.html5.org/tests/canvas/suite/tests/
+[00:38] <tmpvar> 788 tests
+[00:41] <Connorhd> atmos: I'm not sure how it works
+[00:53] <fictorial> What would be faster, concatenating a few strings together and a single call to buffer.asciiWrite() or multiple buffer.asciiWrite() calls?
+[00:53] isaacs_ has joined the channel
+[00:53] <fictorial> isaacs: maybe I could find this out using node-bench?  I'm not familiar with that.
+[01:04] <_ry> fictorial: probably concating first
+[01:05] <_ry> not sure though
+[01:05] <_ry> one would hope the opposite
+[01:05] <fictorial> Trying to get node-bench to work
+[01:06] magcius has left the channel
+[01:07] <fictorial> node-bench v0.0.2 works with node v0.1.33 ... ok
+[01:07] <fictorial> now, writing the benchmark functions; then I'll let you know!
+[01:07] <fictorial> oh wait
+[01:08] <fictorial> no Buffer in Node < 0.1.33
+[01:08] <fictorial> Er, <=
+[01:08] mjr_ has joined the channel
+[01:10] <fictorial> I'll just use concatenation for now until node-bench works with Node HEAD
+[01:10] <fictorial> thanks
+[01:11] mattly has joined the channel
+[01:16] <fictorial> _ry: I need to write an entire Buffer into a second Buffer at an offset.  I suppose first.binaryWrite(second.binarySlice(0, second.length)) will do.  Is there any optimizations to be had for avoiding the slicing, encoding, decoding, etc?
+[01:16] <_ry> em
+[01:16] <_ry> we should do a memcpy
+[01:16] <_ry> i need it too
+[01:16] <fictorial> that'd be nice indeed :)
+[01:17] <_ry> api suggestion?
+[01:17] <_ry> bufferA.copy(bufferB, at, start, length) ?
+[01:17] <fictorial> well you have utf8Write, asciiWrite, binaryWrite... perhaps bufferWrite instead of copy?
+[01:18] <_ry> bufferA.copy(offsetA, bufferB, offsetB, length) ?
+[01:18] <fictorial> else, yes, that looks good
+[01:18] <fictorial> write does imply a write head/offset/position
+[01:19] <_ry> bufferA.write(bufferB, offsetA, offsetB, length)
+[01:19] <fictorial> hmm, no. I mean if you use "write" then that makes offsetA implicit, right?
+[01:19] <_ry> oh wait, let's look at the Binary/E thing
+[01:19] <fictorial> ok
+[01:19] <_ry> i think they have this
+[01:20] <_ry> copy(target, Number(targetStart_opt), Number(start_opt)), Number(stop_opt)) Buffer
+[01:20] <fictorial> sure that's fine - I just found their wiki+spec too
+[01:20] <fictorial> ok
+[01:21] <CIA-77> node: 03Ryan Dahl 07master * rcd577d5 10/ (26 files in 6 dirs): Upgrade V8 to 2.2.0.3 - http://bit.ly/9Cxzq2
+[01:24] rtl has joined the channel
+[01:25] <ddollar> is process.compile safe to compile random code in and not have it interfere with the state outside it at all?
+[01:27] ditesh|cassini has joined the channel
+[01:32] <_ry> ddollar: no
+[01:39] <inimino> deanlandolt: don't forget Opera
+[01:39] mjr__ has joined the channel
+[01:39] <fictorial> _ry: I'm curious, how come we cannot add a realloc() to Buffer to grow it dynamically?
+[01:40] <fictorial> s/grow/resize/ (could shrink too)
+[01:40] <_ry> fictorial: if the buffer refers to a slice, then it gets hard
+[01:40] <_ry> because that data may be owned by someone else...
+[01:40] <fictorial> so slices are themselves 0-copy Buffer objects?
+[01:40] <_ry> b = new Buffer(1024);
+[01:41] <_ry> b2 = b.slice(100, 200);
+[01:41] <_ry> b2.resize(500);
+[01:41] <_ry> yes
+[01:41] <fictorial> You could throw "unsupported operation on a slice" in that case, no?
+[01:41] <_ry> you could. we could also say that buffers shouldn't be expected to enforce that security
+[01:42] <fictorial> I suppose the real trouble is: b = new Buffer(1024); b2 = b.slice(900, 1023); b.resize(500); ... b2 points to out of bounds data.
+[01:43] <_ry> well, supposedly we'd realloc it
+[01:43] <_ry> but you'd also have things where you are in a loop
+[01:44] <_ry> well say you do
+[01:44] <fictorial> hmm? if the slice's parent buffer is shrunken, and the slice was a slice of the part removed, the slice is invalid after the resize on the parent
+[01:44] <_ry> for(var i = 0, l = buffer.lenght; i < l ; i++) { ...}
+[01:44] <_ry> but in the ... some other slice that resizes the buffer
+[01:44] <_ry> well.. hm
+[01:44] <_ry> i guess that wouldn't be affected actually
+[01:45] <_ry> oh i see what you're saying 
+[01:45] <fictorial> GrowableBuffer would be cool at least ... No problems there. I would just punt if the growBy() call (made up) is on a slice.
+[01:45] <_ry> i thought you did b2.resize()
+[01:46] <_ry> yeah, it'd have to be grow only
+[01:46] <fictorial> Yep, because of slices
+[01:47] <fictorial> Binary/E says "A ByteArray is a mutable, flexible (explicitly growable and shrinkable) representation of a C unsigned char (byte) array. " heh
+[01:48] <fictorial> So I suppose Node's Buffer is the analog of the Binary/E "ByteString" then and not ByteArray. OK
+[01:48] <fictorial> ACTION knows jack about commonjs
+[01:48] <inimino> well, it's not immutable
+[01:49] <inimino> it's just not resizable
+[01:49] <fictorial> sure, right - ok
+[01:49] <fictorial> it's its own thing then really
+[01:49] <_ry> i'm basically making Buffer fit to my needs.. i hope to turn it into a commonjs proposal at some point
+[01:49] <_ry> binary/f is pretty close
+[01:49] <fictorial> right on 
+[01:50] <inimino> none of the binary/* seemed to have great momentum, except Binary/B which had some issues
+[01:50] <inimino> I'm glad you did your own thing
+[01:52] <inimino> maybe this'll be my week to finally catch back up to current HEAD
+[01:52] mjr_ has joined the channel
+[01:56] indiefan has joined the channel
+[01:57] gf3 has joined the channel
+[02:01] <CIA-77> node: 03Ryan Dahl 07master * rb72ffc0 10/ (3 files in 2 dirs): Add buffer.copy - http://bit.ly/ajny9L
+[02:01] <_ry> fictorial: ---^
+[02:01] <fictorial> Nice, thanks :)
+[02:01] <_ry>  var bytesCopied = buffer.copy(target, targetStart, sourceStart, sourceEnd);
+[02:01] <fictorial> I was just trying my hand at adding GrowBy()
+[02:02] <_ry> i should probably work on some docs today...
+[02:02] <_ry> boring.. :(
+[02:03] <fictorial> is there a standard v8 Exception for out of memory?
+[02:04] <_ry> no
+[02:04] <fictorial> ok
+[02:05] <_ry> fictorial: what you can do is call V8::LowMemoryNotification()
+[02:05] <_ry> not ure what that does
+[02:05] <fictorial> ok I'll dig
+[02:05] <_ry> I guess GCs
+[02:05] <fictorial> probably
+[02:06] <fictorial> Yep, exactly what it does.
+[02:06] <fictorial> CollectAllGarbage
+[02:06] <fictorial> Is that blocking?
+[02:06] admc has joined the channel
+[02:06] bpot has joined the channel
+[02:06] <fictorial> I.e. malloc fails, call LowMemoryNotification, then try malloc again?
+[02:07] <_ry> fictorial: doesn't matter - has to be done in the v8 thread
+[02:07] <fictorial> what does?
+[02:07] <_ry> GC
+[02:07] <fictorial> Oh wait, isn't all the memory allocation outside the scope of V8's memory management anyway?
+[02:08] <fictorial> er, memory allocation __for Buffers__
+[02:08] <_ry> for buffers, yes
+[02:08] <_ry> but V8 says when they get freed
+[02:08] <fictorial> Ok
+[02:09] r11t_ has joined the channel
+[02:09] <fictorial> so I didn't follow your GC thread bit... I shouldn't retry immediately thereafter then yes?
+[02:09] <fictorial> that's a notification to kick off GC which won't happen until v8 gets control again basically?
+[02:10] <_ry> i think if realloc fails you ought to throw
+[02:10] <_ry> we should probably have a standard node exception for that
+[02:10] <fictorial> ok... yeah, probably.
+[02:10] <_ry> but just throw Exception::Error for now
+[02:10] <fictorial> ok
+[02:13] <fictorial> patch done - writing up a test and rebuilding now ... bbiab
+[02:22] mrjjwright has joined the channel
+[02:35] <CIA-77> node: 03Ryan Dahl 07master * rec0266a 10/ src/node_timer.cc : 
+[02:35] <CIA-77> node: Update libev's clock when starting timers
+[02:35] <CIA-77> node: Make the timeouts more accurate. See test/pummel/test-timers.js - http://bit.ly/ctGJyW
+[02:35] rtomayko_ has joined the channel
+[02:44] r11t has joined the channel
+[02:47] kenneth_reitz has joined the channel
+[02:51] mcarter has joined the channel
+[03:05] binary42 has joined the channel
+[03:14] devinus has joined the channel
+[03:24] gwoo has joined the channel
+[03:25] tlrobinson_ has joined the channel
+[03:32] RayMorgan has joined the channel
+[03:34] <fictorial_bbl> _ry: b=new Buffer(10); b[11]=0xFF does not throw... Should it?
+[03:34] <fictorial_bbl> or even b[10]=0xFF does not throw
+[03:41] chakrit has joined the channel
+[03:45] mrjjwright has joined the channel
+[03:48] mikeal has joined the channel
+[03:53] tilgovi has joined the channel
+[03:54] fizx has joined the channel
+[03:58] <_ry> fictorial: how would you?
+[03:58] <fictorial> TBH I don't see where operator[] is defined!
+[03:58] <fictorial> This is just a generic property access I guess
+[03:58] <fictorial> But where is that in Buffer?
+[03:59] PyroPete1 has joined the channel
+[04:00] mattly has joined the channel
+[04:00] <_ry> fictorial: http://github.com/ry/node/blob/ec0266a56cca10c5faa92c54baf2d3bb447ece65/src/node_buffer.cc#L136-138
+[04:01] <fictorial> Ah... that's what that is.  
+[04:01] <fictorial> Well, in context, it reads like a book actually. Heh.
+[04:01] <fictorial> set indexed properties to external data array -- geez, it doesn't get more obvious heh
+[04:01] <_ry> http://github.com/ry/node/blob/ec0266a56cca10c5faa92c54baf2d3bb447ece65/deps/v8/include/v8.h#L1356-1365
+[04:02] <fictorial> ok, well now that I know how that works, it doesn't seem possible :)
+[04:02] <_ry> could implement our own []= , but i don't know
+[04:03] <_ry> i like the one-liner
+[04:04] <fictorial> Yeah, it's fine.  I was just assuming that [] on out of bounds would throw.
+[04:04] <fictorial> It does return "undefined"
+[04:05] <_ry> goes along with the "keep on truckin'" principle 
+[04:06] <mjr_> so what does it actually do if you write past the end?
+[04:06] <_ry> ignroes it, i assume
+[04:13] <fictorial> _ry: sent you a pull request for Buffer.growBy
+[04:13] <fictorial> Let me know if there any problems. That was my first foray into anything v8 related.
+[04:16] <_ry> fictorial: so if realloc move memory, it frees the old pointer
+[04:17] <_ry> if there are multiple slices to which refer to the same blob, and one of those blobs gets grown
+[04:17] <fictorial> aha, yes.
+[04:17] <_ry> so probably Blob should be changed to have a pointer to it's data
+[04:18] <_ry> then the data can change out from under it
+[04:18] <_ry> (instead of using the bytes[1] thing)
+[04:18] <fictorial> instead of the char[1] trick
+[04:18] <fictorial> yeah
+[04:20] <CIA-77> node: 03Ryan Dahl 07master * r01f7d44 10/ (23 files in 4 dirs): Upgrade to WAF 1.5.15 - http://bit.ly/aVXoAC
+[04:20] <_ry> i'll do that quickly that quicky
+[04:20] <_ry> you can rebase your changes onto it
+[04:20] <fictorial> oh, ok -
+[04:25] fictorial has joined the channel
+[04:27] silentrob has joined the channel
+[04:28] <fictorial> LimeChat likes to crash lately.
+[04:34] <kenneth_reitz> fictorial: use Linkinus
+[04:35] <kenneth_reitz> fictorial: It's so much better
+[04:35] <fictorial> ¿Qué es esto?
+[04:37] Yuffster_ has joined the channel
+[04:37] brian_ has joined the channel
+[04:39] <CIA-77> node: 03Ryan Dahl 07master * r85487c8 10/ (src/node_buffer.cc src/node_buffer.h): 
+[04:39] <CIA-77> node: Blob struct should not contain actual data
+[04:39] <CIA-77> node: This is to allow eventual realloc without messing up the data_ references in
+[04:39] <CIA-77> node: all the slices. - http://bit.ly/cndCEg
+[04:39] <_ry> fictorial: ---^
+[04:40] kriskowal has joined the channel
+[04:40] <_ry> fictorial: maybe you can add to your test a few other slices
+[04:41] <_ry> fictorial: and make sure they still have a reference
+[04:41] <fictorial> good call - 
+[04:41] <_ry> kriskowal: hey
+[04:41] <kriskowal> dude
+[04:41] <kriskowal> two days without internet; just got in
+[04:42] <_ry> camping i hope? 
+[04:42] <kriskowal> alas
+[04:42] <kriskowal> relations in mid-ca
+[04:42] <kriskowal> anual slide in the slideshow of cousins' children growing up
+[04:42] <_ry> :)
+[04:43] <kriskowal> sup
+[04:43] kenneth_reitz has joined the channel
+[04:44] <_ry> fictorial and i are adding a few things to Buffer
+[04:45] <kriskowal> what kind of stuff?
+[04:45] <_ry> realloc
+[04:45] <kriskowal> grow?
+[04:45] <_ry> yeah
+[04:45] <kriskowal> cool.  may i recommend doing that on length assignment?
+[04:45] <kriskowal> it's what all the kids are doing these days
+[04:46] <_ry> can't shrink though
+[04:46] <fictorial> right
+[04:46] <kriskowal> without loss of data
+[04:46] <_ry> we got all these slices floating about with refs
+[04:46] <kriskowal> ah
+[04:47] <kriskowal> might not be such a great idea to do realloc at that layer, given that fact
+[04:47] <kriskowal> i've been doing all my reallocs by new Buffer(newLength) oldBuffer.copy(newBuffer)
+[04:47] <_ry> yeah. i'm hesitant 
+[04:48] <_ry> but you miss the optmization of resizing the memory without copy
+[04:48] <kriskowal> ah, yes.
+[04:48] <kriskowal> well, grow-only isn't so bad.
+[04:48] <kriskowal> you could emulate shrink by setting the length, perhaps
+[04:48] <_ry> having realloc is a bit dangerous because having people build up buffers by appending chars is going to be slow
+[04:49] <fictorial> _ry: people will always find a way to do silly things though :)
+[04:49] <kriskowal> indeed.  there's also the problem of growing buffers that share a common allocation
+[04:49] <kriskowal> if two buffers grow, they might expect to own the new region
+[04:50] <_ry> yeah. it think people really only ought to realloc if they control the allocation
+[04:50] <_ry> s/it/i/
+[04:50] mikeal has joined the channel
+[04:50] <_ry> hm
+[04:51] <fictorial> I'm not sure I follow allocation ownership here, sorry
+[04:51] <_ry> yeah it's a tricky function to add
+[04:51] <_ry> well if you follow the convention that only the allocater can realloc, then you can trust that the new data isn't used
+[04:52] <kriskowal> i won't bring up the securability implications; it's possible to construct an attenuated, immutable, securely sharable bytestring from buffer/b on top of buffer pretty trivially
+[04:52] <_ry> right
+[04:52] <_ry> i'm not worried about security so much
+[04:52] <_ry> inside a process we all trust each other
+[04:53] <kriskowal> just as in an iframe, and among windows from the same domain, all scripts trust each other
+[04:53] <kriskowal> but i won't belabor the point; it's a separable concern
+[04:54] <kriskowal> buffers simply will simply have to be unavailable in sandboxed code, when all the other pieces that make that possible are in play
+[04:55] <kriskowal> simply will simply.  yay
+[05:11] nsm has joined the channel
+[05:12] <_ry> kriskowal: is binary/f your current state of the art?
+[05:12] <fictorial> _ry: pull request sent
+[05:12] <kriskowal> it's close
+[05:13] <kriskowal> i think i've gone beyond it a little bit and plan to write a binary/f/0 that is a strict subset of it; the part i think ought to be written at the embedding layer
+[05:13] <kriskowal> there's quite a bit that can be done by patching in js
+[05:13] <kriskowal> http://github.com/kriskowal/narwhal-lib/blob/narwhal-lib/lib/narwhal/buffer.js
+[05:14] <kriskowal> bearing in mind that this is still based on your net2 branch of yore
+[05:14] <kriskowal> on a related note, the narwhal-lib branch is factored out of narwhal and can *probably* be safely used in node, though not all of its parts are relevant
+[05:15] <kriskowal> i moved a lot of potential collisions into the narwhal/ subtree
+[05:22] keeto has joined the channel
+[05:27] <kriskowal> _ry is it possible to reset the non-blockingness of stdio when node exits?
+[05:28] rtomayko has joined the channel
+[05:29] bmizerany has joined the channel
+[05:33] <_ry> kriskowal: what would that mean?
+[05:34] <kriskowal> when i run node under vim, when node exits, vim is unable to redraw
+[05:34] <kriskowal> i isolated the problem to the O_NONBLOCK on stdio
+[05:34] <kriskowal> i'm guessing it would be possible to read the old value and restore it on exit, and i'm guessing vim would be able to redraw again afterward
+[05:35] <kriskowal> but i'm just guessing; are you knowing?
+[05:36] <_ry> i don't know.. like setting unsetting the O_NONBLOCK flag right before exit fixes it?
+[05:36] tlrobinson_ has joined the channel
+[05:36] <kriskowal> by "unable to redraw", i mean that ^L fails to clean up the view; there are patches of missing characters and the screen size appears to be incorrect
+[05:36] fizx has joined the channel
+[05:36] <kriskowal> i could check, maybe before jsconf
+[05:37] <_ry> oh i see what you mean
+[05:39] <_ry> unsetting O_NONBLOCK doesn't seem to fix it
+[05:41] <_ry> is it because vim does vfork,exec and the node process shares the STDOUT_FILENO ?
+[05:42] <_ry> bizzare
+[05:42] <kriskowal> perhaps i can try to reproduce with fork,exec instead; i presume that there's no difference in the treatment of the fd though
+[05:42] <_ry> i think you're right, it should record the flags and reset them
+[05:42] <kriskowal> oh, vim
+[05:42] <kriskowal> vim certainly does a fork/exec itself
+[05:44] <kriskowal> i prolly could talk to the vim people about reopening /dev/tty over stdio to fix the problem too
+[05:50] <_ry> kriskowal: i think i fixed it
+[05:50] <kriskowal> were you able to repro?
+[05:50] <_ry> yes
+[05:54] <CIA-77> node: 03Ryan Dahl 07master * rb0d1d6c 10/ src/node_stdio.cc : 
+[05:54] <CIA-77> node: Reset stdin, stdout fd flags on exit
+[05:54] <CIA-77> node: In vim, lauching node as a child process would mess up the screen. This was
+[05:54] <CIA-77> node: because Node was changing the flags on STDIN_FILENO and STDOUT_FILENO
+[05:54] <CIA-77> node: (particularly adding O_NONBLOCK) but those flags leaked into the parent
+[05:54] <CIA-77> node: process. - http://bit.ly/9fylwS
+[05:54] <_ry> kriskowal: ---^
+[05:54] <kriskowal> sweet, thanks
+[06:00] <_ry> fictorial: hmm
+[06:00] <_ry> fictorial: seems there is still a problem
+[06:00] <kriskowal> _ry on another note, i'm trying to write a waitpid(pid, cb)
+[06:00] <_ry> i'll comment on github
+[06:00] <fictorial> ok
+[06:01] <_ry> kriskowal: how do you do that?
+[06:01] <kriskowal> running into trouble persisting the callback handle
+[06:01] <kriskowal> case and point: i haven't succeeded yet
+[06:01] <_ry> kriskowal: is there a way to get notification when a certain pid terminates?
+[06:02] <kriskowal> ah, yeah
+[06:02] <kriskowal> you're using it in childProcess, i think
+[06:03] <_ry> kriskowal: that's using SIGCHLD
+[06:03] <kriskowal> ah, i had presumed it was based on  sys/wait.h's waitpid
+[06:03] <kriskowal> which blocks, of course
+[06:05] <_ry> yeah - you can get an async calback when a child process terminates
+[06:05] <kriskowal> ev_child* should work though; i've been permuting that bit of code
+[06:05] <_ry> but afaik not from just any process
+[06:05] <kriskowal> yes, the docs say it has to be the parent, i think
+[06:05] <kriskowal> or root, presumably
+[06:06] <kriskowal> m.  maybe not
+[06:06] <kriskowal> in any case, i got the ev_child_init to work, but my callback didn't
+[06:06] <kriskowal> i presume that it has something to do with not being able to put handles on the heap
+[06:07] <kriskowal> not sure how to deal with that
+[06:07] <_ry> you could call waitpid in another thread
+[06:07] <_ry> and use an ev_async call
+[06:08] <kriskowal> aight
+[06:08] <kriskowal> you generally attach callbacks to an object like emitter to persist the handle, right?
+[06:08] <_ry> yeah
+[06:09] <kriskowal> how does that work if you throw away the emitter object?
+[06:09] <_ry> you can also create a Persistent<Function> handle
+[06:09] <_ry> allocate it on the heap
+[06:09] <_ry> let me find an example
+[06:09] <_ry> (that's probably what you want to do here)
+[06:09] <kriskowal> aaah
+[06:09] <kriskowal> persistents can go on the heap then
+[06:09] <kriskowal> i see
+[06:09] <kriskowal> yeah, it would be good to see the explicit unref code in an example
+[06:10] <_ry> http://github.com/ry/node/blob/b0d1d6c2b905e03f910f611fe5f916b30164d9b2/src/node.h#L61-78
+[06:11] <_ry> yeah, so you can use those functions
+[06:11] <_ry> each tiem you call waitpid, i guess it should start a new pthread
+[06:11] <_ry> hm
+[06:11] <_ry> it's going to have to make a new ev_async
+[06:11] <_ry> so you'll put the cb pointer in the async->data
+[06:12] <_ry> start the thread
+[06:12] <kriskowal> aye aye
+[06:12] <_ry> ev_async_signal() (or whatever it's called) from the thread once waitpid() is done
+[06:12] <_ry> then terminate the thread (just exit the function)
+[06:13] <_ry> from the main thread you'll get a callback from ev_async, you unwrap the callback, execute it, clean up
+[06:13] <_ry> this should probably go in its own source file
+[06:13] <kriskowal> i'm presently writing in a narwhal extension
+[06:13] <_ry> ah okay
+[06:13] <kriskowal> if you'd like it upstream, i can do it in a branch
+[06:13] <_ry> seems useful
+[06:14] <kriskowal> could be, but presently you're wrapping vfork/exec through a cleaner api.  this is necessary only for my sundry evil purposes.
+[06:14] <_ry> um, you should ask in #posix or something if this is the best way to do async waitpid()
+[06:14] <kriskowal> i'll have to drop by, thanks
+[06:17] isaacs has joined the channel
+[06:24] keeto_ has joined the channel
+[06:24] <kriskowal> _ry one fellow on #posix says that you get a sigchld for the termination of the process, but it's a zombie until you call wait or waitpid on it
+[06:25] qFox has joined the channel
+[06:26] <kriskowal> and the sigchld may not correspond to the exiting process, and could be a continue or pause, so i'd have to use poll to check whether it was zombie and then waitpid on it
+[06:28] tk has joined the channel
+[06:29] <_ry> kriskowal: but we're interested in non-child processes, right?
+[06:30] <kriskowal> he did not offer a general solution
+[06:30] <kriskowal> s/he/they
+[06:31] mikeal has joined the channel
+[06:32] <_ry> mikeal: your HEAD request problem has really thrown a wrench in my plans.
+[06:32] <mikeal> really?
+[06:33] <_ry> yeah. i've really overlooked this issue when designing my parser
+[06:33] mrjjwright has joined the channel
+[06:33] <mikeal> you can't just special case it?
+[06:33] <_ry> yeah, but it makes things less nice.
+[06:35] <_ry> you have to have information about higher level going-ons in order to find the message boundry
+[06:36] <kriskowal> _ry looks like we'd have to poll with kill(0, pid) to check a non-child process
+[06:36] <_ry> in order to find the response boundaries you need to know that you have or have not sent out a head
+[06:36] <mikeal> i haven't looked at the structure of the parser
+[06:37] <mikeal> could you just have an alternate response body parser
+[06:37] <_ry> it's just that you have to tell the parser information
+[06:37] <mikeal> so the current one can remain unchanged but it's just not called when you know the length will or must be zero
+[06:38] <_ry> it can be hacked in
+[06:38] <mikeal> but not cleanly :(
+[06:38] <_ry> i'll use the return value from the on_headers_complete callback to pass the information 
+[06:38] <_ry> 1 indicates it should not expect a body
+[06:38] <_ry> but.. yeah. really annoying
+[06:39] <_ry> oh well - i guess that's the internet
+[06:39] <mikeal> hehehe
+[06:39] <_ry> kriskowal: lame
+[06:39] <_ry> kriskowal: i think the pthread and waitpid is better
+[06:39] <_ry> ACTION away
+[06:58] <isaacs> mikeal: what's your HEAD problem?
+[07:00] <mikeal> when you make an HTTP HEAD request and it returns the content-length of the resource "end" never fires
+[07:00] <mikeal> because it thinks it's the content-length of the actually request, it's not, it's the content-length of the resource if you did a GET request
+[07:07] mrjjwright has joined the channel
+[07:11] <isaacs> mikeal: ahh, i see
+[07:11] <isaacs> hey, i just realized something...
+[07:11] <isaacs> when was multipart.js actually removed from node?
+[07:12] <isaacs> HA! it was on friday.
+[07:12] <isaacs> nice.
+[07:14] <isaacs> On the third day, yay, the multipart library did rise up once again...
+[07:14] <isaacs> http://github.com/isaacs/multipart-js/commit/cca723b88972414832889ef4f389bc38c2c39d09
+[07:19] teemow has joined the channel
+[07:22] charlesjolley has joined the channel
+[07:26] felixge has joined the channel
+[07:26] felixge has joined the channel
+[07:49] <micheil> nice work isaacs 
+[08:05] kriskowal has joined the channel
+[08:05] mikeal has joined the channel
+[08:05] felixge has joined the channel
+[08:05] mikeal1 has joined the channel
+[08:08] admc has joined the channel
+[08:24] Elfix has joined the channel
+[08:26] maritz has joined the channel
+[08:42] rtomayko has joined the channel
+[08:51] <mcarter> has process.stdio been moved?
+[08:57] chakrit has joined the channel
+[09:18] markwubben has joined the channel
+[09:18] hellp has joined the channel
+[09:32] javajunky has joined the channel
+[09:41] tisba has joined the channel
+[09:41] javajunky has joined the channel
+[09:49] chakrit has joined the channel
+[09:49] sveisvei has joined the channel
+[10:28] botanicus has joined the channel
+[10:37] maushu has joined the channel
+[10:45] markwubben_ has joined the channel
+[11:01] ssteinerX has joined the channel
+[11:09] xla has joined the channel
+[11:17] sveisvei has joined the channel
+[11:36] alex-desktop has joined the channel
+[12:07] nsm has joined the channel
+[12:16] demolithion has joined the channel
+[12:36] kriszyp has joined the channel
+[12:44] pmuellr has joined the channel
+[12:56] jamesduncan has joined the channel
+[12:57] gf3 has joined the channel
+[13:00] davidsklar has joined the channel
+[13:04] pmuellr_ has joined the channel
+[13:05] malkomalko has joined the channel
+[13:20] jherdman has joined the channel
+[13:32] jamesduncan_ has joined the channel
+[13:33] ditesh|cassini has joined the channel
+[13:43] figital has joined the channel
+[13:57] confounds has joined the channel
+[14:05] TheEnd2012 has joined the channel
+[14:10] nsm has joined the channel
+[14:11] mattly has joined the channel
+[14:13] alex-desktop has joined the channel
+[14:15] Yuffster has joined the channel
+[14:17] rtl has joined the channel
+[14:22] stepheneb has joined the channel
+[14:24] pmuellr has left the channel
+[14:24] stepheneb has joined the channel
+[14:38] aryounce has joined the channel
+[14:43] <fictorial> good morning
+[14:44] <technoweenie> morning
+[14:45] <mattly> morning!
+[14:45] <jherdman> hiii!
+[14:47] charlesjolley has joined the channel
+[14:55] binary42 has joined the channel
+[14:56] sudoer has joined the channel
+[14:58] wasabist has joined the channel
+[15:07] tekky has joined the channel
+[15:08] alexiskander has joined the channel
+[15:09] chakrit1 has joined the channel
+[15:12] steadicat has joined the channel
+[15:17] softdrink has joined the channel
+[15:20] <fictorial> _ry: http://github.com/fictorial/node/commit/804f8da5f3254f21e4eaf5ba04e95dc4b2cb33da
+[15:23] kriskowal has joined the channel
+[15:26] tmpvar has joined the channel
+[15:26] <tmpvar> yo
+[15:28] erikvold has joined the channel
+[15:29] tlrobinson_ has joined the channel
+[15:32] mattly has joined the channel
+[15:40] kenneth_reitz has joined the channel
+[15:41] kenneth_reitz has joined the channel
+[15:42] kenneth_reitz has left the channel
+[15:55] r11t has joined the channel
+[16:04] RayMorgan has joined the channel
+[16:09] callen has left the channel
+[16:12] tekky has joined the channel
+[16:12] mcarter has joined the channel
+[16:15] dnolen has joined the channel
+[16:17] dandean has joined the channel
+[16:21] indiefan has joined the channel
+[16:25] fijal has joined the channel
+[16:25] <fijal> hello
+[16:27] <fijal> when I compile node, there are warnings that someone (evpipe_write in ev.c in libev) does not check the return value of write
+[16:27] <fijal> that looks bad
+[16:27] <fijal> why is that?
+[16:27] stepheneb has joined the channel
+[16:29] bpot has joined the channel
+[16:29] <fijal> why your buildbots fail as well?
+[16:31] jamesduncan_ has joined the channel
+[16:31] sh1mmer has joined the channel
+[16:32] <deanlandolt> anyone know when felixge gets back?
+[16:35] joshbuddy has joined the channel
+[16:40] isaacs has joined the channel
+[16:40] <_ry> fijal: they aren't error, they are warnings
+[16:40] <_ry> fijal: buildbots fail because not all tests are passing at the moment
+[16:42] <fijal> _ry: what if the write fail?
+[16:43] <fijal> then the error won't be reported, because nobody checks it, right?
+[16:43] <fijal> I'm claiming that these warnings are sort of important
+[16:43] <fijal> usually
+[16:44] <nefD> hrm.. anyone happen to have first hand experience with running nginx + php via FastCGI? Particularly how the performance compares to a typical LAMP stack?
+[16:44] <_ry> fijal:http://pod.tst.eu/http://cvs.schmorp.de/libev/ev.pod#COMPILER_WARNINGS
+[16:44] mfeiri_ has joined the channel
+[16:45] <fijal> still
+[16:45] <fijal> it doesn't matter what compiler generates
+[16:45] <_ry> patches to libev can be directed upstream
+[16:45] <fijal> I think it's pretty serious issue to not check for write
+[16:45] <fijal> no
+[16:45] <fijal> my question is
+[16:45] <fijal> if this write fails
+[16:45] <fijal> error is hidden
+[16:45] <fijal> node.js will explode in grouse ways
+[16:45] <fijal> you have to have a pretty good reason to not check for the return value of write
+[16:45] <fijal> I think
+[16:47] CodeOfficer has joined the channel
+[16:47] <deanlandolt> fijal: i think what _ry is saying is that it's a libev issue, not a node issue...you should nag them about it :)
+[16:47] <fijal> ok
+[16:47] <fijal> but that renders node.js unusable basically
+[16:47] <fijal> because you use libev
+[16:47] <deanlandolt> oh, and IIRC "libev is our god. we do not question libev" :)
+[16:47] <fijal> right?
+[16:47] <fijal> ok
+[16:47] <_ry> fijal: you should understand before you question
+[16:47] <fijal> how about test failures?
+[16:48] <fijal> _ry: yes?
+[16:49] <_ry> well, as i said. bring it up with libev. but if you don't understand completly what you're worrying about, then be prepared to be ignored :)
+[16:50] <_ry> node might be unusable for many reasons, but not checking that return value is not one of them
+[16:50] RayMorgan_ has joined the channel
+[16:50] <fijal> hm
+[16:50] <fijal> so what's the policy of node for error recovery?
+[16:51] <_ry> fijal: what do you mean?
+[16:51] <fijal> well, if something wents wrong
+[16:52] <fijal> like I run a server and one of my clients disconnects in between
+[16:52] <fijal> or in the middle of sending TCP data
+[16:52] <_ry> it's usually handled with an 'error' event
+[16:52] <fijal> yeah, but that precisely comes back to my point about write
+[16:52] <fijal> if write fails and noone notices that
+[16:53] <fijal> how do you get an error?
+[16:53] <fijal> that's precisely what I'm worrying about
+[16:53] <fijal> do you have such tests?
+[16:54] <_ry> fijal: that write is for internal thread notification
+[16:55] <fijal> ok, that's better explanation
+[16:57] <fijal> I'm simply wondering - if I run production server and I run into rare crashes or wrong error recovery
+[16:58] <fijal> is your policy to fix it or is your policy to ignore the issue, because it's rare
+[16:58] <deanlandolt> fijal: monit and friends are your friends
+[16:58] <_ry> fijal: yes, our policy is to fix bugs
+[16:58] <fijal> deanlandolt: that's what I consider buggy software
+[16:58] <_ry> not checking write()'s return value does not imply bug
+[16:59] nsm has joined the channel
+[16:59] <fijal> _ry: no, but it points to a potential bug IMO
+[17:00] <fijal> one of my favorite bugs is for example if select returns a value to read but subsequent read blocks
+[17:00] <fijal> BUGS section in linux select
+[17:00] <fijal> would you consider this a bug?
+[17:00] <_ry> of course
+[17:01] <fijal> do you use nonblocking sockets?
+[17:02] <_ry> fijal: yes - that is the point of the project
+[17:03] <fijal> hm
+[17:03] <fijal> for some reason I though you use select loop
+[17:05] <_ry> fijal: Why don't you strace it yourself
+[17:05] <fijal> yeah, sorry
+[17:06] RayMorgan has joined the channel
+[17:06] fijal has left the channel
+[17:07] sh1mmer has joined the channel
+[17:08] lifo has joined the channel
+[17:08] <fictorial> Yay, Linkinus supports IGNORE :)
+[17:09] jed_ has joined the channel
+[17:10] mjr_ has joined the channel
+[17:14] <_ry> fictorial: i'm not so happy with keeping references of slices
+[17:14] <_ry> it's slow, and unnecessary
+[17:15] <_ry> i have buffers which have many thousands of slices
+[17:15] <fictorial> really?
+[17:15] <fictorial> wow
+[17:15] <fictorial> I wonder if its going to be slower than rewriting operator[] and operator[]= to replace SetIndexed...
+[17:15] <_ry> i basically block allocate a 40kb buffer, then read() and write() from it
+[17:15] <_ry> for all sockets
+[17:15] <_ry> then emit slices to 'data' evevents
+[17:16] <fictorial> oh, for node itself you mean
+[17:16] <_ry> ususally these slices are just a couple bytes
+[17:16] <_ry> yeah
+[17:16] <fictorial> oh geez - ok
+[17:16] kriskowal has joined the channel
+[17:16] <_ry> fictorial: i suspect using [] and []= is not really slow
+[17:17] <_ry> that's also not on the hot path really
+[17:17] sh1mmer has joined the channel
+[17:17] <fictorial> well, actually, I guess that is probably true.  if you consider how SetIndexProperties... is likely implemented, there's not much to it.
+[17:17] <_ry> at least for me
+[17:17] towski has joined the channel
+[17:18] <fictorial> I'd call it for every byte received for a stateful parser
+[17:18] <_ry> i mean, i'm still undecided if realloc is a necessary feature
+[17:18] <_ry> i guess it's nice, and i've watned it when writing node-amqp
+[17:18] <fictorial> necessary? no, it's not. one can create a new, larger Buffer, and copy the old one into it, and continue on.
+[17:19] <fictorial> ditto - it's a convenience.
+[17:19] <_ry> i think it'd be nice to experiement with it
+[17:20] <_ry> but if we see people taking buffers from 'data' events and reallocing them
+[17:20] <_ry> that'd be bad :)
+[17:20] <_ry> maybe we should restrict realloc to buffers whose off_ == 0 and length_ == blob_->length
+[17:20] <mjr_> hopefully that'd all just happen magically in JavaScript land.
+[17:21] <fictorial> not everyone is a stateful parsing genius either.  most examples now using strings and initially do something like this.inboundData += chunk; this.parseReplies(...)
+[17:21] <_ry> fictorial: yeah
+[17:22] <tisba> hmm, is there an event-based version of JSON.parse available for node?
+[17:22] <fictorial> it just makes things more difficult with Buffers since there's no equivalent of += that auto-extends like a String does
+[17:22] <_ry> tisba: no
+[17:23] <fictorial> Maybe an abstraction over multiple Buffer objects is in order
+[17:23] <fictorial> Like what NGiNX does
+[17:23] <tisba> _ry: k, thanks
+[17:24] <_ry> fictorial: i think a 'tape' abstraction would be nice
+[17:24] rednul has joined the channel
+[17:24] <fictorial> yes, that's a good name for it
+[17:24] <fictorial> NGINX doesn't resize buffers, it chains them... If you have 3 buffers that look like a single bigger buffer, and want byte at some offset, the "tape" knows in which buffer to find it
+[17:24] <fictorial> so the tape has an operator[] but the buffers therein use SetIndexedProper...
+[17:25] <fictorial> that would be great and fast and would avoid the need for GrowBy
+[17:25] <fictorial> ok
+[17:26] <fictorial> BufferTape could just be in JS too, no C++ needed.
+[17:26] <_ry> right
+[17:26] <fictorial> ok I'll hack it out
+[17:26] <_ry> tape.write("hello world")
+[17:26] <_ry> tape.write('more strings')
+[17:27] <_ry> would update the head
+[17:27] <mortens> ACTION embarks on his first real attempt at writing something with node:p
+[17:27] <fictorial> so internally it just uses some arbitrarily fixed size and adds a new buffer to the end of the tape as needed?  that works
+[17:28] <_ry> fictorial: would be nice if it kept track of its own memory, used a free list for the buffers
+[17:28] <_ry> to reduce GC
+[17:28] <_ry> especially if you use just one size
+[17:29] <fictorial> hmm
+[17:29] <_ry> http://github.com/ry/node/blob/master/lib/net.js#L212-239
+[17:29] <fictorial> you mean shared across all such tape instances?
+[17:29] <_ry> yeah
+[17:30] <_ry> http://github.com/ry/node/blob/ae805f10573e008702741a1e1bf85ce974968d52/lib/net.js#L212-239
+[17:30] <_ry> ^-- permlink for logs
+[17:31] <_ry> fictorial: shrug, maybe not, just a thought
+[17:31] <fictorial> Yeah, I'm thinking about it and it's not clicking... I'll think more :)
+[17:32] <_ry> ACTION away
+[17:32] <fictorial> anyway I'll work on an initial version of BufferTape or whatever we want to name it.
+[17:32] <sh1mmer> oh hell yes. :) http://www.yuiblog.com/blog/2010/04/05/running-yui-3-server-side-with-node-js/
+[17:33] fizx has joined the channel
+[17:34] fizx has joined the channel
+[17:34] charlesjolley has joined the channel
+[17:34] james has joined the channel
+[17:35] <fictorial> weird!
+[17:37] <Guest97021> sh1mmer: interesting stuff. it seems to me that visionmedia's ext.js might be more appropriate though
+[17:38] <sh1mmer> Guest97021: if you say so.
+[17:38] <Guest97021> part/
+[17:38] Guest97021 has left the channel
+[17:38] Guest97021 has joined the channel
+[17:39] rtomayko has joined the channel
+[17:43] jherdman has joined the channel
+[17:43] silentrob has joined the channel
+[17:45] r11t has joined the channel
+[17:49] r11t has joined the channel
+[17:49] RayMorgan has joined the channel
+[17:50] cpleppert has joined the channel
+[17:50] cpleppert has left the channel
+[17:53] r11t has joined the channel
+[17:58] r11t has joined the channel
+[17:59] dnolen has joined the channel
+[18:06] chakrit has joined the channel
+[18:07] joshbuddy has joined the channel
+[18:07] tek has joined the channel
+[18:09] <konobi> _ry: ping
+[18:12] chakrit has joined the channel
+[18:20] javajunky has joined the channel
+[18:20] keeto has joined the channel
+[18:20] rtl has joined the channel
+[18:24] admc has joined the channel
+[18:26] tekky has joined the channel
+[18:27] <_ry> konobi: pong
+[18:33] felixge has joined the channel
+[18:33] felixge has joined the channel
+[18:33] <CIA-77> node: 03Ryan Dahl 07master * r0301adf 10/ (test/pummel/test-keep-alive.js test/simple/test-http-cat.js): In tests, wait for 'listening' before connecting - http://bit.ly/ao1QzS
+[18:33] idoru has joined the channel
+[18:39] felixge has joined the channel
+[18:44] Aduros has joined the channel
+[18:48] <kriskowal> fictorial this is the narwhal/io-boot BufferIO implementation; it's what you want from BufferTape, based on Python's StringIO.  There's also a StringIO module which backs a String "tape" with a BufferIO and uses a transcoder pair for reading and writing.
+[18:48] <kriskowal> http://github.com/kriskowal/narwhal-lib/blob/narwhal-lib/lib/narwhal/io-boot.js#L400
+[18:48] mikeal has joined the channel
+[18:50] <fictorial> kriskowal: will check it out, thanks!
+[18:50] <_ry> kriskowal: the problem is the copy on resizing
+[18:50] <_ry> it should be a chain i think
+[18:51] <kriskowal> it has a settle method that gets called when the read head is past half of the buffer
+[18:51] <kriskowal> settling copies from the read head to the write head to the beginning of the buffer.  it also does automatic growing.
+[18:51] <kriskowal> growing is exponential on demand
+[18:52] <konobi> _ry: the postgres bindings don't have any transaction features, right?
+[18:52] <_ry> konobi: no
+[18:52] <konobi> hhhmmm...
+[18:52] <_ry> konobi: although, isn't that done at the sql layer?
+[18:52] <konobi> it can be i think
+[18:53] bronson has joined the channel
+[18:54] <kriskowal> _ry chain vs settling is an allocation churn vs copy cost sort of trade off.  in any case, my buffer copy method uses either memcopy or memmove based on whether the regions overlap.
+[18:54] <kriskowal> i haven't gotten around to consolidating my buffer fork with yours, but i intend to send patches up your way for the copy and copyFrom methods
+[18:55] gwoo has joined the channel
+[18:55] <kriskowal> this is the relevant section if someone is in a hurry http://github.com/kriskowal/node/blob/narwhal-master/src/narwhal_buffer.cc#L441-664
+[18:59] TheEnd2012_ has joined the channel
+[19:00] confounds has joined the channel
+[19:01] r11t_ has joined the channel
+[19:02] felixge has joined the channel
+[19:02] felixge has joined the channel
+[19:06] devinus has joined the channel
+[19:08] kriszyp has joined the channel
+[19:09] xla has joined the channel
+[19:09] jamesduncan_ has joined the channel
+[19:11] <isaacs> felixge: hey, if you get a chance, can you check to see if the parser in multipart-js works for your needs?
+[19:11] <felixge> isaacs: what's the plan for it, getting it back into node or keeping it user land?
+[19:11] <isaacs> felixge: keep in userland
+[19:11] <felixge> isaacs: ok
+[19:11] <isaacs> felixge: i camelCased the event names
+[19:11] <felixge> isaacs: i saw that, thanks :)
+[19:14] <deanlandolt> felixge: i have a few dirty questions for ya if you've got a second
+[19:14] <felixge> deanlandolt: sure
+[19:14] <felixge> isaacs: I'll give it a spin this week, I'm a little backed up with stuff atm
+[19:14] <isaacs> felixge: np
+[19:14] <deanlandolt> cool...i'd love to get this in as the default store in pintura -- right now it's just a file based json store that degrades pretty quick
+[19:15] <deanlandolt> what does process.EventEmitter.call(this) accomplish?
+[19:18] <felixge> deanlandolt: are you looking at the old version or the v2 branch?
+[19:18] <deanlandolt> 2.0
+[19:18] <deanlandolt> err, 0.2
+[19:18] <felixge> ether way, it's calling the parent contructor
+[19:18] <felixge> for the event emitter class which is inherited
+[19:18] <deanlandolt> still seeing a process.mixin used so i imagine it's still under construction
+[19:19] <deanlandolt> yeah, i see this: sys.inherits(Dirty, events.EventEmitter); at the end
+[19:19] <deanlandolt> i figure stub out the read/write streams in rhino pretty easily...it's really just the EventEmitter stuff that i'm unsure about
+[19:20] <felixge> deanlandolt: I'm not sure why you'd want to port dirty to Rhino?
+[19:20] <felixge> I mean with blocking I/O the whole thing is gonna suck pretty hard
+[19:20] <deanlandolt> so it could be the default store in perstore
+[19:20] <deanlandolt> felixge: yeah, but i can do quick and dirty non-blocking in rhino w/ threads
+[19:20] <deanlandolt> that's not hard at all
+[19:21] <felixge> deanlandolt: ok :)
+[19:21] <felixge> deanlandolt: well, the event emitter stuff is documented in node's docs
+[19:21] <felixge> deanlandolt: dirty doesn't do anything magic there
+[19:22] <deanlandolt> good deal...just wanted to make sure it wasn't more than i thought it was 
+[19:23] <deanlandolt> structurally the 0.2 stuff won't change a whole lot, right? you just need to dump process.mixin and such?
+[19:33] <felixge> deanlandolt: yes, and I'll add filter()
+[19:33] <felixge> deanlandolt: that's about it
+[19:33] <deanlandolt> cool...yeah, i was wondering where filter was :)
+[19:38] teemow has joined the channel
+[19:38] piranha has joined the channel
+[19:42] fizx has joined the channel
+[19:44] fizx has joined the channel
+[19:46] derferman has joined the channel
+[19:48] NyteOwl has joined the channel
+[19:52] piranha_ has joined the channel
+[19:53] NyteOwl has left the channel
+[20:04] derferman has joined the channel
+[20:06] stepheneb has joined the channel
+[20:10] indiefan has joined the channel
+[20:11] <mjr_> Is it possible to cancel a connection that's still waiting to connect?  It kind of looks like you can't.
+[20:13] dgathright has joined the channel
+[20:14] kenneth_reitz has joined the channel
+[20:14] kenneth_reitz has joined the channel
+[20:23] <ddollar> is anyone involved with the express project in here? have a quick question
+[20:26] javajunky has joined the channel
+[20:28] indiefan has joined the channel
+[20:33] <mikeal> i'm seeing that problem where the stdio "data" event isn't emitting
+[20:35] <mikeal> nm, i fixe dit
+[20:35] Iveaux has joined the channel
+[20:36] <mikeal> no, it's still there
+[20:36] binary42_ has joined the channel
+[20:36] teemow has joined the channel
+[20:36] <atmos> ddollar: i've written an express app
+[20:36] <atmos> whattup ?
+[20:37] <ddollar> atmos: trying to return an empty response,  halt(200, '')  and it keeps defaulting to an 'OK' body.. trying to find a way around it
+[20:38] <jherdman> why?
+[20:39] <ddollar> why am i trying to return an empty response? because there is no data to return
+[20:39] <atmos> ddollar: this.halt(200, '') ?
+[20:39] <ddollar> atmos: or return('')
+[20:40] <atmos> weird, i know this works http://github.com/atmos/webhooks.js/blob/master/lib/app.js#L72
+[20:40] <atmos> that's a json response though
+[20:40] <ddollar> yeah
+[20:40] <ddollar> it looks like express does a  body = body || standard_message_for_code[code]
+[20:41] <ddollar> and '' falls through || in javascript
+[20:41] <atmos> haha
+[20:41] <atmos> 204 ?
+[20:41] <javajunky> ddollar that should work (at least it used to)  
+[20:41] <javajunky> the chat example used to do it
+[20:41] <ddollar> hmm, 204 would work
+[20:41] bmizerany has joined the channel
+[20:42] <atmos> i'd see if it actually does work
+[20:42] <atmos> standard_message_for_code seems rather retarded
+[20:42] <atmos> i haven't looked too closely at the code though
+[20:42] <ddollar> http://github.com/visionmedia/express/blob/master/lib/express/request.js#L173
+[20:42] <javajunky> ddolar :  this.status(200); this.respond("");
+[20:43] <ddollar> respond says it's private api
+[20:44] <atmos> seems like halt should do that
+[20:44] <javajunky> ddollar: fair comment, it'll work for now though, might be worth asking as an issue on github,  I'm still trying to fix my most recent express pull ;)
+[20:45] <ddollar> will do, thanks :)
+[20:48] <nefD> uff. dbslayer is a pain to get installed..
+[20:49] <javajunky> godaamn I REALLY HATE SUBMODULES 
+[20:52] <ddollar> javajunky: hear, hear
+[20:52] <atmos> javajunky: me too, that's why i'm into seeing kiwi and/or npm get more adoption
+[20:54] <javajunky> atmos: yeah I'd love kiwi or npm to succeed (I've worked on both, although my npm fixes were early and got discarded) .. the absence of a PM is stopping me from encouraging people to adopt, but I guess I understand the concerns..a bit ;)
+[20:54] <javajunky> (I've fixed my git issue now, just needed to vent!) 
+[20:54] <CIA-77> node: 03Ryan Dahl 07master * r1097b02 10/ src/node.cc : Better, faster, idle notification - http://bit.ly/94LmF5
+[20:55] <atmos> hehe, yeah i dunno if it's the js culture that likes submoduling or if it's the lack of a real package manager people are using
+[20:56] drostie has joined the channel
+[20:56] <kriszyp> is there a way to fs.watchFile such that it doesn't keep the event loop waiting (for possible future events)?
+[20:57] <_ry> kriszyp: see the persistent option
+[20:57] creationix has joined the channel
+[20:57] <_ry> kriszyp: set it to false
+[20:57] <kriszyp> oh, nice, thank you
+[20:59] <creationix> _ry: what do you think about making setTimeout without a time argument to act the same as process.nextTick?
+[20:59] <creationix> I'm writing something that runs on node and the browser so I would like a uniform API
+[21:00] <felixge> jackyyll: http://debuggable.com/posts/git-fake-submodules:4b563ee4-f3cc-4061-967e-0e48cbdd56cb
+[21:00] <_ry> creationix: um...
+[21:00] <_ry> creationix: *Shrug*
+[21:00] <_ry> i don't like overloaded meanings, it's hard to keep track of
+[21:00] <creationix> how much slower is setTimeout(fn, 0) than process.nextTick(fn) anyway?
+[21:00] <tmpvar> thousands of nanoseconds :P
+[21:01] <creationix> it would have the same meaning, just speed up a case of setTimeout
+[21:01] <felixge> creationix: I think it's multiple times faster
+[21:01] <felixge> creationix: but I don't think setTimeout() should be hacked
+[21:01] <felixge> creationix: you can easily alias / overwrite / in your code
+[21:01] <jackyyll> felixge: ?
+[21:02] <jackyyll> wrong person?
+[21:02] <javajunky> atmos: I believe that its a deliberate and stated project position not to have an 'official' package manager (at this moment in time) rather than for a lack of possible options 
+[21:02] <felixge> jackyyll: yeah I think I meant javajunky 
+[21:02] <jackyyll> mmkay :p
+[21:02] <felixge> jackyyll: sorry
+[21:02] <creationix> felixge:  true, but then I have the overhead of my wrapper
+[21:02] <tmpvar> on the browser build out a process.nextTick = setTimeout; ?
+[21:03] <felixge> creationix: how often do you plan to call this thing? :)
+[21:03] <creationix> felixge: depends
+[21:03] <creationix> it's for converting sync functions to work async so they don't hijack the entire control flow
+[21:03] <creationix> I'l writing a control-flow library
+[21:04] <felixge> creationix: do you have an actual problem you are trying to solve?
+[21:04] technoweenie has joined the channel
+[21:04] <felixge> (sorry, just sounds like doing things more complex than they need to be)
+[21:04] <creationix> no, I just thought it was a way to simplify the node api (I would then propose to remove process.nextTick)
+[21:05] <creationix> since it's whole purpose was a faster setTimeout
+[21:05] <nefD> blargh.. all that and node.dbslayer is crazy out of date =\
+[21:05] <felixge> creationix: actually, it's not meant as a setTimeout, it's really meant as a nextTick
+[21:05] <felixge> I think setTimeout() is meant for a timed delay
+[21:05] <_ry> sorry - i'm going to force push
+[21:05] <nefD> doesn't look like theres much to it, though.. I suppose learning from whats here and writing something up myself wouldnt be too bad
+[21:05] <felixge> nextTick is independent of time (afaik)
+[21:05] <CIA-77> node: 03Ryan Dahl 07master * r801fb8a 10/ src/node.cc : Better, faster, idle notification - http://bit.ly/d6JKY9
+[21:06] <deanlandolt> creationix: does setTimeout work without a delay cross-browser? if so, thta does seem pretty nice
+[21:06] <creationix> felixge: fair enough, it's not a big deal, just wanted to see what you guys though
+[21:06] <felixge> setTimeout(fn, 0) should really be undefined. I mean it could just as well mean execute right away (sync)
+[21:06] <nefD> although, its using promise (which I take it was removed?), and im not at all informed about what those are, what to do if they are no longer available, etc :x
+[21:06] <felixge> deanlandolt: afaik setTimout(fn, 0) will make setTimeout use the smallest timeout depending on plattform / browser engine. Usually ~15ms
+[21:07] <felixge> but to me that's really a hack I'd like to stay in the browser world and not come over to node ;)
+[21:07] <deanlandolt> yeah, but does setTimeout(fn) default to 0 (which defaults to ~15 ms) in every browser? is the second `delay` arg optional?
+[21:07] <tmpvar> nefD, there is a node-promise project on github
+[21:07] <felixge> I mean, we can port bad APIs if they are standard. But porting bugs? I don't know :)
+[21:07] <deanlandolt> heh
+[21:07] <nefD> tmpvar:  Ah so.. i'll check that out, thanks
+[21:08] <javajunky> felixge: it'll take me a while to fully grok that and understand the implications ;) 
+[21:08] <felixge> javajunky: the fake sub modules?
+[21:08] <creationix> porting bugs? how about standardizing them (ECMA)
+[21:09] <javajunky> felixge: yeah, thx .. was a bit of a tease, 'partial' subtrees would be perfect for me atm, I just had to 'mootools-ise' something that I'm also using as a submodule which means I now have a load of 'cruft' in a 'public' folder meh ;)
+[21:09] <deanlandolt> creationix: actually, MDC specs an optional third arg for passing a list of additional params
+[21:10] <creationix> deanlandolt: that could be useful
+[21:10] <felixge> javajunky: sub trees and git are not buddies. I mean I have a friend who has a friend who claims it can be done by merging partial trees of remotes - but I'm not into that kind of fetish stuff ;)
+[21:12] admc has joined the channel
+[21:19] <javajunky> felixge: eek
+[21:28] hudlee123 has joined the channel
+[21:37] softdrink has joined the channel
+[21:38] <_ry> http://pastie.org/904497
+[21:38] <_ry> i'll just paste it into the channel:
+[21:38] <_ry> http = require('http');
+[21:38] <_ry> http.createServer(function (req, res) { res.writeHead(200, {'Content-Type': 'text/plain'}); res.close('Hello World');
+[21:39] <_ry> }).listen(8000);
+[21:39] <kriskowal> shortcut for write/close, eh?
+[21:39] <_ry> yeah
+[21:39] <kriskowal> mistern's encodings proposal has something similar going on
+[21:39] <inimino> hm
+[21:40] <_ry> it's necessary to get that all packed into a single packet
+[21:40] <kriskowal> i didn't like it, but the reasons and problems were different
+[21:40] <_ry> otherwise i have to do strange buffering 
+[21:40] <kriskowal> interesting
+[21:40] <inimino> maybe have a .send() or something?
+[21:41] <_ry> no
+[21:41] <_ry> but! i do want to s/close/end/
+[21:41] <_ry> http://pastie.org/904504
+[21:41] <_ry> so it will look like this eventually
+[21:41] <inimino> "end" is better
+[21:42] <_ry> no .send() - we're settled on .write()
+[21:43] <mjr_> Is it possible to close a Stream while it is connecting?
+[21:43] <inimino> I meant instead of overloading close() like that, adding a different method
+[21:43] <_ry> mjr_: forceClose()
+[21:43] <inimino> but it doesn't read as bad with 'end'
+[21:43] <_ry> inimino: oh
+[21:43] <mjr_> _ry: I can't make forceClose() close the connection until the connect times out.
+[21:43] <mjr_> Then it indeed closes right away.
+[21:44] <mjr_> I guess I'll boil it down to a simple test.
+[21:45] <_ry> mjr_: hm.. i guess getaddrinfo() is in the thread pool.. and when it comes back it probably wants to connect
+[21:45] <_ry> we might have to set a flag
+[21:45] <_ry> this stuff is hard to test
+[21:46] <_ry> i should probably install a mock dns library
+[21:53] <mjr_> I'm not sure this is in DNS.  Test case soon.
+[21:55] <isaacs> _ry: so, not .close()?  we're doing .end() now?
+[22:03] kenneth_reitz has joined the channel
+[22:03] <blazzy> _ry: what was that about a mock dns library?
+[22:05] tekky has joined the channel
+[22:08] gf3 has joined the channel
+[22:09] <blazzy> I took a crack at a c-ares implementation last night. trying to match current js api. I'm going to add the timeout functionality later tonight. and submit a patch for feedback.
+[22:09] <blazzy> unfortunately we lose ttl info for a bunch of queries
+[22:11] <blazzy> well all of them at the moment. but it is possible to have it for A and AAAA queries with the c-ares api
+[22:12] <mjr_> no ttl support seems bad.
+[22:12] <devinus> hrm
+[22:13] <_ry> isaacs: yeah, what do you think?
+[22:13] <isaacs> ACTION shrug
+[22:13] <isaacs> whatevs
+[22:13] <devinus> if you guys were to make an online game in node, what would the Player objects be if you designed it?
+[22:13] darkf has joined the channel
+[22:13] <_ry> blazzy: oh? who are you on the mailing list?
+[22:13] <blazzy> _ry: Krishna Rajendran
+[22:13] <blazzy> mjr_: yeah, i hope i'm just missing how to do it
+[22:14] <_ry> blazzy: cool - i don't think ttl is so important
+[22:14] <_ry> although would be nice
+[22:14] <_ry> but did you get queries working?
+[22:14] <_ry> did you go with the low-level binding?
+[22:14] <_ry> i'm very excited to see it
+[22:15] <_ry> also, do you have it included in deps/ ?
+[22:15] <_ry> if not i have a patch which does that
+[22:16] javajunky has joined the channel
+[22:17] <_ry> isaacs: yeah, what do you think about end()?
+[22:17] <_ry> isaacs: i thought it'd sound better in the context of responses and such
+[22:17] <isaacs> _ry: end() works fine, i guess.
+[22:17] <nefD> woot! was able to hobble together my own lil' dbslayer promise provider  using the outdated one as reference :P
+[22:18] <isaacs> _ry: i rather like close(), since it sounds like a hose that your'e tying off or something
+[22:18] <blazzy> _ry: I went with a lowish level binding. A channel is created in JS and the constructor is given a callback to handle socket state changes.
+[22:19] <_ry> blazzy: and so you use IOWatcher at the JS level?
+[22:19] <blazzy> _ry: yup
+[22:19] <_ry> awesome!
+[22:19] <_ry> great, i'm really excited
+[22:20] <blazzy> _ry: I made bindings to ares_gethostbyname and ares_gethostbyaddr, but also ares_query. So the first two are kind of redundant
+[22:21] <tekky> devinus: what do you mean by player objects?
+[22:21] <devinus> tekky: just an abstract object that represents the player. maybe holds it's connection socket
+[22:22] <devinus> tekky: i feel as if i'm missing a huge design pattern, since im just creating a "player" and holding it's socket and appending it to a huge list
+[22:22] <devinus> like maybe i should be using an eventemitter or soemthing
+[22:25] <tekky> guess it really depends on your programming style, if you are going for mostly OO design or not on how you want to store and reference key items like that
+[22:27] bmizerany has joined the channel
+[22:27] tekky has joined the channel
+[22:28] <fictorial> weird, I'm testing binary-safeness of redis-node-client with Buffers in part by checking that I can store and read back UTF-8 encoded strings.
+[22:29] <fictorial> but it seems that somewhere an extra \u0000 is being added to the mix
+[22:29] <fictorial> AssertionError: "\u00f6\u65e5\u672c\u8a9e" == "\u00f6\u65e5\u672c\u8a9e\u0000"
+[22:29] <fictorial> Anyone ever seen something like that and/or know what's up?
+[22:30] mattly has joined the channel
+[22:31] <fictorial> http://gist.github.com/356972
+[22:35] <inimino> fictorial: must be the terminating NULL byte of a C string
+[22:35] <fictorial> that's what I was thinking too... hmm.
+[22:36] mrjjwright has joined the channel
+[22:37] <fictorial> that shouldn't leak into JS land though
+[22:38] <fictorial> wonder if there's a bug in utf8Slice
+[22:42] r11t has joined the channel
+[22:44] <mjr_> _ry:  here's an example of the mysterious uncloseable socket on OSX: http://gist.github.com/356983
+[22:44] <mjr_> I stuck some debugs into net.js, and it looks like calling forceClose() ends up restarting the connect process.
+[22:44] <mjr_> Which is sort of the opposite of the intended effect. :)
+[22:46] hassox has joined the channel
+[22:58] gf3 has joined the channel
+[23:00] <kriszyp> does fs.unwatchFile unsubscribe all listeners of the file/path?
+[23:01] gf3 has joined the channel
+[23:08] tekky has joined the channel
+[23:09] jamesduncan_ has joined the channel
+[23:10] devinus has joined the channel
+[23:17] <konobi> _ry: does libpq have a quote() function?
+[23:25] eyzn has joined the channel
+[23:28] <_ry> mjr_: okay, thanks
+[23:28] <_ry> konobi: yes, i believe so
+[23:29] <_ry> http://www.postgresql.org/docs/8.1/static/libpq-exec.html#LIBPQ-EXEC-ESCAPE-STRING
+[23:30] <mjr_> I got lost trying to figure out the event loop after calling forceClose, but it does seem to start over with dns again.
+[23:30] <mjr_> Even though the hostname is an IP address already.
+[23:32] <isaacs> kriskowal: hey, you around? got a require() edge case for you: http://gist.github.com/349076
+[23:33] <kriskowal> ah, yeh.
+[23:33] <isaacs> kriskowal: the issue is that the require(c) in b.js thinks its in the cache, since it's been entered for the require.async
+[23:33] <kriskowal> there be monsters mixing async and sync
+[23:33] <isaacs> yeah
+[23:33] <kriskowal> this is where promises really would shine.
+[23:33] <isaacs> i'm tempted to say "don't do that"
+[23:33] <kriskowal> yeah, it's not as simple; it's a real hazard
+[23:34] <kriskowal> the trouble is there is no explicit signal for when a module completes its exports
+[23:34] <kriskowal> with a sync, the signal is implicit
+[23:34] <isaacs> well, i have an onload function...
+[23:34] <kriskowal> but with async, there needs to be a way to explicitly defer
+[23:34] <isaacs> but hte issue is that the sync require() sees that there's already a module in progress, so treats it as a transitive dep
+[23:35] <kriskowal> in narwhal+node, i'm planning to experiment with async require by having modules return a promise to resolve undefined when the api is complete
+[23:35] <kriskowal> so a module could say return when(waitingForThis(), function () …
+[23:35] <isaacs> you know, this stuff would be a lot easier if node just didn't support require.async, and didn't support require() after hte initial module startup
+[23:36] <isaacs> ie, do your startup, and then be done iwth it.
+[23:36] <kriskowal> that would probably be a good interim solution
+[23:36] <isaacs> it'd cut out a LOT of code.
+[23:36] <isaacs> alternatively, i'd say, let's not have require(), and only have require.async() but good luck getting people to ever stop complaining about that.
+[23:36] <isaacs> but that would be even less code.
+[23:37] <kriskowal> require.async isn't working out like i thought it would on commonjs
+[23:37] <isaacs> oh?  how're they taking it?
+[23:37] <kriskowal> yeah.  Wes- and tobie have been heading up the discussion
+[23:37] <kriskowal> it's related to the transport format issue, but separate
+[23:38] <kriskowal> require.async has taken the form require.ensure([ids], function (require) {…})
+[23:38] <kriskowal> at least, in the most recent proposals.
+[23:38] tek has joined the channel
+[23:40] <kriskowal> i'm not in love with it, but it does force error handling into having require throw exceptions, and it does provide an opportunity to prevent a certain class of race conditions
+[23:41] <kriskowal> and also makes you think of old people drinks
+[23:41] <isaacs> hahah
+[23:41] <isaacs> it's a bit like yui's loader, which is actually nice
+[23:41] <kriskowal> get off my lawn
+[23:42] <kriskowal> ACTION drinks ensure
+[23:42] <isaacs> YUI().use("foo", "bar", "baz", function (Y) { ... })
+[23:42] <isaacs> for an async loader, tha'ts actually really nice.
+[23:42] <kriskowal> the inner Y is a what?
+[23:42] <kriskowal> oh, it's a Y object tree
+[23:42] <isaacs> it's an instance of YUI that has the various modules attached.
+[23:42] <kriskowal> yeh
+[23:42] <kriskowal> so, yeah, similar
+[23:42] <kriskowal> just that access to modules is still mediated by the require function
+[23:43] <isaacs> well, no, i'ts mediated by the require.ensure functio.
+[23:43] <isaacs> something like this would be neat: require.async("foo", "bar", "baz", function (er, foo, bar, baz) { ... })
+[23:44] <kriskowal> yeh, they didn't want to go there about error handling
+[23:44] <isaacs> then how do you handle errors?
+[23:44] <kriskowal> passing a require function makes it so you can get the exception when you call require
+[23:44] <isaacs> ohhhh... wait, i get it
+[23:44] <kriskowal> require.ensure(["foo"], function (require) {require("foo")
+[23:44] <isaacs> so the argument is a function that can do sync require.
+[23:44] <isaacs> ACTION groks
+[23:45] <kriskowal> yeh.  and it can be "monadic" if i may use the term loosely
+[23:45] <isaacs> right
+[23:45] <isaacs> gah, that's kinda awful, though...
+[23:45] <kriskowal> yeh, kinduh
+[23:45] <isaacs> require.ensure(["http://foo.com/path/to/module.js"], function (require) { require("http://...
+[23:46] <isaacs> imo, the only reason to have async require is to load things that are far away
+[23:46] <kriskowal> yeh, pretty much
+[23:47] <kriskowal> i mean, you could obviously reduce the verbosity of that
+[23:47] <isaacs> i'm trying an exercise right now where i try to implement just the minimum required bootstrapping code, and then tell everyone to implement whatever they want in userspace if they want.
+[23:47] <kriskowal> with a var, or a package-specific-require
+[23:47] <kriskowal> good plan, really
+[23:48] <isaacs> and i don't think i need async require for that.
+[23:48] <isaacs> or uncached require, or sandboxed require, or any of that other malarky
+[23:48] <kriskowal> i'm trying an exercise where narwhal gets out of other people's way so that it can be used in more platforms
+[23:48] <isaacs> hehe
+[23:48] <isaacs> also a good plan
+[23:48] <isaacs> it'd be nice if node could move more to the engine level and let narwhal sit on top of it.
+[23:48] <kriskowal> on a related note, i put ini.js in narwhal, and finished the api, so it has encode/decode
+[23:48] <isaacs> oh, nice
+[23:49] <isaacs> not parse/stringify?
+[23:49] <kriskowal> JSON provides encode/decode too
+[23:49] stepheneb has joined the channel
+[23:49] <isaacs> oic
+[23:49] <kriskowal> i've got a bunch of modules in narwhal that all provide encode/decode
+[23:49] <isaacs> hey, i sent _ry a patch for this, but i guess he never applied it
+[23:49] <kriskowal> e.g., base64
+[23:50] <kriskowal> what patch?
+[23:50] <isaacs> http://github.com/isaacs/node/commits/ini-stringify
+[23:51] <isaacs> _ry: ^
+[23:51] <kriskowal> ah
+[23:52] <isaacs> anyway, it's not rocket surgery
+[23:52] <kriskowal> brain science
+[23:53] <kriskowal> that's what my roommate is trying to do with node
+[23:53] <isaacs> brain science? really?
+[23:53] <kriskowal> distributed scientific computing platform
+[23:53] <isaacs> wow, neato
+[23:53] <kriskowal> yeh, you met dirk at the ssjs meetup?
+[23:53] <kriskowal> quiet german guy
+[23:53] <kriskowal> not jan
+[23:56] <isaacs> i think so, yeah
+[23:56] <isaacs> jan's the tall german guy
+[23:56] <isaacs> couch fellow
+[23:56] <mjr_> and not so quiet
+[23:56] <isaacs> right, that too :)
+[23:56] <isaacs> speaking of which, we should do another one of those soon.
+[23:57] <isaacs> that was a lot of fun
+[23:58] <kriskowal> isaacs, here it is http://github.com/kriskowal/narwhal/blob/b99f503f3e361beaa5c661fa4475e9cdf6376e46/packages/narwhal-lib/lib/ini.js
+[23:58] <_ry> god. ascii encoding is so ridiculously faster..
+[23:58] <_ry> it can't have utf8 be default...
+[23:59] <kriskowal> man, utf-8 ain't complicated; any idea why it's lagging?
+[23:59] <isaacs> kriskowal: ascii is even ain'ter complicated

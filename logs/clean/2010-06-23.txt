@@ -1,0 +1,3016 @@
+[00:00] <mde> Not for full-stack JS that doesn't involve the JVM. :)
+[00:00] <ryah> i'm interested in node as an experiment of how we can change programming style
+[00:00] <ryah> still unsure if it will actually work
+[00:00] <mde> I mean, devs will have to learn how to use events and callbacks.
+[00:01] <mde> But if something goes south in a globally scoped-callback, you can't just throw up your hands and hope the end-user dev can deal with it.
+[00:01] <ryah> a JS platform with blocking coroutines would be super easy
+[00:01] <ryah> well "super easy"
+[00:02] <ryah> it would be doable
+[00:02] <creationix> ryah: you thinking about a fork of node that slower, but much easier to use?
+[00:02] <mde> Node is going to be way faster than anything in its class, even with queueing.
+[00:02] <creationix> "much easier"
+[00:02] <ryah> creationix: i think it would be similar speed
+[00:02] <creationix> ryah: ok, so just different semantics
+[00:02] <ryah> but my thesis is that it willb e harder to use
+[00:02] <ryah> still unsure if that's true :)
+[00:03] <ryah> the worst thing about node is losing your stacktraces from events
+[00:03] <creationix> and at the same time, that's a feature
+[00:03] <creationix> it keeps stack nice and shallow
+[00:03] <ryah> hard to find errors though..
+[00:03] <blowery> coming from Spring, I would appreciate a shallow stack
+[00:03] <ryah> i kind of think having dtrace probes is going to make this better
+[00:03] <blowery> it's refreshing
+[00:04] javajunky has joined the channel
+[00:04] <ryah> well, node is just a lot less than spring
+[00:04] <inimino> in debug mode
+[00:04] <mde> The queueing approach keeps things nice and simple for now, and it's still ridiculously fast compared to something like Rails or even Sinatra.
+[00:04] <ryah> if we had a whole ORM layer, node's also have big stacks
+[00:04] <inimino> you could always track the location of where every event was queued from
+[00:04] <ryah> mde: not fast enough :D
+[00:04] <blowery> ryah: it's not the ORM, it's the DI
+[00:04] <ryah> lately i've been thinking i need to rewrite lib/net.js in c...
+[00:05] <ryah> (again)
+[00:05] <inimino> :)
+[00:05] <mjr_> boo
+[00:05] <mde> ryah: Fast enough depends on what you want to do with it. :)
+[00:05] <inimino> ryah: will it be faster?
+[00:05] <ryah> inimino: we're seeing too many GCs
+[00:05] <Tim_Smart> If we start comparing node to rails, then we are in the wrong mindset
+[00:05] <inimino> oh
+[00:05] <blowery> heh
+[00:05] mikeal has joined the channel
+[00:05] <blowery> Node.js: Rails done right!
+[00:05] <Tim_Smart> rails is too slow to be in the node.js race
+[00:05] <mde> For me, it's an absolute requirement to return the error with the right response.
+[00:05] <inimino> I thought the Buffers would avoid a lot of GC pressure
+[00:06] <blowery> ACTION hides
+[00:06] <mjr_> faster is hard to argue with, but the current system seems pretty reasonable.
+[00:06] <ryah> inimino: it does, it's a bit unclear
+[00:06] <mde> Yeah, I started benchmarking Geddy against Rails, and it's just so unfair.
+[00:06] <inimino> hrm, ok
+[00:06] <ryah> mjr_: yeah, net.js is nice. if we solidified on these node_net.cc bindings switching out the backend with JSC would be possible
+[00:06] <ryah> which would be rad
+[00:07] dgathright has joined the channel
+[00:07] <ryah> (obviously sevearl months down the road, we're no where near ready to do that yet)
+[00:07] <mjr_> Yeah, I guess that's my major concern.  Right now it still seems like the API might change 
+[00:07] zomgbie has joined the channel
+[00:07] <inimino> what does JSC have over V8 these days?
+[00:08] <ryah> inimino: powerpc
+[00:08] <inimino> ah
+[00:08] <ryah> (for example)
+[00:08] <creationix> mde, actually that's not a bad compromise
+[00:08] <creationix> you still get parallel I/O within the request
+[00:08] <creationix> even if requests themselves aren't parallel
+[00:08] <creationix> works as long as you don't have any long connections
+[00:09] <mde> creationix: With workers, it seems very reasonable. Multi-core is kind of the norm now anyway.
+[00:10] <creationix> mde: yeah, as long as your load isn't high and connections are short, that works great
+[00:10] <creationix> but the original point of node was to get away from "the norm" and not use threads/processes per request to scale
+[00:10] <creationix> performance is all relative
+[00:10] <mde> creationix: It's no the ideal Node approach, but even with that it has major advantages over the status quo.
+[00:11] <mde> Right, exactly.
+[00:11] <ryah> okay what do you all think about this:
+[00:11] <ryah> node --no-errors server.js
+[00:11] <mde> If it's blazingly fast, but normal devs can't figure out how to debug, it's not that helpful.
+[00:11] <ryah> or 
+[00:11] <inimino> it removes errors from the code? :-)
+[00:11] <creationix> ryah: what would that do?
+[00:11] <inimino> build it!
+[00:11] <Tim_Smart> ryah: Does it make bad code automagically work?
+[00:11] <ryah> enables process.addListener('uncaughtException') 
+[00:11] <ryah> and prints out stack traces
+[00:12] <ryah> also for 'error' events
+[00:12] <Tim_Smart> ah
+[00:12] <ryah> so you don't have to modify your script
+[00:12] <mde> ryah: Would that solve the problem of per-request errors?
+[00:12] <creationix> but even with uncaughtException you still need a lock of one request at a time
+[00:12] <inimino> mde: what's the per-request error problem?
+[00:12] <mde> Yeah, that's the problem I have.
+[00:12] <ryah> mde: not really
+[00:13] <mde> Right, so you still have to queue.
+[00:13] <creationix> now if you could somehow get access to the closure data in scope when the exception happened and pass that along...
+[00:13] <inimino> why are you queueing?
+[00:13] <mde> inimino: It's the fact that you can be juggling multiple requests at a time in a process.
+[00:13] <creationix> that would be golden
+[00:13] <ryah> inimino: responding with 500 and a stack trace when someone does createServer(function (req, res) { setTimeout(function () {
+[00:13] <ryah> throw new Error('blah');
+[00:13] <mde> And one of them can throw an error in a callback, so you have no idea what request it came from.
+[00:14] <ryah> }, 100);
+[00:14] <ryah> }):
+[00:14] <inimino> hm, ok
+[00:14] <ryah> how do you catch that error in the setTimeout?
+[00:14] <creationix> well, how does uncaughtException work in the first place
+[00:14] <mde> Yeah, that would be ideal. You can't even walk up the arguments.callee.caller chain.
+[00:14] <creationix> what data do you have at the c level
+[00:15] <inimino> well... for me... you add an exception handler, and dump some diagnostic data
+[00:15] <inimino> including the request
+[00:15] <ryah> creationix: basically this: http://github.com/ry/node/blob/20905d9d62a115de63fe56d8128906f3ea4d5cd4/src/node_events.cc#L59-64
+[00:15] <mde> It's a callback, so it's just like "this happened in the global scope."
+[00:15] zomgbie has joined the channel
+[00:15] <inimino> but in a --debug mode, you could record a stack trace at everything that queues a future event
+[00:17] <inimino> so every setTimeout, every async fs or network call, generate a stack trace in V8, and then dump all of them when an exception is thrown
+[00:18] <mde> Yeah, y'all are way smarter than I am, it'd be great if you come up with the right way to handle it.
+[00:18] <inimino> mde: would a debug mode be good enough?
+[00:18] <mde> I'd much rather do things the 'Nodely' way.
+[00:18] <ryah> inimino: yeah.
+[00:18] <ryah> or you just die
+[00:18] <mde> inimino: The problem is having a reference to the actual request/response pair that caused the error.
+[00:18] <ryah> browser js <-- most successful platform ever
+[00:18] <mde> So you can do the right thing for the dev or end-user.
+[00:19] <ryah> error handling? none.
+[00:19] <mde> Yeah, it's true. :)
+[00:19] <inimino> yes
+[00:19] <ryah> i think the proper solution for mde is to use two process in debug mode
+[00:19] <ryah> the master proxies requests to the later
+[00:20] <ryah> if the slave dies, it records the stacktrace and prints it to the user
+[00:20] <ryah> maybe we can codify that in someway so it's not so hard..
+[00:20] <ryah> like with workers..
+[00:20] <mde> That sounds like it would work, yeah.
+[00:21] <mde> Well, I'm using workers now.
+[00:21] <mde> And during app-startup it does just what you described.
+[00:22] <ryah> in production mode you pre-fork, when a worker dies you restart it
+[00:22] <creationix> I could easily add a middleware to connect that puts a global lock on requests to queue them
+[00:22] <ryah> but all the connections associated with that worker die too
+[00:22] <creationix> but the queue would grow too fast I think
+[00:22] <mde> Even in production mode, you need info about what in the request caused the error though.
+[00:23] <ryah> mde: print it to stdout
+[00:23] <ryah> mde: kill the process
+[00:23] <mde> creationix: That's exactly what Geddy is doing.
+[00:23] <creationix> mde: yeah, that's where I got the idea
+[00:23] <ryah> queueing is only okay for debug mode
+[00:24] <creationix> could we add a flag to the socket in node that only accepts one connection at a time
+[00:24] <mde> I guess you could use some kind of watcher process to close out dead requests.
+[00:24] <creationix> and doesn't accept another till it's closed the first
+[00:25] <mde> I'm sure it can be optimized, but right now I just want something simple that normal devs can use.
+[00:25] <mde> And it's already so much faster. :)
+[00:25] tjholowaychuk has joined the channel
+[00:26] Tekerson has joined the channel
+[00:30] rauchg has joined the channel
+[00:33] <technoweenie> hey has anyone had any issues w/ downloading binary data from node apps?  sometimes i get 'Received problem 3 in the chunky parser' from curl
+[00:34] <Tim_Smart> technoweenie: Nope :/
+[00:34] shajith has joined the channel
+[00:34] <Tim_Smart> technoweenie: I serve everything on http://fostle.com/ with node
+[00:34] <technoweenie> that error message makes it sound like something im doing or node is doing is not rfc compliant (or curl is picky)
+[00:36] <ryah> technoweenie: hm
+[00:36] <ryah> technoweenie: maybe you can tcpdump that?
+[00:36] <ryah> let's have a look at the headers
+[00:37] creationix has joined the channel
+[00:37] <JimBastard> ive had some problems transferring lots of little files over and over again in node. we saw files slowly increasing in steady but strange numbers getting appended onto each other. still trying to debug, its been going on for a week or so
+[00:37] <technoweenie> ok i'll see if i can find a smaller sample.  it works great if i download a tiny git repo, but not rails
+[00:37] <technoweenie> the rails archive is about 400k
+[00:38] <ryah> hm
+[00:38] <technoweenie> oh nodes is bigger, ha
+[00:39] <ryah> :)
+[00:39] <ryah> it's v8 that makes node's so large
+[00:40] <Tim_Smart> rails doesn't have to carry around the ruby vm
+[00:42] jedschmidt has joined the channel
+[00:42] <technoweenie> ok streaming from a file readstream seems fine.  its not streaming properly from a child process to the web response. 
+[00:46] <ryah> technoweenie: :/
+[00:46] <technoweenie> its writing it to the filesystem jsut fine though.  a second request works
+[00:46] tmpvar has joined the channel
+[00:46] <technoweenie> ok i just installed tcpdump, i'm trying to figure out how to use it
+[00:46] ncb000gt has joined the channel
+[00:50] <ryah> technoweenie: sudo tcpdump -s 0 -X -i lo0 dst tcp port 80 
+[00:51] <ryah> (well depending on where things are being sent)
+[00:52] BrianTheCoder has joined the channel
+[00:52] <technoweenie> it says syntax error.  well let me get a sample that runs locally.  
+[00:53] <ryah> maybe take out 'dst'
+[00:58] <CIA-76> node: 03Mikeal Rogers 07master * rf62979d 10/ (3 files in 3 dirs): Add sys.pump - http://bit.ly/aEOet2
+[01:01] <Tim_Smart> ^ Hah, funny that. I just did http://github.com/biggie/biggie-router/commit/97755f25fba353a9708d6de365779900b6d2411f
+[01:01] <ryah> it's been sitting in my queue for like 3 weeks
+[01:01] <ryah> i think there's something wrong with it 
+[01:01] <ryah> but - well there's something wrong with everything :)
+[01:02] <LOLWUT__> hehehe
+[01:02] <sechrist> what's the fastest way to copy an object? It's not eval(JSON.stringify(object)) is it?
+[01:02] mikeal has joined the channel
+[01:03] <sechrist> technoweenie: ngrep is the bomb
+[01:03] <sechrist> but I admit I don't know what you're doing
+[01:03] <sechrist> that's pretty much a tcp dump into grep
+[01:04] <ryah> someone should write an http version of wireshark
+[01:04] <ryah> oh
+[01:04] <ryah> node knockout idea :D
+[01:04] <LOLWUT__> I definitely approve of this.
+[01:04] <Tim_Smart> Someone should serve pancakes with node
+[01:04] <LOLWUT__> this also.
+[01:05] <visnup> I want belgian waffles
+[01:05] <technoweenie> i wonder if i should add pausing to the child process
+[01:05] <LOLWUT__> I'm actually considering using nodejs for doing web app testing at work
+[01:05] <inimino> sechrist: no, just write a recursive loop
+[01:05] <gerad> node_pcap
+[01:05] <technoweenie> is there a way to tell if a stream is paused
+[01:06] <ryah> technoweenie: hm, i don't think so
+[01:06] <gerad> http://github.com/mranney/node_pcap
+[01:06] <sechrist> inimino: that's faster? why is there no v8 object copy
+[01:06] <sechrist> rawr
+[01:06] <technoweenie> one of the challenges is i'm writing to 2 streams.  i wonder if it'd be more reliable to stream to the hard drive and then stream to the web request
+[01:07] <JimBastard> ACTION says, just don't cross them.
+[01:07] steadicat has joined the channel
+[01:07] <inimino> sechrist: it better be faster, because it's doing strictly less work
+[01:07] <sechrist> ryah: are recursive loops the fastest way to copy an object?
+[01:07] <gerad> courtesy of mjr_
+[01:07] <inimino> (and iterating object properties is one of the fastest things you can do in V8)
+[01:08] <sechrist> for x in blah is really that fast?
+[01:08] <inimino> if you want to be sure you'll probably have to benchmark it
+[01:08] <sechrist> well yeah and I have to agree that has to be faster than parsing text
+[01:09] <inimino> right
+[01:09] <sechrist> process.copy plz
+[01:10] <inimino> you could write it in C but I really doubt it'd be enough faster to matter
+[01:10] <sechrist> or sys really
+[01:10] mikeal has joined the channel
+[01:10] <sechrist> hehe yeah
+[01:10] <ryah> sechrist: yeah i guess there's no good way to do this 
+[01:10] <ryah> sechrist: Object.clone should be joining us soon
+[01:10] <sechrist> yay
+[01:10] <sechrist> it's a pretty useful activity
+[01:11] <inimino> Object.clone?
+[01:11] <Tim_Smart> Object.clone +1
+[01:12] <Tim_Smart> inimino: It's in the ECMA5 spec I think
+[01:12] <inimino> I haven't seen it
+[01:12] <mikeal> ryah: i looked at adding the close event to http
+[01:12] <mikeal> and it's hard :)
+[01:12] <ryah> mikeal: hm really?
+[01:12] <mikeal> ServerResponse specifically
+[01:12] <mikeal> there isn't an obvious place to wedge and event where the write finally flushes
+[01:13] rauchg has joined the channel
+[01:13] <ryah> why does it need the 'close' event again?
+[01:13] <mikeal> i thought you could do it in send
+[01:13] <mikeal> for pump
+[01:13] <mikeal> so the callback fires when the writes flush
+[01:16] cloudhead has joined the channel
+[01:20] <_announcer> Twitter: "Anyone running Hummingbird http://mnutt.github.com/hummingbird/ on @heroku? Think I might give it a crack. #nodejs" -- Xavier Shay. http://twitter.com/xshay/status/16813264904
+[01:21] <ryah> mikeal: looking into it
+[01:23] <mikeal> the issue was that there are some raw connection writes and then some writes that go through send
+[01:23] <mikeal> so you can't just stick code in send to handle it
+[01:23] <mikeal> you'll either need to wrap write more code in every place that does a write, or wrap the connection.write method
+[01:23] <ryah> yeah
+[01:23] shahbaz has joined the channel
+[01:23] <ryah> seems a bit painful
+[01:24] <mikeal> i can't type today
+[01:25] <falconair> hi, are there any plans to provide an ubuntu package for node.js? it is much easier to do "apt-get install node" than to manually install it
+[01:25] <ryah> falconair: there is already a debian package
+[01:26] <ryah> i think you can probably just install that
+[01:26] ditesh|cassini has joined the channel
+[01:26] <ryah> falconair: http://packages.debian.org/sid/nodejs
+[01:28] <falconair> hm...doesn't show up in Synaptic Package Manager
+[01:29] <sechrist> halorgium: you there?
+[01:29] <halorgium> sechrist: ja
+[01:29] <sechrist> what's your license on buftok.js, can I use it freely?
+[01:29] <halorgium> it was stolen from eventmachine
+[01:29] <halorgium> and ported
+[01:29] <halorgium> so i dunno
+[01:29] <sechrist> hm
+[01:29] <Tim_Smart> Pumping a file stream into a gzip stream into a response stream. Just epic
+[01:30] <sechrist> well it has a good place in websockets
+[01:30] <ryah> licensing *headache*
+[01:30] <sechrist> ryah: yarly
+[01:30] <ryah> ^-- what i have
+[01:30] <technoweenie> i'm pumping a git archive stream, to gzip, and then to the filesystem + a response stream simultaneously
+[01:30] <technoweenie> well, i was.  i'm going to try doing them separate. i suspect the response stream isnt keeping up
+[01:31] <sechrist> I normally don't care about licenses -- but since I'm pushing to github now and because of all of that mess with JimBastard I feel required to care
+[01:31] <JimBastard> yo sechrist 
+[01:31] <sechrist> yo
+[01:31] <JimBastard> i keep it real
+[01:31] <JimBastard> http://github.com/Marak/asciimo/commits/master
+[01:31] <JimBastard> i put down the big money to get scott g to write a figlet parser
+[01:32] <JimBastard> hes the lead dev on jquery ui
+[01:32] <sechrist> the big monies
+[01:32] <JimBastard> fuck those haters
+[01:32] <JimBastard> ACTION is unstoppable
+[01:32] <sechrist> ACTION lulz
+[01:32] <JimBastard> fuck that dude
+[01:32] <Tim_Smart> Until you get hit by a train
+[01:32] <Tim_Smart> You are unstoppable
+[01:32] <JimBastard> Tim_Smart: i try to not leave apartment jail for that exact reason
+[01:32] <JimBastard> ahahaha
+[01:33] <JimBastard> its really funny though
+[01:33] <technoweenie> you could've just been more polite and there wouldnt have been any issues
+[01:33] <JimBastard> well
+[01:33] <sechrist> speaking of futurama JimBastard, two episodes of the new season leaked
+[01:33] <sechrist> I should go watch them
+[01:33] <JimBastard> it turns out patorjk had managed the FIGlet font format for god knows what reason
+[01:33] <JimBastard> all his fonts were not to the figlet spec
+[01:34] <sechrist> managed or mangled?
+[01:34] <JimBastard> lol
+[01:34] <JimBastard> mangled
+[01:34] <JimBastard> anyway, it turns out there is a way more comprehensive / free database
+[01:34] <JimBastard> http://www.figlet.org/figlet-man.html
+[01:34] <sechrist> JimBastard: http://patorjk.com/images/blog-2010/wow-guy.png
+[01:34] <JimBastard> so i just deleted all the code
+[01:34] <sechrist> HOLY CRAP LIMECHAT EMBEDS IMAGES
+[01:35] <JimBastard> well, his code
+[01:35] <JimBastard> i kept all my awesome jquery code
+[01:35] <JimBastard> reading that code makes you ninja for real
+[01:35] <JimBastard> UI win
+[01:35] <visnup> I've been stalled on a design for a client website; figlet has just inspired me
+[01:35] <JimBastard> so there is a new repo now
+[01:35] <JimBastard> all the code in the new repo is 100% legal and open source
+[01:35] <JimBastard> protected by MIT and some GPL
+[01:35] <JimBastard> well both
+[01:36] <JimBastard> so lulz to that
+[01:36] <JimBastard> scott g owned that shit
+[01:36] <sechrist> MIT has armed guards outside the repo?
+[01:36] <JimBastard> he turned 1300 lines of patorjk garbage into 80 lines of awesomeness
+[01:36] <blowery> no no, MIT has cake
+[01:36] <JimBastard> you hear that
+[01:36] <sechrist> thriteen...hundred?
+[01:36] <JimBastard> go to his site
+[01:36] <JimBastard> read his code
+[01:36] <sechrist> holy shshshshit
+[01:36] <JimBastard> then read our new code
+[01:37] <JimBastard> thats just the parser
+[01:37] <sechrist> ACTION facepalm
+[01:37] <JimBastard> i gotta go finish this, just be easy and dont go causing internet drama please
+[01:38] <sechrist> "If you have a Jailbroken iPhone 3GS with the OLD BOOTROM and you DID NOT use Spirit to jailbreak then you can create the ipsw with PwnageTool 4.0 and restore with your jailbroken recovery mode. " bah
+[01:39] <sechrist> screw you userland jailbreak
+[01:39] <JimBastard> nice visnup 
+[01:46] <ncb000gt> JimBastard: i'm positive that someone has already thought up refactoring code...you...you....BASTARD!
+[01:46] <JimBastard> >>><<<
+[01:47] <JimBastard> its like soo fubar
+[01:47] <JimBastard> caus im always the guy that is like
+[01:47] <JimBastard> YO we gotta pay for that software
+[01:47] <JimBastard> this is good shit
+[01:47] SamuraiJack has joined the channel
+[01:47] <JimBastard> if someone releases like a little one off tool
+[01:47] <JimBastard> at least back in the day
+[01:47] <JimBastard> everything good seems OSS these days
+[01:48] <ncb000gt> well, see, you've inspider me....I've come up with something called asciimore! there was this awesome code on github...some jquery in there too
+[01:48] <ncb000gt> ...
+[01:48] <JimBastard> ahahaha doo ittt
+[01:48] <ncb000gt> >=D
+[01:48] <JimBastard> +10 if you buy the domain
+[01:48] <JimBastard> ill link to you
+[01:48] <ncb000gt> haha
+[01:48] <JimBastard> check out the new repo
+[01:48] <JimBastard> its 10x better
+[01:48] <JimBastard> http://github.com/marak/asciimo/
+[01:49] <JimBastard> well, mathematically speaking that is....about the figlet parser
+[01:51] <sechrist> brew install axel
+[01:51] <sechrist> awesomesoft
+[01:51] <technoweenie> fuck you chunky parser
+[01:51] <sechrist> technoweenie: which one
+[01:53] grahamalot has joined the channel
+[01:54] jsilver has joined the channel
+[01:54] <_announcer> Twitter: "pdf.js - PDF generation from the browser (or node.js): http://is.gd/cZNKC" -- Coder I/O. http://twitter.com/coderIO/status/16815416197
+[01:55] <Tim_Smart> cloudhead: I'll try using an EventEmitter now.
+[01:55] <ncb000gt> JimBastard: nice.
+[01:56] <JimBastard> im working on wrapping it up all nicely in a dual-sided library
+[01:56] <JimBastard> you know how i roll
+[01:56] <JimBastard> you include asciimo.js your page as a script or in node.js as a commonjs. same file. all magic.
+[01:58] tjholowaychuk has joined the channel
+[01:58] WALoeIII has joined the channel
+[02:01] visnup has joined the channel
+[02:02] kurisu has joined the channel
+[02:07] gf3 has joined the channel
+[02:07] pavelz has joined the channel
+[02:08] WALoeIII has joined the channel
+[02:13] <technoweenie> ryah: good news, if i wait to stream the file after `git archive` is done, it seems to work great
+[02:15] <technoweenie> i might need to just pause the git archive stdout if the web response.write() returns false
+[02:16] <ryah> yes, you probably should do that
+[02:16] <ryah> but it doesn't seem like htat would give you the chunked error
+[02:17] <ryah> it would only drive up your memory
+[02:18] <technoweenie> hmm, ok.  well i'll play around with it some more.  
+[02:20] jsilver has joined the channel
+[02:27] derferman has joined the channel
+[02:27] pnewhook has joined the channel
+[02:29] jsilver has joined the channel
+[02:29] jsilver has joined the channel
+[02:33] <CIA-76> node: 03Ryan Dahl 07master * rfc175a0 10/ (src/node.cc lib/mjsunit.js): Remove mjsunit from repo - http://bit.ly/apEnoT
+[02:37] <CIA-76> node: 03Ryan Dahl 07master * rf541043 10/ (src/node.cc lib/ini.js test/simple/test-ini.js): Remove ini.js - http://bit.ly/bpnLix
+[02:41] <micheil> ryah: probably ping isaacs and make sure he knows about that last commit
+[02:41] <micheil> currently npm uses ini.js or something
+[02:42] <tjholowaychuk> ACTION works on haml killer
+[02:43] <Tim_Smart> Poor haml.
+[02:46] teemow has joined the channel
+[02:49] isaacs has joined the channel
+[02:50] <ryah> oops
+[02:50] <ryah> really?
+[02:51] <ryah> oh, he's got it in there
+[02:52] <cloudhead> Tim_Smart: how's that working out for you?
+[02:53] <Tim_Smart> Good thanks. Starting to add tests for http://github.com/biggie/biggie-router now
+[02:54] <cloudhead> Tim_Smart: I think I'm going to look into making `this.callback` more flexible
+[02:54] <Tim_Smart> cloudhead: Good idea :p
+[02:54] <cloudhead> so it can be used like in your gist
+[02:54] <Tim_Smart> Maybe force it to be used like: this.callback()
+[02:55] jakehow has joined the channel
+[02:55] <Tim_Smart> so you can register it as a non-returning test
+[02:55] <Tim_Smart> or make callback a getter
+[02:55] <cloudhead> Tim_Smart: it is a getter
+[02:55] <Tim_Smart> oic
+[02:55] <cloudhead> Tim_Smart: the problem is you called it from inside a function
+[02:55] <cloudhead> so when the topic returned, it wasn't called yet
+[02:56] <cloudhead> so it didn't know whether to expect it to be called or not
+[02:56] <Tim_Smart> Ah
+[02:56] <cloudhead> yea
+[02:57] <cloudhead> So what I might have to do is if you return undefined, it expects it to be called
+[02:57] <cloudhead> and then it doesn't need to be a getter
+[02:58] <cloudhead> it's sort of an edge case anyway
+[02:58] <_announcer> Twitter: "Thank you or somebody Node.js CommonJS # shibuyajs like to hear about it" [ja] -- nazoking. http://twitter.com/nazoking/status/16819392309
+[02:59] BrianTheCoder has joined the channel
+[02:59] <Tim_Smart> cloudhead: Not so much a case in async testing
+[02:59] <Tim_Smart> *edge case
+[03:03] MarkHansen has joined the channel
+[03:04] <cloudhead> Tim_Smart: no I mean wanting to return undefined explicitly
+[03:04] <cloudhead> like, function () { return undefined }
+[03:04] <Tim_Smart> Ah yes I defiantly agree there
+[03:04] <cloudhead> I wouldn't be able to distinguish
+[03:05] <cloudhead> but you can always do `topic: undefined` ie without the function
+[03:05] <cloudhead> and that should still work
+[03:05] piratepenguin has joined the channel
+[03:08] <piratepenguin> so node.js is, basically, server-side javascript, which is pretty damn neat (i've been looking for this for a while). I'm about to embark on creating some prototype webapps, the possibility of using just the one language is intriguing :)
+[03:08] <tjholowaychuk> :D
+[03:08] <MarkHansen> :D
+[03:08] <tjholowaychuk> it is nice
+[03:08] <mde> piratepenguin: It is nice being able to share code back and forth between client and server.
+[03:09] <Tim_Smart> Hmm a spider just hid in my keyboard
+[03:10] <MarkHansen> o_O
+[03:11] <piratepenguin> mde: indeed. By share do you mean, copy and paste type sharing? Or how about the idea of (if the app developer allows), being able to 'transfer' serverside code to run locally - has this been thought of?
+[03:12] <mde> piratepenguin: Not copy-paste, but doing it in a systematic way. 
+[03:12] <mde> So, two good examples are templating, and model/input-validation code.
+[03:13] <_announcer> Twitter: "@donohoe what are the best resources to learn css3 transforms and animations? Btw, you should have a look at Node.js and @expressjs" -- Xavier Damman. http://twitter.com/xdamman/status/16820323613
+[03:13] <mde> I'm working on a web framework that does a lot of that kind of code-sharing.
+[03:14] <mde> The model code for the framework runs in all the major browsers, plus Node, plus TheRubyRacer, which is V8 embedded in Ruby: http://github.com/mde/geddy/tree/master/geddy-model/
+[03:16] <piratepenguin> sounds very cool mde. Gotta start exploring this stuff!
+[03:16] <mde> It's a nice change from having to code everything twice.
+[03:17] <LOLWUT__> piratepenguin, I've just been getting started too
+[03:17] <LOLWUT__> I'm about a week in or so
+[03:17] <LOLWUT__> :)
+[03:17] <piratepenguin> cool :)
+[03:17] <tjholowaychuk> mde: I dont mind the idea of sharing that stuff, infact it would be great. but that puts some limitations on what you can do within the orm realm
+[03:17] <LOLWUT__> it's giving me a reason to learn more than just DOM programming and jquery, tbh :P
+[03:17] <tjholowaychuk> unless most of your code is client side friendly as well
+[03:17] <LOLWUT__> and the scalability is crucial imo
+[03:18] <tjholowaychuk> in which case it would be nicer to have a build i guess, so you dont slow down node lots with extra crap
+[03:18] <piratepenguin> tjholowaychuk: It would I suppose require running a local node.js server, probably easily installed as a browser extension
+[03:18] <mde> tjholowaychuk: The sharing back and forth does force you to avoid Node-specific code, yes.
+[03:18] <tmpvar> or atleast abstract away from it
+[03:18] <tjholowaychuk> mde: in the future that wont be such a big hurdle. will be nice
+[03:19] <mde> But if you've done a lot of X-browser, it's no worse, treating Node as yet another platform.
+[03:19] <tjholowaychuk> for sure
+[03:19] <mde> The biggest hurldle with ORM is SQL vs. NoSQL, so far. :)
+[03:20] <mde> Developers should mostly not have to care which they use.
+[03:20] <marshall_law> has anyone built TheRubyRacer as a module for node? (embed ruby into node?) ;)
+[03:20] <LOLWUT__> I know no such magicks
+[03:21] <tjholowaychuk> mde: yeah ideally not. DM was great for that you could use yaml and you wouldnt even really know its something else
+[03:21] <mde> marshall_law: So, embedding V8 in Ruby in Node? :)
+[03:21] <marshall_law> i'd like to port our kroll binding layer to node, that would be a fun project
+[03:22] <tjholowaychuk> mde: recursive embedding! haha
+[03:22] <mde> tjholowaychuk: Exactly. geddy-model is just a JS port of DM. It's a nice, simple API.
+[03:22] sechrist has joined the channel
+[03:22] <marshall_law> mde: they already do the data marshalling part between v8 and ruby, so it'd just be a matter of controlling it from node rather than a ruby interpreter :)
+[03:22] <mde> Heheh, exactly. 
+[03:22] <mde> marshall_law: Sounds like a nice Science Fair project. :)
+[03:22] jxson has joined the channel
+[03:22] <marshall_law> hehe
+[03:23] <marshall_law> mde: kroll (the microkernel we wrote for titanium) does dynamic data marshalling
+[03:23] <marshall_law> it can marshall between JS , Ruby, Python, PHP
+[03:23] <marshall_law> any and all
+[03:23] <mde> tjholowaychuk: I think it's going to be possible with Couch to generate views on the fly and cache them to approximate most of the stuff you can do with an ORM.
+[03:23] <marshall_law> right now it's built against JavaScriptCore though
+[03:23] <marshall_law> porting to v8 wouldn't be terribly difficult i don't think
+[03:23] <mde> marshall_law: That sounds pretty interesting. I know there's going to be a lot of mixing and matching going on.
+[03:24] <piratepenguin> are there any big web apps being made with node or is there more work to be done before that happens? it looks like there's been a surprising lot of interest
+[03:24] <mde> I met with some engineers from Twitter who are trying to do JS-in-Ruby stuff.
+[03:24] <marshall_law> mde: :)
+[03:24] <mde> piratepenguin: We're still building the frameworks, I think. :)
+[03:25] <LOLWUT__> seems to me one could build their own rudimentary framework
+[03:25] <LOLWUT__> with minimal effort
+[03:25] <mde> Yeah, that's what I thought too. :)
+[03:25] <piratepenguin> I suppose thats the more important thing right now. Looks like a good effort is being made!
+[03:25] <LOLWUT__> the http stuff is pretty straightforward
+[03:25] <mde> It's easy to get sucked in.
+[03:25] <LOLWUT__> what I've been contemplating
+[03:26] <LOLWUT__> and I'm not exactly sure how it'd be done in javascript/node
+[03:26] <LOLWUT__> but taking video files
+[03:26] <LOLWUT__> and packing them in a nodejs buffer
+[03:26] <LOLWUT__> to play as bitstreams to clients
+[03:27] <marshall_law> LOLWUT_: definitely possible, binary data in node is pretty straightforward
+[03:27] <marshall_law> the streaming / async APIs make it really simple to do binary streaming as well
+[03:27] <LOLWUT__> yeah, I just don't know how I'd read the file in as binary data in js
+[03:27] <marshall_law> LOLWUT_: node also has file APIs :)
+[03:27] <LOLWUT__> I'm a HUGE streaming video guy
+[03:27] <LOLWUT__> never gone as far as actually writing the streaming server
+[03:27] <LOLWUT__> but I've implemented my own solutions before
+[03:27] <LOLWUT__> and it's really fun
+[03:28] <marshall_law> LOLWUT_:  take a look at the docs, specifically the Buffer type.. you probably don't want to do much binary manipulation if you can avoid it though.. just pass it on through ;)
+[03:28] <LOLWUT__> how would one go about packing the file as binary data?
+[03:28] ajpiano has joined the channel
+[03:28] <LOLWUT__> like in straight js, not necessarily nodejs
+[03:28] <marshall_law> the problem is javascript has UTF-16 encoding in it's strings, so getting at / manipulating bytes is expensive in JS unfortunately
+[03:28] <mjr_> node has a Buffer class that makes this easy, but isn't "straight" js.
+[03:28] <technoweenie> if you're streaming files, look at file.readstream and file.writestream
+[03:29] <piratepenguin> LOLWUT_: interesting. I'm interested in spending this summer becoming a video codec guy :) and I'd like for that to involve creating webapps to demonstrate effective/ineffective compression techniques etc
+[03:29] <LOLWUT__> well I'd basically be adopting the Whatever Works (tm) strategy 
+[03:29] <tjholowaychuk> and the new pump method :D
+[03:29] <LOLWUT__> piratepenguin, I'm actually developing a few custom video solutions atm
+[03:29] <LOLWUT__> trying to break away from livestream
+[03:30] <LOLWUT__> but bw is taxing and traditionally scaling streaming video is expensive
+[03:30] <ryah> LOLWUT__: you can encode arbitrary binary data in a string
+[03:30] <ryah> but it's not fast
+[03:30] <ryah> "encode"
+[03:30] <LOLWUT__> ryah: basically I'm thinking the server would take it's sweet time
+[03:30] <LOLWUT__> packing binary data into a buffer
+[03:30] <LOLWUT__> when a client connects
+[03:30] <LOLWUT__> or say, views the <video> element of a page
+[03:31] <_announcer> Twitter: "Is it a boy ... # nodejs this will give the talk!" [pt] -- Felipe Silva. http://twitter.com/felipe_silva/status/16821450032
+[03:31] <LOLWUT__> it plays what's currently streaming
+[03:31] <LOLWUT__> while that's streaming it could be working on encoding another video
+[03:31] <LOLWUT__> or just build up a queue
+[03:31] <LOLWUT__> etc
+[03:31] <LOLWUT__> so I don't think the actual time spent packing data is an issue
+[03:31] <ryah> LOLWUT__: CanvasPixel arrays are good
+[03:32] mikeal has joined the channel
+[03:32] <LOLWUT__> hm, can't say I'm familiar
+[03:32] <ryah> that's basically the first browser binary interface
+[03:32] <LOLWUT__> most of my javascript knowledge is rooted in DOM and jquery to be quite honest
+[03:32] <LOLWUT__> ah I see
+[03:33] Clooth has joined the channel
+[03:33] <ryah> LOLWUT__: http://beej.us/blog/2010/02/html5s-canvas-part-ii-pixel-manipulation/
+[03:33] <LOLWUT__> oh interesting
+[03:33] <ryah> if only XHR could read into them
+[03:34] <LOLWUT__> yeah seriously
+[03:34] <tmpvar> just a tip: canvas is fill limited
+[03:34] <LOLWUT__> yeah, I don't think this is the method I'd like to employ, though this offers some interesting future possibilities
+[03:35] <LOLWUT__> I am looking at using various canvas stuff for game design via browser
+[03:35] <LOLWUT__> so I'll definitely have to read up on this :)
+[03:35] <tjholowaychuk> i had a canvas rts game just about finished until my computer blew up :(
+[03:35] <tjholowaychuk> and i was stupid and didnt github it up
+[03:35] ajpiano has joined the channel
+[03:36] <LOLWUT__> aw man
+[03:36] <LOLWUT__> I feel ya
+[03:36] <LOLWUT__> I lost a hard drive about 3 weeks ago
+[03:36] <LOLWUT__> had a bunch of perl stuff I had written on it
+[03:36] <LOLWUT__> including a pseudo-ai chatbot
+[03:36] <LOLWUT__> and like
+[03:36] <LOLWUT__> 8mb worth of raw irc logs it used
+[03:36] <LOLWUT__> to converse
+[03:37] technoweenie has left the channel
+[03:37] <piratepenguin> ryah: XHR cant read into canvas, how do you mean? like automatically?
+[03:37] <tjholowaychuk> i got bored and wrote an osx voice recognition thing that would use TM snippets etc and code for me via voice haha, navigate the browser n shit
+[03:37] <LOLWUT__> lol
+[03:37] <LOLWUT__> it's like you're reading very dry poetry
+[03:38] <LOLWUT__> aloud
+[03:38] <LOLWUT__> (the sound of speaking to code, that is ;))
+[03:39] <ryah> piratepenguin: if you could pull binary data from the web into a canvas
+[03:40] <piratepenguin> oh yeah, is there a security block for that?
+[03:41] <LOLWUT__> probably :<
+[03:41] <LOLWUT__> buzzkills.
+[03:41] <piratepenguin> yeah I did this before but I must've needed the user permission thing
+[03:42] <piratepenguin> but LOLWUT_ isn't what we need a more complete video api to enable the live streaming possibilities?
+[03:43] <LOLWUT__> not necessarily
+[03:43] jedschmidt has joined the channel
+[03:43] <LOLWUT__> not to oversimplify by being like "it's all just ones and zeros"
+[03:43] liucougar has joined the channel
+[03:44] jcburns has joined the channel
+[03:44] <LOLWUT__> but theorhetically if you pack a buffer with binary data as a certain format
+[03:44] <LOLWUT__> any client supporting that format and network streaming
+[03:44] <LOLWUT__> should play it
+[03:45] <LOLWUT__> from there I'd think it's a matter of choosing what you want to support in terms of codec
+[03:45] <mjr_> you can pull binary data from an xhr into a canvas and/or a base64 image url.  It's awkward dealing with JS strings, but it can be made to work.
+[03:45] <LOLWUT__> interesting
+[03:46] <mjr_> base64 image URLs are hilarious, in case you haven't used them.
+[03:46] <LOLWUT__> can't say that I have
+[03:50] <LOLWUT__> oh wow
+[03:50] <LOLWUT__> lol
+[03:51] technoweenie has joined the channel
+[03:51] <Tim_Smart> creationix: Moving to the new modules, I have seen a definite speedup in benchmarks :)
+[03:51] <technoweenie> ryah: ahh you can't pause a child process.
+[03:51] <technoweenie> makes sense 
+[03:52] <_announcer> Twitter: "Windows / cygwin at node.js move. - Client-side scripting with Web Standards: cygwin frustrated before in various node.js try finally found success in this move. The following hand ... http://bit.ly/aD1eAd" [ja] -- livedoorcliphot. http://twitter.com/livedoorcliphot/status/16822743998
+[03:55] <_announcer> Twitter: "would it be so crazy/wrong if node.js used json files to store/persist startup config like ports, etc? seems only natural to me." -- Kyle Simpson. http://twitter.com/getify/status/16822927934
+[03:55] <ryah> technoweenie: ?
+[03:55] <ryah> you should abe able to
+[03:56] <technoweenie> TypeError: Object #<a ChildProcess> has no method 'pause'
+[03:56] <technoweenie> unless that was added after 1.98
+[03:56] <ryan[WIN]> haha that kyle simpsons misunderstands node
+[03:57] <technoweenie> Online death notice for Kyle Simpson. Read Kyle Simpson's life story, offer tributes/condolences, send flowers or create a Kyle Simpson
+[03:57] derferman has joined the channel
+[03:57] <technoweenie> oh, kyle simpson from that tweet
+[03:58] <LOLWUT__> how do I configure this framework?
+[03:59] <LOLWUT__> :3
+[04:02] <Tim_Smart> LOLWUT__: Which framework?
+[04:02] <LOLWUT__> oh I'm just being cheeky
+[04:02] <LOLWUT__> due to tweet above
+[04:02] <Tim_Smart> Oh I see.
+[04:04] quirkey has joined the channel
+[04:08] <technoweenie> oh wait, i'm calling pause on the process object, when i should be calling it on the stdout stream
+[04:09] <mikeal> ok
+[04:09] <mikeal> is there a single good rproxy out there?
+[04:09] <ryah> haproxy?
+[04:09] <ryah> nginx?
+[04:10] <mikeal> nginx is a terrible rproxy
+[04:10] <Tim_Smart> err really?
+[04:10] <mikeal> great fileserver
+[04:10] <mikeal> yeah, it's not good, it's just better than apache
+[04:11] mtodd has joined the channel
+[04:13] <technoweenie> ok that works, sweet
+[04:16] <mscdex> i've had good luck with haproxy
+[04:17] <_announcer> Twitter: "http://tinyurl.com/y68q2co Slicehost, Node.js &amp; WebSockets" [sr] -- onion_soup. http://twitter.com/onion_soup/status/16824243049
+[04:22] bpot has joined the channel
+[04:27] <_announcer> Twitter: "Geddy web framework has 100 watchers on GitHub. I guess I should do a release or something. http://github.com/mde/geddy #node.js #nodejs" -- Matthew Eernisse. http://twitter.com/mde/status/16824809541
+[04:27] unomi has joined the channel
+[04:29] <_announcer> Twitter: "Just registered to compete in the node.js knockout: http://nodeknockout.com/" -- Chris Wanstrath. http://twitter.com/defunkt/status/16824932337
+[04:33] BrianTheCoder has joined the channel
+[04:33] steadicat has joined the channel
+[04:37] derferman has joined the channel
+[04:39] jsilver has joined the channel
+[04:39] jon__ has joined the channel
+[04:45] gerad has joined the channel
+[04:46] <mape> Looks like there could be quite a lot of new projects out of node knockout
+[04:46] aiskander has joined the channel
+[04:46] <visnup> yay
+[04:48] <_announcer> Twitter: "OH: "Ruby cant scale because MRI isnt built on top of node.js"" -- Abhay Kumar. http://twitter.com/abhay/status/16826004869
+[04:52] everton has joined the channel
+[04:52] kjeldahl has joined the channel
+[04:54] <_announcer> Twitter: "Callback-oriented programming makes control flow a PITA. Keeping an eye of CoffeeScript's proposed 'defer' statement. #nodejs" -- James Sadler. http://twitter.com/freshtonic/status/16826286961
+[04:57] <mscdex> gedddddddyyyyyyyyyy
+[04:57] jsilver has joined the channel
+[05:06] <mikeal> haha
+[05:06] kurisu has joined the channel
+[05:06] <_announcer> Twitter: "I just gave Node.js a serious look, and damn is that sexy. Can't wait until an amazing webserver is build on it." -- Kyle Hotchkiss. http://twitter.com/kylehotchkiss/status/16826950868
+[05:06] wink- has joined the channel
+[05:08] <_announcer> Twitter: "Check out http://bit.ly/9oDsJg Not used it, looks interesting @freshtonic: Callback-oriented programming makes control flow a PITA. #nodejs" -- Spot. http://twitter.com/spotnyk/status/16827041842
+[05:11] sh1mmer has joined the channel
+[05:14] <Tim_Smart> isaacs: Did someone let you know ini.js has been removed from node?
+[05:14] <isaacs> Tim_Smart: yeah, that's why npm uses its own copy now.
+[05:15] <Tim_Smart> Oh, brilliant.
+[05:15] <Tim_Smart> isaacs: I also implemented that router btw ^^
+[05:15] <isaacs> cool
+[05:21] <_announcer> Twitter: "Oh I want! Who&#39;s with me on that?! Participate in a competition to learn Node.JS! http://nodeknockout.com/ - Plenty of time up there ..." [pt] -- Rodrigo Alves Vieira. http://twitter.com/rodrigo3n/status/16827724927
+[05:22] <ryah> isaacs: i think you were the only user? or?
+[05:22] <mscdex> hehe
+[05:22] <isaacs> ryah: maybe.  which is weird, because i didn't add it originally
+[05:22] <ryah> oh we added it (at joyent)
+[05:22] <isaacs> ryah: i think most people use json for configs.  npm did that originally, but json is ugly to edit by hand
+[05:22] <mscdex> i think ini.js is nice as a separate module
+[05:23] <isaacs> ryah: ah, that's right
+[05:23] fictorial has joined the channel
+[05:23] <ryah> json, yeah - not the most beautiful config file format
+[05:24] fictorial_ has joined the channel
+[05:24] <isaacs> good for saving and reading, but not for human consumption
+[05:24] <isaacs> ini is so friendly there
+[05:24] <sechrist> hmm there's a request for http.Client proxy support
+[05:24] <sechrist> on the mailing list
+[05:24] <mscdex> socks! :-D
+[05:24] <sechrist> yeah socks
+[05:24] <ryah> i was thinking about having a .node/config file
+[05:24] <ryah> that's why i had ini in there
+[05:25] <isaacs> i see
+[05:25] <ryah> but it seems like it wont be happening
+[05:25] <isaacs> that's too bad.  there's a lot that could be done with a .noderc
+[05:25] <ryah> socks?
+[05:25] <Tim_Smart> ryah: .node_libraries is a kind of weird directory name too. It should be .node/libraries or something
+[05:25] <mscdex> .node/libs
+[05:25] <ryah> yeah
+[05:25] <ryah> ~/.node/modules
+[05:26] <mscdex> yeah
+[05:26] <ryah> i know
+[05:26] <ryah> some things you just never get around to changing
+[05:26] <mscdex> hehe
+[05:27] <ryah> ACTION needs to pull ssl out of net.js
+[05:27] <ryah> :/
+[05:27] <ryah> difficult
+[05:28] <mscdex> why pull it out?
+[05:28] <ryah> it's kind of tangled up in there
+[05:28] <ryah> would be nice to have clean separation between the ssl and tcp modules
+[05:29] <mscdex> hrm
+[05:30] <mscdex> but tcp connections could still use ssl though right?
+[05:30] <ryan[WIN]> hy
+[05:32] Yuffster has joined the channel
+[05:34] <ryah> mscdex: well ssl without tcp wouldn't have much point :)
+[05:36] <ryan[WIN]> SSL UDP
+[05:36] <ryan[WIN]> FUCK YEAH
+[05:36] <ryan[WIN]> FUCKIN SECURE DATAGRAMS AND SHIT
+[05:36] <ryan[WIN]> sorry i'll calm down
+[05:36] <ryan[WIN]> :>
+[05:37] piratepenguin has joined the channel
+[05:41] <mscdex> yeah i realized that was a stupid question not long after i asked it
+[05:42] sudoer has joined the channel
+[05:43] <mape> Hmm node knockout should have a "I want this section"
+[05:43] <ryan[WIN]> mscdex, :D
+[05:43] <mape> So people who want to join but don't have any good ideas have something to treasure hunt in
+[05:46] jsilver has joined the channel
+[05:46] linuxsable has joined the channel
+[05:47] mtodd has joined the channel
+[05:50] sudoer has joined the channel
+[05:59] pavelz has joined the channel
+[06:02] virtuo has joined the channel
+[06:05] <_announcer> Twitter: "Recently, &quot;nodejs&quot; is &quot;nobjas&quot; look. Scary. Gathering the fear of retirement." [ja] -- oogatta. http://twitter.com/oogatta/status/16829804965
+[06:08] JimBastard has joined the channel
+[06:08] <JimBastard> done http://github.com/marak/asciimo/
+[06:08] <JimBastard> just gotta take a break and tell broodmother to reinit the drone that runs the website
+[06:10] charlesjolley- has joined the channel
+[06:19] zomgbie has joined the channel
+[06:24] gerad has joined the channel
+[06:24] gerad has left the channel
+[06:31] <ryah> technoweenie: did you figure out what was wrong?
+[06:31] <technoweenie> not really, i tried several ways of writing to 2 streams at the same time
+[06:31] <technoweenie> i tried pausing the slow one (the outgoing web response)
+[06:32] <technoweenie> pausing if the slow one's write returned false, rather
+[06:32] <technoweenie> i tried pausing if either stream's write returned false
+[06:32] <technoweenie> i just perform the 2 steps in order.  i do a git archive to build the zip, and then send the zip to the user
+[06:32] <technoweenie> i just need to rig it so if you have 5 people trying to download a fresh archive, it doesnt start 5 `git archive` processes
+[06:35] <ryah> but you're getting this chunked error?
+[06:35] <ryah> very strange..
+[06:35] <technoweenie> no, not when i do it sequentially
+[06:35] <technoweenie> only when i try to write to 2 streams at the same time
+[06:36] <technoweenie> i was trying to write the output of `git archive` to a local file AND to the outgoing web response
+[06:37] <technoweenie> the current version is working great though.  i want to start phasing it in tomorrow
+[06:37] charlesjolley- has joined the channel
+[06:41] mtodd_ has joined the channel
+[06:41] WALoeIII has joined the channel
+[06:43] mikeal has joined the channel
+[06:46] <technoweenie> we're using god to monitor node.js (mainly because we use god for all the ruby shit)
+[06:48] MattJ has joined the channel
+[06:55] Achilles has joined the channel
+[06:55] slaskis has joined the channel
+[06:56] <_announcer> Twitter: "node.js has its own Rails Rumble version, go javascripters go! http://nodeknockout.com/" -- Raul Murciano. http://twitter.com/happywebcoder/status/16831997330
+[06:56] kjeldahl has joined the channel
+[06:57] kjeldahl has joined the channel
+[06:58] <ryah> technoweenie: hmm - we should figure out that two stream deal
+[06:58] <ryah> it sounds like a bug
+[06:59] <technoweenie> dang i wish gist had line number links/highlights
+[06:59] <mape> It does?
+[06:59] <ryah> technoweenie: me too
+[07:00] <mape> Oh nm
+[07:00] <mape> easy enough fix?
+[07:00] <technoweenie> no, not yet... there are a few UI things that should be brought up to date
+[07:00] jsilver has joined the channel
+[07:01] <technoweenie> ryah: yea the frustrating thing is i cant duplicate this locally.  it only seems to be triggered on the server
+[07:01] <technoweenie> git archive is running against a remote file server, and the web response is passing through the internets 
+[07:02] <technoweenie> ryah: what do you need though, will a tcpdump and source code be enough
+[07:05] <jsilver> hi guys whats ups
+[07:05] <jsilver> what's hot in nodeland
+[07:06] <jsilver> technoweenie, i have an app with attachment_fu with it in it
+[07:06] <jsilver> ACTION looks as technoweenie  ;)
+[07:06] <jsilver> ;) ;)
+[07:06] <jsilver> yr plugin does it's job
+[07:06] <Tim_Smart> jsilver: *self plug* By jquery style router http://github.com/biggie/biggie-router */self plug*
+[07:06] <jsilver> Rmagick sucks tho
+[07:06] <Tim_Smart> *My
+[07:06] <jsilver> Tim_Smart, *click*
+[07:06] nsm has joined the channel
+[07:06] <technoweenie> jsilver: cool
+[07:07] <mape> Tim_Smart: might want to look at making the readme a little more structured, short intro on it
+[07:07] ewdafa has joined the channel
+[07:07] <Tim_Smart> mape: Yeah. I was too busy actually working on the code. I'll might do that tonight
+[07:08] <mape> Hehe yeah
+[07:08] <mape> So biggie has nothing to do with connect?
+[07:08] <jsilver> tim smart
+[07:08] <jsilver> is that an easy way to chain asynchronous
+[07:08] <jsilver> explain next() ?
+[07:08] <jsilver> assume i'm retarded, i'm from ruby :)
+[07:08] <Tim_Smart> mape: Me and creationix are trying to keep the module the same
+[07:09] <Tim_Smart> *modules
+[07:09] <mape> Hmm k, so. it is sorta like connect but without all the middleware?
+[07:10] industrial has left the channel
+[07:10] <Tim_Smart> mape: Similar to connect in that it supports middleware, different syntax and core though
+[07:10] <jsilver> what is connectr
+[07:10] <mape> Why should I use it?
+[07:10] <ryah> technoweenie: tcpdump would be good to start
+[07:10] <jsilver> what is connect*
+[07:11] <jsilver> ACTION wants to hack some n0de on his new netbook
+[07:11] <Tim_Smart> jsilver: http://howtonode.org/connect-it
+[07:11] <ryah> technoweenie: i just need tcpdump of from the computer curl is on
+[07:11] <technoweenie> jsilver: the various web frameworks are still pretty new, i'd start simple w/ the core node http server
+[07:11] b_erb has joined the channel
+[07:11] <ryah> jsilver: what netbook?
+[07:11] <jsilver> hp mini 210 w/ jolicloud
+[07:11] <ryah> is jolicloud nice?
+[07:11] <Tim_Smart> mape: I find it easier to create complex stacks with biggie
+[07:12] <technoweenie> i'm still hoping fab will come and kick some ass
+[07:12] <technoweenie> though i think trying to write fab apps in coffee script will drive me nuts
+[07:12] <jsilver> yes it's very nice, includes restricted drivers and a nice app installer with some good stuff that ubuntu doesnt make immediately obvious to the new user (skype, dropbox, etc)
+[07:12] <technoweenie> -> -> -> ->
+[07:12] <jsilver> i tried UNR first which lacked drivers, which was unacceptable seeing that jolicloud is the exact same thing and comes working...
+[07:14] <jsilver> technoweenie, yeah fab is cool looking
+[07:14] <jsilver> but i prefer the chaining style demonstrated by tim's app
+[07:15] <Tim_Smart> I might write a post on tumblr about it
+[07:15] <Tim_Smart> and fix the readme
+[07:15] <jsilver> i wrote a cool tumblr today
+[07:15] <jsilver> wanna see it guys
+[07:15] <jsilver> its about automatic tunneling with if-up.d
+[07:16] <jsilver> lol
+[07:16] <jsilver> http://jsilverman.tumblr.com
+[07:17] <_announcer> Twitter: "asciimo is 100% MIT and GPL. http://asciimo.com #javascript #nodejs #nycjs #node.js read the code, don't listen to echos in the echo chamber" -- marak squires. http://twitter.com/maraksquires/status/16832888680
+[07:19] <Validatorian> JimBastard: nice :)  Any plans to implement the 'test all'?
+[07:22] <mape> nodeknockout.. when is the due date on registration?
+[07:23] <jsilver> what's asciimo
+[07:23] <Validatorian> jsilver: ascii-text generator, like figlet
+[07:23] <jsilver> hmm
+[07:24] <_announcer> Twitter: "@ Explodus I&#39;m feeling rather as JavaScript and Asynchronous I / O with node.js" [de] -- Leon Weidauer. http://twitter.com/techpriester/status/16833158878
+[07:24] <Validatorian> totally useful for... ummm... hrm.  Pirated software nfos!
+[07:25] <Tim_Smart> I might use it in me readme!
+[07:25] <mape> Well the code for asciimo is stole so perfect match.. :D
+[07:25] <Validatorian> actually, JimBastard had a good idea (I think) on his initial post to the email list -- you can use it in the console for install scripts or whatever
+[07:25] <Tim_Smart> mape: It got recoded
+[07:25] <jsilver> Validatorian, wow thats cool actually
+[07:25] <mape> Tim_Smart: Hehe yeah
+[07:26] <Validatorian> jsilver: yea, I loved figlet (actually, the windows port, figwin) like 8 years ago :)
+[07:26] ceej has joined the channel
+[07:26] <jsilver> ahh very nice
+[07:26] <jsilver> node is a very good thing
+[07:28] <Validatorian> there was a lot of controversy regarding some code that marak used for asciimo, in regards to copyright. Looks like Marak just removed all of the code he used and released it under a license (the previous code didn't have any license)
+[07:28] <jsilver> oh! that explains the nature of that message then
+[07:28] <Validatorian> yep :)
+[07:29] <jsilver> who is marak anyway
+[07:29] <Validatorian> JimBastard
+[07:29] <jsilver> ahh
+[07:29] <jsilver> so did he theft code or not
+[07:29] <jsilver> lol
+[07:29] <jsilver> he wouldnt make nervous tweets about it if he didnt i guess
+[07:30] <jsilver> ;)
+[07:30] <technoweenie> he was also pretty rude to the owner on his blog and reddit
+[07:30] <technoweenie> i dont think the guy cared about the code being 'stolen' 
+[07:30] <jsilver> ahah wow
+[07:30] <jsilver> wowzer
+[07:31] creationix has joined the channel
+[07:31] derbumi has joined the channel
+[07:32] <Validatorian> he was rude, I agree, but the guy really overreacted, imho.
+[07:32] jedschmidt has joined the channel
+[07:32] <jsilver> FOSS Drama Town
+[07:32] <jsilver> :p
+[07:32] <technoweenie> pretty simple rule, dont feed the trolls
+[07:33] <jsilver> ACTION is def not a troll 
+[07:33] <jsilver> :)
+[07:33] <Validatorian> ACTION feeds jsilver
+[07:33] <jsilver> ;D
+[07:33] <jsilver> nom nom nom
+[07:33] <jsilver> it better have been vegan food
+[07:33] <jsilver> srs
+[07:34] <jsilver> ACTION is a vegan
+[07:34] <Validatorian> alright, I'm out.  Getting my 7.2 surround sound setup tomorrow, with a new media closet and wiring my whole house with cat6 :-D
+[07:34] <jsilver> later n00b
+[07:34] <jsilver> :P
+[07:34] <Validatorian> it was tofurkey
+[07:34] <jsilver> yes, it was
+[07:35] <jsilver> Oh
+[07:35] <jsilver> never heard of that but cool
+[07:35] <jsilver> vegan food owns tho
+[07:35] <jsilver> googl'd it
+[07:35] <Validatorian> that's the most famous 'tofu dish' I know... maybe "Fakon" (fake bacon)
+[07:35] <jsilver> lol
+[07:35] <jsilver> yea
+[07:35] <jsilver> its funny because real vegetarians dont eat fake meat that much when they cook
+[07:36] <Validatorian> ACTION doesn't understand you people.  I could never give up my delicious flesh
+[07:36] <Validatorian> anyhow, ciao
+[07:36] <jsilver> but whenever u go to vegan restaurants its all fake meat
+[07:36] <jsilver> alright laters
+[07:36] <Tim_Smart> I had tasty tasty steak for dinner
+[07:36] <jsilver> ew.
+[07:36] <jsilver> ;P
+[07:37] <jsilver> i just do it for health reasons
+[07:37] <jsilver> ACTION is health freak
+[07:37] <Validatorian> jsilver: http://farm5.static.flickr.com/4006/4651508461_41a254ac49.jpg
+[07:37] <_announcer> Twitter: "#geek #nodejs added support for datagram sockets." -- Beej Jorgensen. http://twitter.com/beejjorgensen/status/16833697604
+[07:38] <jsilver> Validatorian, LOL
+[07:38] <jsilver> yeah but I used to smoke cigarettes and be all hardcore and shit
+[07:38] <jsilver> it was bad
+[07:38] <JimBastard> man
+[07:38] <jsilver> I kick ass now
+[07:38] <JimBastard> how the fuck did i waste half a week on this FIGlet bullshit
+[07:38] <JimBastard> ahaha
+[07:38] <jsilver> what is that anyway
+[07:39] <JimBastard> jsilver: http://i.imgur.com/FIXNQ.png
+[07:39] <JimBastard> pretty much boils down to that
+[07:39] <jsilver> JimBastard, that's cool. teach me your jitsu
+[07:40] <Validatorian> JimBastard: finish js-fu :'(
+[07:40] <Validatorian> ACTION is gone
+[07:45] <JimBastard> yeah i have to
+[07:45] teemow has joined the channel
+[07:45] <JimBastard> jsilver: http://asciimo.com 
+[07:45] <jsilver> yeah I saw
+[07:45] <jsilver> was wondering more about FIGlet
+[07:45] <jsilver> or you could tell me some cool stuff about how u made it
+[07:45] <jsilver> lol
+[07:46] <jsilver> im a node n00b 
+[07:52] agnat has joined the channel
+[07:53] javajunky has joined the channel
+[07:54] sixthgear has joined the channel
+[07:59] sixthgear has joined the channel
+[08:01] tilgovi has joined the channel
+[08:02] margle has joined the channel
+[08:03] zomgbie has joined the channel
+[08:03] N` has joined the channel
+[08:06] rockstar has joined the channel
+[08:06] rockstar has joined the channel
+[08:08] ph^ has joined the channel
+[08:22] <jsilver> im porting jashkenas' coffeescript tmbundle to gmate soon
+[08:22] <jsilver> Linux
+[08:22] <jsilver> is whats up
+[08:32] <Tim_Smart> vim ftw
+[08:34] felixge has joined the channel
+[08:34] felixge has joined the channel
+[08:36] <jsilver> f vim
+[08:36] <jsilver> except when i use it sometimes
+[08:36] <jsilver> :p
+[08:36] ollym has joined the channel
+[08:38] <Tim_Smart> jsilver: You tried http://github.com/etexteditor/e ?
+[08:38] <jsilver> yes but isnt that windows
+[08:38] <jsilver> i like GEdit a LOT
+[08:38] <Tim_Smart> It builds on linux apparently
+[08:39] <jsilver> i know, but the linux version still contains the anti-piracy code
+[08:39] <jsilver> havent bothered. been using gmate this whole time atleast on Rails
+[08:39] <jsilver> was immediately turned off by code asking me about serial keys
+[08:39] <jsilver> :)
+[08:40] <jsilver> cba to turn it off
+[08:40] TomY has joined the channel
+[08:40] <_announcer> Twitter: "github and mongoDB on node.js support to very large ..." [zh-CN] -- aki. http://twitter.com/aki_xavier/status/16836124645
+[08:40] <jsilver> and coffeescript deserves a gtksourceview binding
+[08:41] romainhuet has joined the channel
+[08:41] charlesjolley- has joined the channel
+[08:44] cloudhead has joined the channel
+[08:45] <Tim_Smart> jsilver: There we are. A readme http://github.com/biggie/biggie-router
+[08:45] <_announcer> Twitter: "node.js isn’t just another MVC web framework. It’s at the bleeding edge of a technology stack." -- aki. http://twitter.com/aki_xavier/status/16836312383
+[08:46] <jsilver> Tim_Smart, very nice
+[08:50] hassox has joined the channel
+[08:50] hassox has left the channel
+[08:50] jedschmidt has joined the channel
+[08:53] <_announcer> Twitter: "node.js helped me find my religion" -- technowürst. http://twitter.com/technoweenie/status/16836599547
+[08:54] agnat has joined the channel
+[08:56] dabreaka has joined the channel
+[08:56] <_announcer> Twitter: "Hates the fact rubyist mocking node.js..peace out!" -- Lakshan Perera. http://twitter.com/laktek/status/16836717818
+[08:59] <_announcer> Twitter: "I'm joining node.js knockout coding contest, need more team members #node" -- William Estoque. http://twitter.com/westoque/status/16836827591
+[09:03] <Tim_Smart> I wouldn't mind entering the node-knockout. Got no idea what I would do though
+[09:03] <technoweenie> i have an idea, but its not exactly a great showcase of node
+[09:03] cataska has joined the channel
+[09:06] <mape> Yeah, they really do need a "good ideas I want coded" page on knockout
+[09:10] <b_erb> I'd go for a S3 clone
+[09:11] <Tim_Smart> I might make a team now, just in case I get an idea later. Anyone keen?
+[09:12] <Tim_Smart> PM me your email if you are
+[09:14] <isaacs> Tim_Smart: i'd love to see a command-line driven mmorpg
+[09:15] <isaacs> Tim_Smart: like, nethack, but with other people running around in there with you
+[09:15] agnat has joined the channel
+[09:15] <isaacs> that'd be badass
+[09:16] <isaacs> you've got ncurses, and tcp, and you can have the server juggle the incoming connections and handle the business logic.
+[09:16] <Tim_Smart> Sounds interesting...
+[09:17] <Tim_Smart> I had an idea, where you would make a service that piped serveral API's into one service
+[09:17] <isaacs> boooorrrrringgggg
+[09:17] <isaacs> you can't waste time with that
+[09:17] <Tim_Smart> hehe
+[09:17] <isaacs> plus, yahoo already does that all over the place.
+[09:17] <Tim_Smart> oh right
+[09:18] <isaacs> it'd be really funny if you said "hey, i built yql in node" and then you look under the hood, and it's just using the http client to hit yql
+[09:18] <Tim_Smart> hah
+[09:18] <isaacs> the multiplayer rpg game, though, that's an idea i've kind of been kicking about for a while now.
+[09:18] <isaacs> mostly cuz i think it'd be fun to play
+[09:19] <isaacs> could even do some pvp type stuff
+[09:19] <Tim_Smart> Well do you have time to work on it for node knockout?
+[09:19] <isaacs> nope.
+[09:19] <kodisha> isaacs:  with UI?
+[09:19] <isaacs> also, i'm judging, and a sponsor
+[09:19] <isaacs> kodisha: ui = command-line + ncurses
+[09:19] <isaacs> kodisha: nethack stylie
+[09:19] <Tim_Smart> I forgot about that :p
+[09:20] javajunky1 has joined the channel
+[09:20] <kodisha> i will probably skip the knockout, i have no decent ideas :|
+[09:20] <kodisha> (morning all)
+[09:23] Ori_P has joined the channel
+[09:26] saikat has joined the channel
+[09:26] <technoweenie> lots of time to come up with one
+[09:27] <technoweenie> b_erb: having looked at parkplace (an s3 clone in ruby), i dont think i'd want to do that :)
+[09:28] <_announcer> Twitter: "node.js appears to be the new silver bullet. What happened to Erlang?" -- Postmodern. http://twitter.com/postmodern_mod3/status/16837986937
+[09:28] <b_erb> technoweenie: parkplace is way off the original api now, and i think a node-based clone might even work as a total replacement within smaller use cases while still being API compatible
+[09:29] <technoweenie> is it? it hasnt been updated in years 
+[09:30] <technoweenie> it'd be great to have though. i wouldnt want to code it :)
+[09:30] <technoweenie> whats the judging going to be like i wonder
+[09:30] <b_erb> well, this was not a serious suggestion for the contest, but I'd like the outcome 
+[09:31] <technoweenie> i'd like to do a campfire clone
+[09:31] <technoweenie> or like some irc/campfire bridge that i could access w/ propane
+[09:35] <_announcer> Twitter: "Okay, Node.js was the Cygwin seems some people have stumbled in trying to build, gcc and make from it What is not in the standard. I had to install it for granted, nothing 躓Kanakatta." [ja] -- 天沢(弱). http://twitter.com/amasawa/status/16838254667
+[09:35] <_announcer> Twitter: "I made a thing: http://github.com/caolan/forms -- An easy way to create, parse and validate forms in #nodejs" -- Caolan. http://twitter.com/caolan/status/16838280576
+[09:40] javajunky has joined the channel
+[09:40] mAritz has joined the channel
+[09:41] agnat has joined the channel
+[09:45] xla has joined the channel
+[09:56] jsilver has joined the channel
+[09:57] jsilver has joined the channel
+[09:59] fermion has joined the channel
+[10:03] <mAritz> how in the hell are you supposed to get anything done in node.js if there are awesome things popping up left and right all the time? -.-
+[10:03] <mAritz> (phew, now it's the correct channel :P)
+[10:04] <jedschmidt> can anyone tell me if this is a valid test?
+[10:04] <jedschmidt> http://gist.github.com/449728
+[10:04] <jedschmidt> i'm trying to figure out the performance implications of fn( obj ) versus fn.call( obj )
+[10:06] <mAritz> you're doing 2 different things here. fn( obj ) just gives obj as an argument. fn.call(obj) sets the this var inside the function to obj but doesn't give it any arguments
+[10:10] <jedschmidt> mAritz: i'm aware of that.
+[10:10] <jedschmidt> they're both ways of passing data into a function.
+[10:10] <jedschmidt> i'm just wondering if it's a valid way to test the overhead of passing it using a context.
+[10:11] <mAritz> theoretically, yes.
+[10:12] <mAritz> however you're really kinda comparing apples and oranges here. you can do that (http://www.wolframalpha.com/input/?i=apple+vs+orange), but the question is how useful it is. ;)
+[10:13] <jedschmidt> i disagree, respectfully.
+[10:27] jetienne has joined the channel
+[10:38] agnat has joined the channel
+[10:41] Ori_P has joined the channel
+[10:43] <mAritz> jedschmidt: that's okay. :P
+[10:44] <jedschmidt> mAritz: currently, (fab) uses "this" to hold the callback function.
+[10:44] <jedschmidt> mAritz: i'm trying to figure out whether it's worth the performance hit.
+[10:45] sztanphet has joined the channel
+[10:48] <mAritz> without knowing much about (fab) I'd expect a callback function to be passed as fn(callback) ;)
+[10:48] <MarkHansen> yeah. the conventions all over node are fn(arg1, arg2, argN, callback)
+[10:49] <jedschmidt> heh, let's just say (fab) is a little unconventional.
+[10:50] jsilver has joined the channel
+[10:51] <jedschmidt> the tradeoff here is that "this" is slightly more flexible, at the expense of some perf.
+[10:52] <jedschmidt> app.call( callback, arg1 ) is the norm in (fab) right now, which is nice because (1) you can use arguments.length to see whether args were passed, and (2) you don't have to clutter every function declaration with "callback" params.
+[10:56] <jsilver> can I set a var to a function and then pass that var to a node function as the callback?
+[10:57] <jedschmidt> jsilver: indeed you can.
+[10:57] <jsilver> why don't people do it
+[10:57] <jedschmidt> jsilver: because using an anonymous function (one defined inline, not in a var) is more convenient a lot of the time.
+[10:58] <jsilver> ah
+[10:58] <jedschmidt> jsilver: you don't need the clutter of a var, and functions defined deep in place have access to more state than those defined higher up.
+[10:58] <jsilver> im out 
+[10:58] <jsilver> hmm
+[10:59] <jsilver> nice
+[10:59] <jsilver> ok im out
+[10:59] <jsilver> night
+[11:19] derbumi has joined the channel
+[11:27] ceej has joined the channel
+[11:28] femto has joined the channel
+[11:31] jedschmidt has joined the channel
+[11:34] maushu has joined the channel
+[11:43] TomY has joined the channel
+[11:44] caolanm has joined the channel
+[11:44] <_announcer> Twitter: "OpenID on node.js? Apparently, even bite, node.js not know the meaning." [ja] -- Ian Lewis. http://twitter.com/IanMLewis/status/16843836643
+[11:49] freshtonic has joined the channel
+[11:55] ewdafa has joined the channel
+[11:59] <_announcer> Twitter: "Node.JS Knockout: A Node Coding Contest in August: http://is.gd/d02Fm" -- Coder I/O. http://twitter.com/coderIO/status/16844560109
+[12:05] jos3000 has joined the channel
+[12:05] Ori_P has joined the channel
+[12:09] <_announcer> Twitter: "Node.js knockout 48--hour node.js coding contest. anyone interested? http://nodeknockout.com/" -- Somchok Sakjiraphong. http://twitter.com/sunny36/status/16845081596
+[12:10] <k23z> would it be hard to re-write server-side Socket.IO-node in any other language ?
+[12:11] <k23z> sechrist: ?
+[12:11] <k23z> Tim_Smart: ?
+[12:11] phiggins has joined the channel
+[12:11] <Tim_Smart> k23z: Such as?
+[12:11] <k23z> Tim_Smart: such as Haskell or Perl or Python
+[12:12] <Tim_Smart> Python + Tornado could pull it off
+[12:12] <k23z> maybe but ignore Tornado..
+[12:12] <Tim_Smart> Not really, it would scale
+[12:12] <Tim_Smart> *wouldn't
+[12:12] <k23z> wouldn't ?
+[12:12] <k23z> how so ?
+[12:13] <Tim_Smart> lots of concurrent connections introduces problems
+[12:13] <dahankzter> C would scale ;)
+[12:13] <Tim_Smart> dahankzter: If you used libev yeah :)
+[12:14] <Tim_Smart> Or threads
+[12:14] <k23z> libev sounds awesome
+[12:14] <k23z> threads...meh
+[12:15] <Tim_Smart> k23z: Node.js uses libev
+[12:15] <k23z> but I was actually intersted in the socket part and how the data comes serialized ..
+[12:15] <k23z> it does ?
+[12:15] <dahankzter> libevent really rox
+[12:15] <dahankzter> isnt memcached using it?
+[12:16] <Tim_Smart> dahankzter: Not sure, nginx might be using it also
+[12:16] <dahankzter> both nginx and memcached
+[12:17] <dahankzter> memcached is getting old too
+[12:17] <dahankzter> funny how it took so long for it to catch on
+[12:17] <dahankzter> i blame enterprise java....
+[12:17] <Tim_Smart> mongodb is faster than memcached now
+[12:18] <mape> have benches to back that up?
+[12:19] jstewart1 has joined the channel
+[12:19] jstewart1 has left the channel
+[12:19] <Tim_Smart> mape: Actually about the same speed
+[12:21] <caolanm> Tim_Smart: have you been using mongo in production?
+[12:22] <Tim_Smart> caolanm: I have been using couch mainly
+[12:22] <caolanm> I've been using couch too, not really played with mongo yet
+[12:22] stepheneb has joined the channel
+[12:22] <Tim_Smart> I'll probably look at riak next though
+[12:22] <dahankzter> mongodb can cover most if not all of memcached's usecases 
+[12:23] <caolanm> the interesting thing for me is that mongo can do reasonable ad-hoc queries, unlike couch
+[12:23] <dahankzter> mongodb is a gazillion times simpler to use than couch
+[12:23] <dahankzter> still couche have some benefits, like versioning
+[12:23] <k23z> Tim_Smart: yes but I many maybe the protocol for socket.io is different
+[12:23] <caolanm> love the simplicity of couch ;)
+[12:23] <unomi> how would you rate redis vs mongo ?
+[12:24] <k23z> Tim_Smart: maybe it sends some special data that the server-side(node.js) handles in a special way
+[12:24] <dahankzter> redis is key-value right?
+[12:24] <unomi> yeah, isn't mongo?
+[12:24] <dahankzter> much simpler but less powerful
+[12:24] <dahankzter> nope
+[12:24] <caolanm> why does socket.io require you to run the examples as sudo??
+[12:24] <dahankzter> documents
+[12:24] <unomi> ah
+[12:24] <caolanm> I'm *not* running examples as sudo!
+[12:24] <mape> caolanm: tries binding low ports?
+[12:24] <Tim_Smart> k23z: socket.io would just use json
+[12:24] <caolanm> flash?
+[12:25] <mape> yeah
+[12:25] <Tim_Smart> caolanm: It binds to the port used to serve cross-domain-policies
+[12:25] <caolanm> I'm currently using faye for something, but actually socket.io looks like a better match
+[12:26] <caolanm> Tim_Smart: ahh, thanks
+[12:26] <caolanm> that should be in the readme
+[12:27] dwww has joined the channel
+[12:28] <k23z> tommorow I'm starting work
+[12:28] <k23z> as a js ninja
+[12:32] TheEnd2012 has joined the channel
+[12:33] <_announcer> Twitter: "RingoJS vs NodeJS: http://is.gd/d0vfT" [lv] -- appengine js sdk. http://twitter.com/appenginejs/status/16846396250
+[12:35] <k23z> ringo ?
+[12:35] <k23z> what's this ringo thing
+[12:35] <Tim_Smart> Runs on rhino...
+[12:36] <Tim_Smart> which runs on Java
+[12:36] <jetienne> :)
+[12:36] <k23z> which runs on jvm
+[12:36] <k23z> lol
+[12:36] <k23z> s/vs/</
+[12:42] <dahankzter> hmm i am getting more and more adverse to the jvm... Its still the best vm ever created but still...
+[12:42] <jetienne> q. how do i sleep/stop inside a node script ? like at a given point in the script i want node to stop parsing new lines... but keep running until it all timer and all have expired ?
+[12:42] <Tim_Smart> setTimeout?
+[12:42] <jetienne> i want the same behaviour one got at the end of the script
+[12:43] <jetienne> Tim_Smart: a sync sleep could do it
+[12:43] <jetienne> but setTimeout is async, so the remaining lines will still be parsed and run
+[12:43] <Tim_Smart> jetienne: Remember node is single threaded
+[12:43] <jetienne> Tim_Smart: i remmeber. but how is it related ?
+[12:44] <Tim_Smart> You don't want to block or you can't recieve callbacks or event
+[12:44] <Tim_Smart> *event
+[12:44] <Tim_Smart> *events
+[12:44] <jetienne> Tim_Smart: ok i think i express myself badly
+[12:44] <jetienne> normally at the end of the .js script, they are no more line, but node is still running until all timeout+fd are in use
+[12:45] <jetienne> i want to have something like that... but to do it in the middle of a .js
+[12:45] <jetienne> a kindof "softexit"
+[12:45] mw has joined the channel
+[12:46] <Tim_Smart> process.addListener('kill', function () { ... }): ?
+[12:46] <jetienne> Tim_Smart: what is that supposed to do ?
+[12:47] <Tim_Smart> It runs when the process is about to exit
+[12:47] <jetienne> nice :) wont fix my problem tho
+[12:47] <jetienne> i think i will go to sleep and query the ml tomorrow
+[12:50] <mape> hmm anyone had issues with profiling lately?
+[12:50] <mape> when using linux-tick-processor I get scons: Reading SConscript files ...
+[12:53] jashkenas has joined the channel
+[12:58] robrighter has joined the channel
+[12:59] <mAritz> jetienne: put an if around the rest of the lines? or just delete them if there is no condition?!
+[13:00] <jashkenas> jetienne: just return from the function?
+[13:03] <jetienne> mAritz: this is what i do, but this is dirty at best. imagine you need this 10 time in the script. you need 10 nested if just for this
+[13:03] <jetienne> jashkenas: whichi function ?
+[13:04] <mAritz> it appears you're doing something wrong then
+[13:04] <jetienne> mAritz: what do you mean
+[13:04] <jashkenas> jetienne: gisting your script, or an excerpt, would probably be enlightening.
+[13:04] <mAritz> having to do that seems just wrong
+[13:05] <_announcer> Twitter: "Anybody want to team up with me for the Node.js Knockout? http://nodeknockout.com/ (Disclaimer: I've never written a real Node app)" -- Jerod Santo. http://twitter.com/sant0sk1/status/16848287026
+[13:05] <jetienne> mAritz: well exit() is a common funciotn in sync programming. i just want a exit() which is async
+[13:05] <jetienne> jashkenas: will do
+[13:06] davidsklar has joined the channel
+[13:06] <jetienne> http://github.com/jeromeetienne/node-neoip/blob/master/contrib/oload_stress_test/oload_stress_test.js#L98 <- jashkenas
+[13:07] <jetienne> currently you see the if()
+[13:07] <jashkenas> the if (true) {
+[13:08] <jashkenas> perhaps if (shouldContinue) { would do the trick?
+[13:08] JAAulde has joined the channel
+[13:08] <jetienne> jashkenas: yep, this is the if() trick... but this is quite dirty
+[13:09] <JAAulde> Nello Node folks--I
+[13:09] <JAAulde> 'm only here for the marketing
+[13:09] <JAAulde> ( http://www.gmosx.com/blog/agVnbW9zeHIPCxIHQXJ0aWNsZRjh2gEM/ringojs-vs-nodejs )
+[13:09] <JAAulde> ^^ guy is a bit screwey
+[13:09] <jetienne> process.softexit() <- ++ :)
+[13:09] <mAritz> JAAulde: _announcer alreay made us aware of that article :P
+[13:10] <mAritz> all hail maushu
+[13:10] <JAAulde> mAritz: cool, i just wanted to explain my marketing comment
+[13:10] <JAAulde> lol
+[13:10] <jetienne> here this is more rino vs v8 :)
+[13:10] <JAAulde> WTF marketing is that guy referring to?
+[13:10] Ori_P has joined the channel
+[13:11] <mAritz> oh, ok. haven't read the article though, because i'm really not interested in anything that is distantly involved with java ^^
+[13:12] <unomi> well, it wasn't really Rys fault, but he did manage to get the attention of some who figured it would be good to be a big fish in a little pond
+[13:12] <mAritz> jetienne: uhm... what's so dirty about if()? that's exactly what if() is for?!
+[13:12] <JAAulde> mAritz: yeah, I just read that RingoJS requires Java
+[13:12] <JAAulde> yuck
+[13:13] jashkenas has left the channel
+[13:13] <maushu> mAritz: All hail me since I'm so awesome.
+[13:13] <maushu> When _announcer doesn't crash that is.
+[13:13] <JAAulde> haha
+[13:13] <unomi> thats a pretty lame post though
+[13:14] <JAAulde> I, for one, want to see every lib get tons of exposure
+[13:14] <mAritz> maushu: or just says: "Twitter:" and nothing else
+[13:14] <JAAulde> long live JS
+[13:14] <unomi> there is truth to some of the JVM kool aid
+[13:14] <JAAulde> dude needs to back off--no need to start fighting inside the JS community
+[13:14] <unomi> but they are 2 fairly different use cases imo
+[13:14] demolithion has joined the channel
+[13:14] punytan has left the channel
+[13:15] <mAritz> i like his argument about speed: ringojs is slower, but fuck you i don't want fast!
+[13:15] <unomi> nod
+[13:16] demolith1on has joined the channel
+[13:16] ph^_ has joined the channel
+[13:17] <unomi> I wonder how the asynch support is in ringojs, seems weird in the context of java libs
+[13:17] <jetienne> mAritz: edit a file, and put 10 nested if, just to do a process.softexit()... it will be appear obvious to you too
+[13:18] <_announcer> Twitter: "TODO: Enviar "upstream" los pequeños parches a node.js y publicar el proxy HTTP con soporte CONNECT en 200 líneas de javascript" -- Santiago Gala. http://twitter.com/sgala/status/16849092654
+[13:18] <_announcer> Twitter: "@ Newsycombinator: RingoJS vs NodeJS http://bit.ly/bQztT0: newsycombinator: RingoJS vs NodeJS http://bit.ly/bQztT0 http://bit.ly/aYC25c" [pl] -- marcelobernard. http://twitter.com/marcelobernard/status/16849113489
+[13:19] <JAAulde> wow, what a dick
+[13:20] ph^ has joined the channel
+[13:21] kersny has joined the channel
+[13:24] <_announcer> Twitter: "RingoJS vs NodeJS http://bit.ly/9R1Nmx nodejs # # # commonjs ringojs" [hr] -- Régis Gaidot. http://twitter.com/rgaidot/status/16849482041
+[13:26] chrischris has joined the channel
+[13:29] tisba has joined the channel
+[13:30] dabreaka has joined the channel
+[13:31] stagas has joined the channel
+[13:32] ivan has joined the channel
+[13:33] <_announcer> Twitter: "http://bit.ly/ag6rIS server-side javascript ecosystem is getting more interesting every day #nodejs #ringojs" -- Tomasz Stachewicz. http://twitter.com/_tomash/status/16850037028
+[13:33] kodisha has joined the channel
+[13:34] <_announcer> Twitter: "[DMathieu] Writing modules for node.js http://bit.ly/9yTjAS" [fr] -- Damien Mathieu. http://twitter.com/dmathieu/status/16850089870
+[13:34] tisba has left the channel
+[13:35] <mAritz> haha, let him talk shit. who cares
+[13:35] kriszyp has joined the channel
+[13:36] <_announcer> Twitter: "@kylecordes That's awesome! How much have you played with Node.JS?" -- Shane Reustle. http://twitter.com/Crath/status/16850227496
+[13:36] <kodisha> ACTION returns 
+[13:38] brandon_beacher has joined the channel
+[13:40] findyourownpath has joined the channel
+[13:41] jherdman has joined the channel
+[13:41] <k23z> I tried socket.io, put in my codez
+[13:41] <k23z> I do a socket.connect() on client-side
+[13:41] <k23z> and on server-side I don't see anything
+[13:42] dabreaka has joined the channel
+[13:44] <_announcer> Twitter: "RingoJS vs NodeJS. Because I'm just that guy. http://bit.ly/ahTII0" -- Frederick Polgardy. http://twitter.com/polgfred/status/16850760576
+[13:44] <k23z> can I check somehow that it actually did connect the socket ?
+[13:45] <k23z> with socket.io I mean
+[13:46] <k23z> the documentation is a bit sketchy
+[13:46] <k23z> I would've liked if every function was documented like
+[13:46] <k23z> socket.connect()  returns X if ok , returns Y if not ok
+[13:46] <k23z> and so forth
+[13:47] gf3 has joined the channel
+[13:48] Ori_P has joined the channel
+[13:48] rockstar has joined the channel
+[13:48] rockstar has joined the channel
+[13:48] <_announcer> Twitter: "@zumbrunn CommonJS is Betamax, NodeJS is VHS?" -- piefke 3000. http://twitter.com/p3k/status/16851037835
+[13:49] bradleymeck has joined the channel
+[13:49] <mAritz> more like dvd vs blueray
+[13:50] <mAritz> (dvd being the universal format that everyone can play and blue ray the new high resolution that still is only available for relatively few people)
+[13:50] <k23z> sechrist: you told me you had ur own socket.io fork ?
+[13:50] <k23z> sechrist: maybe you know more about the internals
+[13:50] mitkok has joined the channel
+[13:51] <mAritz> it's bluray though, isn't it? (as you might guess i'm one of those that don't have it yet :P )
+[13:52] <_announcer> Twitter: "Web browsing on Twitter ChiarpUserStream node.js made the application - Hatena Diary liquor branch http://d.hatena.ne.jp/sfujiwara/20100621/1277090751" [ja] -- YJ. http://twitter.com/satojkovic/status/16851285398
+[13:53] <sechrist> k23z: wat
+[13:53] <sechrist> yeah I do have a fork
+[13:53] <sechrist> add a connect listener
+[13:53] sanderjd has joined the channel
+[13:54] <sechrist> k23z: https://gist.github.com/34d9a9c9d9230f527397
+[13:54] <sechrist> that is.. also.. not in the documentation
+[13:57] ajpiano has joined the channel
+[13:58] mtodd has joined the channel
+[13:58] <k23z> sechrist: but I just used socket.connect() and on server-side I printed a message on client connection
+[13:58] <k23z> and saw nothing on my screen on server-side 
+[13:58] <k23z> how do you explain that ?
+[13:59] <sechrist> .. what the?
+[13:59] <sechrist> you connect from the client side
+[13:59] <sechrist> not the server side
+[13:59] <sechrist> the connect and disconnect event code I just pasted you in the git goes on the client side
+[13:59] zaach has joined the channel
+[13:59] <sechrist> there are disconnect and connect events on the server side but do you need those?
+[13:59] <k23z>       var socket = new io.Socket(null, {rememberTransport: false, port: 8080});
+[13:59] <k23z>       socket.connect();
+[14:00] <k23z> sechrist: you know the example from chat.html which is in Socket.IO-node repository no ?
+[14:00] <k23z> sechrist: well I'm doing stuff that's being done there
+[14:00] <sechrist> that's client side code
+[14:00] <sechrist> if it's in your browser
+[14:00] <sechrist> that is client side
+[14:00] <k23z> sechrist: yes, and client-side is what I'm talking about
+[14:00] <sechrist> ok
+[14:00] <sechrist> then look at my gist
+[14:01] <_announcer> Twitter: "@p3k nodejs is porn, commonjs is documentary." -- simon oberhammer. http://twitter.com/oberhamsi/status/16851864238
+[14:01] <sechrist> I wake up and there's people bashing node.js
+[14:01] <sechrist> what gives, ryah?
+[14:03] creationix has joined the channel
+[14:03] steadicat has joined the channel
+[14:03] candeller has joined the channel
+[14:04] creationix has joined the channel
+[14:06] softdrink has joined the channel
+[14:07] stepheneb has joined the channel
+[14:08] <sechrist> I'm not sold by ringojs.. it's too abstracted
+[14:09] <_announcer> Twitter: "Over the last year has become very topical javascript: node.js, html5" [ru] -- zakhar. http://twitter.com/zz_zoom/status/16852377650
+[14:09] jakehow has joined the channel
+[14:11] dgathright has joined the channel
+[14:11] candeller has left the channel
+[14:14] scott_gonzalez has joined the channel
+[14:15] <_announcer> Twitter: "Real-time, collaborative mockups with Mockingbird, Node.js and web sockets:  http://techblog.gomockingbird.com/socket-to-em" -- Joe Lanman. http://twitter.com/joelanman/status/16852806999
+[14:16] ceej has joined the channel
+[14:17] <_announcer> Twitter: "I wonder node.js is better. Let&#39;s use it." [ja] -- Jxck. http://twitter.com/Jxck_/status/16852931734
+[14:17] jedschmidt has joined the channel
+[14:19] <kodisha> i think this translation thing is not working the best it can :D
+[14:19] <sechrist> unhtmlspecialchars plz
+[14:19] <stagas> yep
+[14:19] <sechrist> has somebody packaged together php.js for node?
+[14:20] <sechrist> that's an awesome project
+[14:20] <sechrist> for my lazy ass
+[14:20] <stagas> sechrist: yes it recently added commonjs
+[14:20] <stagas> but you wouldn't need to pack all the functions just use the ones you need
+[14:20] <kodisha> php.js in async enviroment :)
+[14:21] <sechrist> is head of ry/node safe?
+[14:21] <sechrist> i'm about to clone
+[14:21] <kodisha> bunch of function should be rewritten to support async stuff
+[14:21] BrianTheCoder has joined the channel
+[14:21] <sechrist> in php.js?
+[14:22] <kodisha> yup
+[14:22] <_announcer> Twitter: "You know, @gmosx, you’re kind of an asshat. Linking to http://nodejs.org with the text “toys?” Seriously?" -- elliottcable. http://twitter.com/elliottcable/status/16853235221
+[14:22] <sechrist> I'm mainly wanting semantic crap. htmlspecialchars, base64decode
+[14:22] <sechrist> I could write/find my own libs to accomplish
+[14:22] <sechrist> but why
+[14:22] hsuh has joined the channel
+[14:22] <kodisha> (twitter wars)
+[14:22] <sechrist> gmosx is a fag
+[14:22] <sechrist> fag fag fag
+[14:23] <sechrist> we node.js users are superior to that of java VM javascript faglets
+[14:23] <sechrist> node-elitism
+[14:23] <_announcer> Twitter: "@gmosx … “cool marketing;” Node.js has been getting attention because it’s really quite well done, and not because of some *buzz campaign*." -- elliottcable. http://twitter.com/elliottcable/status/16853402702
+[14:25] <_announcer> Twitter: "Rack-style middlewares coming to Node.js: http://howtonode.org/connect-it" -- Zach Zolton. http://twitter.com/zdzolton/status/16853530491
+[14:26] <_announcer> Twitter: "@gmosx Have you done any benchmarks? Seriously. Also, node.js crash reports are generally on older versions." -- Chase Sechrist. http://twitter.com/chasesechrist/status/16853578704
+[14:26] <kodisha> who is this gmosx guy? what a hate post he wrote on his blog
+[14:26] <sechrist> that hate post
+[14:26] <sechrist> infuriates
+[14:27] <sechrist> rawr
+[14:27] <_announcer> Twitter: "Interesting: More mature server side javascript: RingoJS http://www.gmosx.com/blog/agVnbW9zeHIPCxIHQXJ0aWNsZRjh2gEM/ringojs-vs-nodejs" -- Ratan J. Sebastian. http://twitter.com/rjsvaljean/status/16853663505
+[14:27] <sechrist> NO
+[14:27] <sechrist> NO
+[14:28] markwubben has joined the channel
+[14:28] <_announcer> Twitter: "@p3k: NodeJS is the latest hype in a long series of serverjs hypes." -- Chris Zumbrunn. http://twitter.com/zumbrunn/status/16853692436
+[14:28] <_announcer> Twitter: "@gmosx say so all you like, but you’re wrong. Node.js is quite well engineered. It’s certainly *not* about attention. /cc @nodejs" -- elliottcable. http://twitter.com/elliottcable/status/16853718769
+[14:28] <kodisha> wtf?
+[14:28] <_announcer> Twitter: "@rjsvaljean also node.js has become much more mature in the last few months. gmosx is just on his period." -- Chase Sechrist. http://twitter.com/chasesechrist/status/16853748902
+[14:30] <kodisha> i think we shouldn't be upset by this, this is just lame, this guy is also lame
+[14:30] <sechrist> upset? over trollz? nah
+[14:30] <sechrist> it's funny tho
+[14:30] <scott_gonzalez> ryah: you around?
+[14:30] <sechrist> I don't even need to do benchmarks to know that node.js is orders of magnitude quicker
+[14:31] <sechrist> plus I do crap down at the FD level
+[14:31] Tekerson has joined the channel
+[14:32] Ori_P_ has joined the channel
+[14:34] <_announcer> Twitter: "RingoJS - like node but worse because Rhino is a slow piece of shit #nodejs" -- TJ Holowaychuk. http://twitter.com/tjholowaychuk/status/16854150960
+[14:35] <_announcer> Twitter: "今一ありがたみがわからん http://www.robsearles.com/2010/05/28/nodejs-tutorial-with-couchdb-and-haml-erdnodeflips/" -- Kazki MATSUMOTO. http://twitter.com/KazkiMatz/status/16854198917
+[14:35] <ryah> scott_gonzalez: hey
+[14:36] <ryah> elliottcable, sechrist: don't flame
+[14:37] <sechrist> tjholowaychuk is my hero
+[14:38] <mAritz> haahaha... i'm watching the world cup (england vs slovenia) in german television and there appears to be someone hacked into the audio feed who sometimes makes subtle noises and said "scheiße, fuck eh" a minute ago. :D
+[14:38] fowlduck has joined the channel
+[14:38] <sechrist> TV hijackings are quite rare
+[14:38] <sechrist> tape it if you have a DVR
+[14:38] <mAritz> it might just be the livestream
+[14:38] <sechrist> oh
+[14:38] <sechrist> I thought you meant like cable
+[14:39] <elliottcable> ryah: huh?
+[14:39] <scott_gonzalez> ryah: nevermind, thought I had run into a weird bug in node, but it was just a missing semicolon :-P
+[14:39] <sechrist> elliottcable: we weren't flaming :)
+[14:39] <elliottcable> ryah: I’m not flaming; I’m trying to tell the guy that his preconceptions are incorrect
+[14:39] <mAritz> but it's definitely there. my dad (who is watching the livestream too, but about 600km away from me) heard it too
+[14:39] <elliottcable> mind you, I flame a ton; I’m just not flaming in this particular ocasson
+[14:39] <_announcer> Twitter: "&quot;Node&#39;s goal is to provide an easy way to build scalable network programs.&quot; Oh, write in JS JS server sites that I thought people Love for the toy. ." [ja] -- Kazki MATSUMOTO. http://twitter.com/KazkiMatz/status/16854465898
+[14:40] <mAritz> tj is flaming though. wouldn't have expected anything else though... :P
+[14:40] <elliottcable> tjholowaychuk is far from my hero |=
+[14:40] <_announcer> Twitter: "Oh good, #nodejs people are fighting with #rhinojs people.  Maybe focus on your own stuff and #STFU." -- Tyler Weir. http://twitter.com/tylerweir/status/16854510278
+[14:40] <elliottcable> he’s fairly annoying
+[14:40] <elliottcable> he’s no better than gmosx is acting in this situation.
+[14:40] <elliottcable> he’s essentially saying “RingoJS sucks, node rules!”, a very bandwagon-esque sort of thing.
+[14:40] <sechrist> twas joking
+[14:41] <sechrist> we need to break out benchmarks
+[14:41] <sechrist> with connect's multicore and stuff
+[14:41] <elliottcable> my point herein is that Node is technically sound, and a very neat idea: not *superior* to Ringo, but certainly not to be ignored just because it’s popular.
+[14:41] <sechrist> depends on what your concerns are
+[14:41] fowlduck has joined the channel
+[14:41] <sechrist> i need speed
+[14:41] <elliottcable> meh @ benchmarks. Different strokes ’n all that. Node’s interesting because of the asynchronicity, something you can’t directly compare to other old-school “serverside JS” implementations.
+[14:42] derferman has joined the channel
+[14:42] <elliottcable> sechrist: in which case, I’d suggest running personalized benchmarks against your own, actual, codebase… generalized benchmarks are a myth, and a dangerous one at that :D
+[14:42] <mAritz> i don't even care about speed, because fuck you! all i need is to see ryahs marketing awesomness and i'm sold! /s
+[14:42] <_announcer> Twitter: "http://bit.ly/bwixZN descriptive information article. Something amazing. . &gt; Node.JS" [ja] -- Kazki MATSUMOTO. http://twitter.com/KazkiMatz/status/16854665071
+[14:42] <elliottcable> mAritz: o_O
+[14:43] <mAritz>  /s = /sarcasm :P
+[14:43] <elliottcable> mAritz: http://en.wikipedia.org/wiki/Temherte_slaq#Temherte_slaq.C3.AE
+[14:43] <ryah> i really don't thing a flame war has any point
+[14:43] <elliottcable> s/\/s/¡/
+[14:44] <elliottcable> ryah: you’re like a big, cuddly teddy bear :D
+[14:44] <mAritz> yeah, that looks exactly like an i in my client
+[14:44] <ryah> anyway - has anyone even tried ringojs? maybe it's super awesome
+[14:44] <elliottcable> ryah: why don’t you keep making awesome stuff, and let us deal with the people who think Node sucks just because it’s popular suddenly? :D
+[14:44] <elliottcable> ryah: no, but I’m trying to get that guy to come in here and evangelize it
+[14:44] <mAritz> no, he needs to do marketing! ¡
+[14:44] <ryah> nodejs has a lot of suck too, just for the record
+[14:44] <mAritz> like this?
+[14:44] <elliottcable> ryah: while also learning that Node, in fact, isn’t silly or overmarketed or buzzy
+[14:44] <elliottcable> mAritz: yah!
+[14:45] <ryah> ACTION needs to go. bye
+[14:45] <elliottcable> ACTION high-fives mitkok for using Unicode
+[14:45] <mAritz> bye :)
+[14:45] <elliottcable> ryah: awwww
+[14:45] <elliottcable> ACTION will miss ryah-teddy-bear
+[14:45] <mAritz> ACTION is not mitkok
+[14:45] <mitkok> sweet haha
+[14:45] <mAritz> :D
+[14:45] <elliottcable> pfft
+[14:45] <mjr_> morning noders
+[14:45] <elliottcable> all m-names are the same anyway
+[14:45] <elliottcable> right mjr_?
+[14:45] <mjr_> shit yeah
+[14:45] <elliottcable> pff morning, I haven’t slept yet
+[14:46] Yuffster has joined the channel
+[14:46] <elliottcable> I scared off stepheneb, b_erb, and charlesjolley- >,>
+[14:46] <mAritz> by calling them all e? (cause that's the only common letter i see)
+[14:47] <elliottcable> and then sechrist, steadicat, and creationix
+[14:47] <mAritz> netsplit?! :/
+[14:47] <elliottcable> I must be really scary.
+[14:47] <_announcer> Twitter: "#reddit RingoJS vs NodeJS: submitted by  jonromero  [link] [1 comment] http://bit.ly/aNc5ag #rulez" -- REDDITSPAMMOR. http://twitter.com/REDDITSPAMMOR/status/16854977085
+[14:48] <mAritz> why the fuck is this one small blog post taking off like that? it's not even well written.
+[14:48] <elliottcable> my fault
+[14:48] <elliottcable> obv.
+[14:48] <mAritz> okay
+[14:48] <elliottcable> I got linked it, and flew off the handle at the dude
+[14:48] <k23z> hmm so I tried what sechrist suggested
+[14:48] <elliottcable> which brought Amy Hoy in on it, and then I @replied ryah, which made him a sad panda bear
+[14:48] <k23z> I still don't get any message or whatever ...
+[14:49] <mjr_> Anything worth doing is going to be threatening to some people.  When people are threatened, they often get defensive.
+[14:49] <elliottcable> your mom got defensive last night.
+[14:49] <elliottcable> it didn’t do her any good.
+[14:49] <mjr_> yeah, good point
+[14:49] <elliottcable> … yeah, your mom jokes in IRC… I really need to sleep.
+[14:49] <elliottcable> ACTION shuts up
+[14:50] <k23z> anyone knows about socket.io ?
+[14:50] polyrhythmic has joined the channel
+[14:50] <kodisha> damn this dying twitter, the worst service ever
+[14:50] <mjr_> ryah: what else does my http_trace need to do to be more useful than telling people to run tcpdump?
+[14:51] <KungFuHamster> twitter.com: a failwhale that sometimes loads social networking messages
+[14:52] <bradleymeck> what would be hilarious is running a JVM ontop of node running ringojs then using java.scripting
+[14:52] mtodd has joined the channel
+[14:53] <elliottcable> hilarious?
+[14:53] <elliottcable> you have a sick, sick, sick sense of humour.
+[14:53] <bradleymeck> 3 js interpretters at once!
+[14:54] <bradleymeck> might try to do that...
+[14:54] <_announcer> Twitter: "@jcroft I hate to be That Guy, but you can compile less.js server-side using node.js" -- ░▒▓ kylefox. http://twitter.com/kylefox/status/16855397934
+[14:57] <_announcer> Twitter: "I've seen two Node.js package managers: npm and kiwi. Is npm the one that most people are using?" -- Chris Powers. http://twitter.com/chrisjpowers/status/16855547373
+[14:57] <KungFuHamster> seconds until Twitter announcer becomes annoying: -3, -4, -5...
+[14:58] <bradleymeck> is _announcer open src?
+[14:59] <mape> Hehe even dhh is poopooing RingJS
+[14:59] <mape> Don't even need ryan to be DDH
+[14:59] <elliottcable> saw that
+[14:59] <mape> *dhh
+[14:59] <elliottcable> annoying
+[14:59] <elliottcable> by smashing Node unnecessarily, that guy sure generated a lot of bad buzz for Ringo.
+[14:59] <bradleymeck> just fundamentally different philosophies
+[15:00] sechrist has joined the channel
+[15:00] <KungFuHamster> bad buzz is better than no buzz
+[15:00] <mape> Well java is pretty much javascript so perhaps it is a good match
+[15:00] <sechrist> mape: what
+[15:00] <bradleymeck> and idk if callbacks make code more complex, just different
+[15:00] <elliottcable> I think he intended to suffix a “¡” there.
+[15:00] <sechrist> ecmascript is nothing like java
+[15:00] <mape> ACTION throws sarcasm over the irc at sechrist 
+[15:00] <sechrist> oh okay
+[15:00] <sechrist> jesus
+[15:00] <sechrist> I was like
+[15:00] <sechrist> waat
+[15:00] <elliottcable> O_O
+[15:01] <elliottcable> lol ikr
+[15:01] <elliottcable> “People often think a good mix should rise and fall, but people are wrong. It should be ALL RISE, baby!” http://drp.ly/1fmu2A
+[15:01] <KungFuHamster> we couldn't hear the implicit ;)
+[15:01] <elliottcable> place the quote, win a Spotify link
+[15:01] capndiesel has joined the channel
+[15:02] <KungFuHamster> Google says it was Barney Stinson
+[15:02] <KungFuHamster> from How I Met Your Mother, apparently
+[15:02] <elliottcable> >,<
+[15:02] <elliottcable> cheator.
+[15:03] <KungFuHamster> more than 2 seconds and anyone could have googled it
+[15:03] <KungFuHamster> besides, I don't want your spotify link, whatever that is
+[15:04] <KungFuHamster> Trivia is only valid in real life, face to face, in a valley with no cell access
+[15:04] <KungFuHamster> the internet has roont trivia games
+[15:04] <maushu> Who here uses other browser besides chrome/firefox/safari daily?
+[15:05] creationix has joined the channel
+[15:06] creationix_ has joined the channel
+[15:08] <unomi> I use opera fairly often
+[15:08] <elliottcable> o_O
+[15:08] <elliottcable> you, sir, take the fun out of everything
+[15:08] <kodisha> chrome/ff combo only here
+[15:08] <elliottcable> wasn’t a trivia game, was seeing if there were any other HIMYM fans in here
+[15:08] <blowery> i use IE every day
+[15:09] <elliottcable> I only use Chrome, personally
+[15:09] <mjr_> If you have a Mac, the new Safari is quite good.  It seems faster than Chrome.
+[15:09] <kodisha> when i think about it i use ff on daily bases just because chrome has long running bug which prevent private cert to be loaded, and i can't access my company's protected wiki/stuff
+[15:10] <unomi> I only use FF for debugging
+[15:10] <kodisha> and for that
+[15:10] <bradleymeck> chromium on mac is much nicer than chrome
+[15:11] <kodisha> somehow i can't switch to chrome developer 
+[15:11] <k23z> how should one test a node.js server ? like open a pipe to the node.js server and get text from that pipe indicating various messages and fake a client that will make requests to the server and see what comes out that pipe in order to test ?
+[15:11] <creationix> I use chrome dev on max because it has a nice full-screen mode
+[15:11] rektide has joined the channel
+[15:11] <creationix> but it has been buggy lately
+[15:11] <mjr_> k23z: check out the test directory in the node source.  There are a lot of examples of testing servers.
+[15:11] <creationix> s/max/mac/
+[15:11] <kodisha> k23z:  testing node, or web sockets
+[15:11] <kodisha> ?
+[15:12] kriszyp_ has joined the channel
+[15:16] kevwil has joined the channel
+[15:17] sztanpet has joined the channel
+[15:18] tmpvar has joined the channel
+[15:19] ajpiano has joined the channel
+[15:19] tmpvar has joined the channel
+[15:19] dabreaka_ has joined the channel
+[15:20] kriszyp has joined the channel
+[15:23] charlesjolley- has joined the channel
+[15:24] <_announcer> Twitter: "Come and join us at WebWorkersCamp (@lacantine, by @af83) http://bit.ly/dAz6ve to talk about NodeJs, NoSQL, WebWorkers. Thx @tbassetto" -- Bastien Colmard. http://twitter.com/Baztoune/status/16857231987
+[15:26] tmpvar has left the channel
+[15:26] tmpvar has joined the channel
+[15:26] micheil has joined the channel
+[15:26] <_announcer> Twitter: "@sant0sk1 node.js idea: Lazer Cats: The Game. Multi-player, web sockets, cats with frickin laser beams." -- John Hobbs. http://twitter.com/jmhobbs/status/16857378533
+[15:27] <mscdex> sharks would be better
+[15:28] jeffreyt has joined the channel
+[15:29] ajpiano has joined the channel
+[15:30] kodisha_ has joined the channel
+[15:31] <_announcer> Twitter: "[The] [from lilulo] vs RingoJS NodeJS: http://url4.eu/4uwg4" [es] -- sldfjd ldajds. http://twitter.com/sldfjd/status/16857685430
+[15:32] kriszyp_ has joined the channel
+[15:36] ajpiano has joined the channel
+[15:38] <_announcer> Twitter: ""node.js is at the bleeding edge of a technology stack that allows developers to blur the lines between software, the web, and the new" wot?" -- Jake Donham. http://twitter.com/jaked1/status/16858101861
+[15:41] <_announcer> Twitter: "@jaked1 node.js definitely involving blurring..." -- Anil Madhavapeddy. http://twitter.com/avsm/status/16858293949
+[15:41] mikeal has joined the channel
+[15:44] <stagas> do you have any latency measurements on websockets?
+[15:45] steadicat has joined the channel
+[15:45] <stagas> I guess it should be close to a ping or.. ?
+[15:45] jetienne has joined the channel
+[15:48] <_announcer> Twitter: "create basic pdf files in the browser or node.js, simple as cake http://bit.ly/dC143e" -- Jonathan Nelson. http://twitter.com/JonathanNelson/status/16858753993
+[15:48] JimBastard has joined the channel
+[15:51] <JimBastard> hey guys just wanted to let you know im leaving node forever to code in ringo
+[15:51] <JimBastard> i read it was cool on a blog post
+[15:51] <bradleymeck> cool we dont like you anywho
+[15:51] <bradleymeck> want waffles?
+[15:52] <JimBastard> :-(
+[15:52] <JimBastard> and yes
+[15:53] <JimBastard> does anyone know if the badassjs guy idles in here
+[15:53] <JimBastard> devon
+[15:54] <bradleymeck> i think he was here once
+[15:55] <JimBastard> word
+[15:55] <_announcer> Twitter: "Node.JS popular and I like the combination of Redis" [ja] -- Kazki MATSUMOTO. http://twitter.com/KazkiMatz/status/16859352267
+[15:59] <voodootikigod> i want a post battle
+[15:59] <voodootikigod> JimBastard vs gmosx
+[15:59] <voodootikigod> who can keep a comment battle boiling the longest
+[16:01] charlesjolley- has joined the channel
+[16:02] JAAulde has joined the channel
+[16:02] <voodootikigod> JimBastard: my money is on you!
+[16:03] <bradleymeck> this is why we make bots
+[16:03] niklasfi has joined the channel
+[16:04] <niklasfi> can someone tell me why this function does not traverse all files and subfolders in the folder? http://pastebin.com/z3tRt8HR
+[16:06] <bradleymeck> tree and files are in the global scope
+[16:06] <JimBastard> lol
+[16:06] <JimBastard> voodootikigod: did you see all that drama the other day?
+[16:06] <voodootikigod> of course
+[16:06] <voodootikigod> not much goes by without me being witness
+[16:06] <JimBastard> hee hee
+[16:06] <mjr_> niklasfi: what does it so?
+[16:06] <mjr_> er, what does it do?
+[16:06] <JimBastard> just wanted to say i removed all that guys code on monday, and paid a contractor to replace it based on the open spec
+[16:06] <voodootikigod> or party to
+[16:06] <JimBastard> http://github.com/marak/asciimo
+[16:07] <JimBastard> the guys parser was 1300 lines, scott g rewrote it from scratch, < 100
+[16:07] <voodootikigod> i think it brings out a good question, but i felt like everyone gets all uppity so you cant have the dialog
+[16:07] indiefan has joined the channel
+[16:07] behmann has joined the channel
+[16:07] <voodootikigod> anyone know what the "controversial link" was
+[16:07] <voodootikigod> ?
+[16:07] <voodootikigod> that I missed
+[16:08] <JimBastard> i got a lot of respect for a lot of developers in the JS community, its important to me that they dont think im some two bit hack whose life project was stealing this code's retarded code
+[16:08] <JimBastard> this was such a quick one off project that meant nothing
+[16:08] dgathright has joined the channel
+[16:08] <voodootikigod> but you are a two bit hack
+[16:08] <JimBastard> i mean
+[16:08] <JimBastard> yeah
+[16:08] <JimBastard> ahaha
+[16:08] <voodootikigod> hehe
+[16:08] <JimBastard> but im not a 1 bit one
+[16:09] <voodootikigod> its all good
+[16:09] <voodootikigod> i am a half bit hack at best
+[16:09] <voodootikigod> how you half a bit
+[16:09] <voodootikigod> i have no idea
+[16:09] <voodootikigod> but i did once
+[16:09] <JimBastard> fuzzy logic
+[16:09] <voodootikigod> and got stuck
+[16:09] <JimBastard> and i thought i saw a two
+[16:09] <bradleymeck> two bits == a nibble == what i want 
+[16:09] <voodootikigod> s/b/p/g
+[16:09] <voodootikigod> better
+[16:10] <JimBastard> http://patorjk.com/blog/2010/06/21/asciimo/ was the link if you were asking
+[16:10] <JimBastard> not sure if you were talking about that
+[16:10] <voodootikigod> http://news.ycombinator.com/item?id=1455247
+[16:10] <voodootikigod> no no no
+[16:11] <voodootikigod> on the gmosx aricle
+[16:11] slaskis_ has joined the channel
+[16:11] <JimBastard> yeah
+[16:11] <JimBastard> its on twitter
+[16:11] BrianTheCoder has joined the channel
+[16:12] <voodootikigod> yea but twitter is down like a priceless girl
+[16:12] <voodootikigod> heyoh
+[16:12] <JimBastard> o.O
+[16:13] tjholowaychuk has joined the channel
+[16:13] WALoeIII has joined the channel
+[16:13] <mjr_> take that, twitter
+[16:14] creationix has joined the channel
+[16:15] riottaba has joined the channel
+[16:17] mw has joined the channel
+[16:19] hypnosis has joined the channel
+[16:19] <hypnosis> heh
+[16:19] sudoer has joined the channel
+[16:20] <JimBastard> heh hypnosis 
+[16:20] admc has joined the channel
+[16:21] <hypnosis> JimBastard: lo
+[16:21] <hypnosis> awesome stuff you guys do
+[16:21] <hypnosis> nodejs ad all
+[16:21] <voodootikigod> fuck that ringojs all the way baby!
+[16:21] <hypnosis> :\
+[16:22] <JimBastard> ahaha thanks hypnosis , there are some rockstars lurking in here
+[16:22] <JimBastard> i just work here
+[16:23] <JimBastard> i didnt know the beatles had a SSJS framework
+[16:23] kodisha has joined the channel
+[16:24] qFox has joined the channel
+[16:24] <voodootikigod> who the fuck is a rockstar
+[16:24] <voodootikigod> JimBastard is
+[16:24] <voodootikigod> thats who
+[16:24] <JimBastard> ehhh, i need a few more years
+[16:24] <JimBastard> im more like the opening band right now
+[16:24] brianmario has joined the channel
+[16:25] <JimBastard> like, the bass player in the opening band
+[16:25] <hypnosis> like myspace is to facebook
+[16:26] <JimBastard> i still get to go on tour, rock out shows, and bang some groupies. but without the main show no one would be there
+[16:26] <JimBastard> and i sometimes get booed off stage
+[16:26] <kodisha> gee this last macos update totaly mesed up my laptop, took him 30 minutes to regain functionality :/
+[16:28] <mikeal> ryah: you coming to the Redis meetup tonight?
+[16:28] Ori_P has joined the channel
+[16:29] Ori_P has joined the channel
+[16:32] derferman has joined the channel
+[16:33] <JimBastard> LOL 
+[16:33] <JimBastard> http://patorjk.com/blog/2010/06/22/thoughts-on-marak/
+[16:33] <JimBastard> ahahaha
+[16:33] <LOLWUT_> lol
+[16:33] <JimBastard> the dude thinks im sock puppetting
+[16:33] <JimBastard> i mean really
+[16:34] <LOLWUT_> because people can't think similar thoughts
+[16:34] <JimBastard> why would i want to hide behind any fake names
+[16:34] <JimBastard> i keep it real as shit
+[16:34] <JimBastard> ask anyone here
+[16:34] <LOLWUT_> the best part I think is the disabled comments.
+[16:35] <LOLWUT_> or where he explains he has an MS in CS, but now "knowing what he knows" about js would have done it differently
+[16:35] <JimBastard> LOLWUT_: go post this on the interwebs
+[16:36] <JimBastard> i gotta do real work today
+[16:36] <JimBastard> be sure to mention i contracted scott g
+[16:36] <LOLWUT_> sure, it's a slow day at the office
+[16:36] <LOLWUT_> tho to be quite honest I'm not sure who scott g is
+[16:36] <micheil> JimBastard: you do have a tendency to sound extremely harsh and gruff at times
+[16:36] <rockstar> voodootikigod, technically, I'm THE rockstar, but I know what you meant.  :)
+[16:37] <voodootikigod> hahah
+[16:37] <LOLWUT_> people who don't mince their words typically sound gruff
+[16:37] <LOLWUT_> it's usually not meant to be rudeness
+[16:37] <micheil> yeah, but it's something to watch.
+[16:37] <LOLWUT_> fair enough
+[16:39] <micheil> I mean, going purely off that article, it does make some of the node community sound fairly negative, which isn't something we want.
+[16:39] <voodootikigod> micheil: which article
+[16:39] <voodootikigod> ?
+[16:39] <micheil> voodootikigod: http://patorjk.com/blog/2010/06/22/thoughts-on-marak/
+[16:39] <voodootikigod> oh
+[16:39] <voodootikigod> i thought you were referring to the gmosx one
+[16:39] <micheil> no..?
+[16:40] <micheil> ACTION isn't in the loop of things atm.
+[16:40] <JimBastard> micheil: im pretty nice in person. i got a decent amount of friends and im always helping people
+[16:40] <micheil> I'm only about here for 10 minutes or so.
+[16:40] <JimBastard> i just like being a bastard on the internet
+[16:40] <LOLWUT_> micheil: imo the only relation is in people who frequent
+[16:40] <tjholowaychuk> WTF
+[16:40] <micheil> JimBastard: yeah, but like I said, it can be taken the wrong way. and we don't really want that.
+[16:40] <tjholowaychuk> var {Foo} = { Foo: 'bar' }
+[16:40] <tjholowaychuk> why did i not know this
+[16:41] <JimBastard> tjholowaychuk: ?
+[16:41] <LOLWUT_> foo always equals "bar"
+[16:41] <LOLWUT_> no exceptions
+[16:41] <micheil> ACTION disappears.
+[16:41] pgriess has joined the channel
+[16:42] <k23z> kodisha: web sockets
+[16:42] <tjholowaychuk> damn it only works in spidermonkey
+[16:42] <k23z> 18:11 < kodisha> k23z:  testing node, or web sockets
+[16:42] markwubben has joined the channel
+[16:42] <k23z> sorry for the "delay" , I was out for a while
+[16:43] <kodisha> well, i forgot what i wanted to ask :D
+[16:43] <tjholowaychuk> JimBastard: in spidermonkey you can do var {foo, bar} = { foo: 'bar', bar: 'baz' }; and print(foo) etc
+[16:43] <kodisha> is there tests in sockets.io
+[16:43] <k23z> kodisha: well I'll have a look I guess
+[16:44] <JimBastard> tjholowaychuk: thats just strange, does that work anywhere else?
+[16:44] <tjholowaychuk> JimBastard: rhino too i think
+[16:44] <tjholowaychuk> doesnt seem like v8 though
+[16:44] gerad has joined the channel
+[16:46] <_announcer> Twitter: "working with node.js has altered the way i think about in browser javascript, but surprisingly, not a lot" -- Brian Mavity. http://twitter.com/bmavity/status/16861871417
+[16:47] skampler has joined the channel
+[16:48] <_announcer> Twitter: "@tjholowaychuk Rhino+RingoJS is fast enough, plus you get java libs. It's just that #nodejs has ruined my interest in non-async platforms." -- Marco Rogers. http://twitter.com/polotek/status/16862000166
+[16:48] <k23z> kodisha: nope , no tests, just a test chat-app
+[16:48] <tjholowaychuk> pfft
+[16:48] <tjholowaychuk> java is never fast enough
+[16:49] <gerad> +1 slow boot-up time is killer for development
+[16:50] <pgriess> does anyone have actual benchmarks of rhino vs v8?
+[16:50] <LOLWUT_> java :<
+[16:50] felixge has joined the channel
+[16:50] felixge has joined the channel
+[16:50] ollym has joined the channel
+[16:50] <pgriess> slow boot-up time not included. i'm interested in steady-state full-jit performance
+[16:50] <mjr_> I think it's great that non-browser JS development is expanding.  Some people really like standards, large sets of libraries to draw upon, and are willing to trade some performance for that.
+[16:50] <_announcer> Twitter: "Seriously considering to try vows for #nodejs. It's just too sexy: http://bit.ly/csmjyK" -- Felix Geisendörfer. http://twitter.com/felixge/status/16862137007
+[16:50] <tjholowaychuk> i remember my jspec stuff would take like 3 seconds in rhino, and maybe 0.2 in node
+[16:51] <LOLWUT_> mjr_: I think the nodejs community is filling in a lot of those libs or addons
+[16:51] <LOLWUT_> kinda like the perl community and their modules
+[16:51] <ollym> tjholowaychuk, in your oo.js library, is it possible to include an object at runtime?
+[16:51] oleg has joined the channel
+[16:51] <tjholowaychuk> ollym: include()? yeah
+[16:51] <tjholowaychuk> i dont see why not
+[16:52] ollym has joined the channel
+[16:54] <voodootikigod> felixge: that site is beautiful
+[16:55] <felixge> voodootikigod: it is
+[16:55] <LOLWUT_> +1
+[16:55] <felixge> voodootikigod: and it's the first time I find a higher-level test suite interesting
+[16:55] <voodootikigod> yea
+[16:55] <voodootikigod> seems pretty tightly built
+[16:55] <voodootikigod> need to poke it a bit more
+[16:55] <voodootikigod> twss
+[16:56] <LOLWUT_> I think I need to get started reading this redis documentation
+[16:56] <felixge> I need to see how well it work with my über-stubbing lib gently
+[16:56] <felixge> state verification is for the weak IMO
+[16:56] <felixge> :)
+[16:58] <tjholowaychuk> serial tests === kinda lame
+[16:58] <JimBastard> felixge: ive been using vows for about a month
+[16:58] stevendavie has joined the channel
+[16:58] <JimBastard> cloudhead is pretty fucking solid developer
+[16:58] <felixge> JimBastard: tell him about exit codes and I may believe you :)
+[16:58] <JimBastard> we've been collabing on a few things
+[16:58] <JimBastard> ?
+[16:58] <tjholowaychuk> its not ci friendly?
+[16:58] <felixge> JimBastard: seems like vows doesn't exit with exit code > 0 on error
+[16:58] <JimBastard> felixge: hrmmm thats odd
+[16:59] <felixge> makes my unix heart *very* angry
+[16:59] <felixge> but otherwise it looks awesome
+[16:59] <JimBastard> felixge: ive been using it for http://github.com/Marak/javascript-fu/tree/master/tests/
+[16:59] <JimBastard> and a couple other private repos
+[16:59] <JimBastard> the dot matrix printer was me / my friends suggestion
+[16:59] <JimBastard> :p
+[17:00] <felixge> dot matrix printer?
+[17:00] <tjholowaychuk> the ...... reporter thing
+[17:00] <tjholowaychuk> i think 
+[17:00] <JimBastard> the little green dots / checks thingy
+[17:00] <JimBastard> yeah
+[17:00] <tjholowaychuk> i like dots
+[17:00] BrianTheCoder has joined the channel
+[17:01] <_announcer> Twitter: "Web development competition in 48 hours with node.js. 28 and August 29. Stakeholders -&gt; http://nodeknockout.com/" [es] -- greenog. http://twitter.com/greenog/status/16862791460
+[17:01] stephenjudkins has joined the channel
+[17:02] stephenjudkins has joined the channel
+[17:03] kevwil has joined the channel
+[17:03] creationix has joined the channel
+[17:03] <felixge> JimBastard: the stuff that just keeps on moving?
+[17:03] <felixge> JimBastard: sometimes it leaves a px at the end of my terminal
+[17:03] <felixge> JimBastard: and it also keeps adding new lines
+[17:04] <felixge> JimBastard: is that intentional?
+[17:04] niklasfi has left the channel
+[17:05] riottaba_ has joined the channel
+[17:05] <JimBastard> felixge: unsure, create an issue
+[17:05] <JimBastard> i really dont like unit tests, i just setup the framework and make my teammates write the tests
+[17:05] <JimBastard> and run them
+[17:05] <JimBastard> lol
+[17:05] <JimBastard> ACTION is working on it i swear
+[17:06] <tjholowaychuk> ACTION loves tests
+[17:06] <tjholowaychuk> ACTION and dots
+[17:06] bpot has joined the channel
+[17:08] ncb000gt has joined the channel
+[17:08] fermion has joined the channel
+[17:09] <_announcer> Twitter: "@polotek @tjholowaychuk #nodejs does much more than just web/tcp. Also, java libs are about the same as c/c++ libs imo..." -- Nick Campbell. http://twitter.com/ncb000gt/status/16863298313
+[17:09] <felixge> JimBastard: http://github.com/cloudhead/vows/issues/issue/5
+[17:09] <sechrist> Are there any systems for like deployment steps for code? like combining javascript, crunching pngs, transferring to s3, etc?
+[17:09] <sechrist> I guess I should just write one
+[17:10] <ncb000gt> sechrist: i believe there is an s3 module for node on the modules page
+[17:10] <felixge> sechrist: I'm actually using ruby for that right now ^^
+[17:10] <JimBastard> thanks felixge ill make sure cloudhead takes a look. hes pretty good about support
+[17:10] <sechrist> ncb000gt: it's too immature
+[17:10] <sechrist> I wouldn't use it
+[17:10] <sechrist> it can't do files over 3MB last I knew
+[17:10] <ncb000gt> hmm, idea, npm bot in irc so you can search for existing modules...
+[17:10] richcollins has joined the channel
+[17:10] <JimBastard> hey ncb000gt did you see the latest drama http://patorjk.com/blog/2010/06/22/thoughts-on-marak/ . the guy reposted and is telling people to download the library i paid scott g to build
+[17:10] <sechrist> felixge: ruby for deployment steps? hmm
+[17:10] <ncb000gt> sechrist: ahh ok, i just remembered seeing it
+[17:10] <k23z> anybody here wanna help me with socket.io ?
+[17:10] <ncb000gt> LOL
+[17:11] <ncb000gt> JimBastard: i hadn't 
+[17:11] <k23z> sechrist: woohoo you're back
+[17:11] <sechrist> I might write my own thing in node for it 
+[17:11] <ncb000gt> i'll take a peek
+[17:11] <technoweenie> capistrano is still good
+[17:11] <k23z> sechrist: dude I checked with teh firebugz
+[17:11] <sechrist> what
+[17:11] <sechrist> I've never used ruby
+[17:11] <sechrist> at all
+[17:11] <k23z> sechrist: it doesn't show any request for the socket.connect() or the socket.send("blah") stuff
+[17:11] <sechrist> I don't even know how to write a hello world in ruby
+[17:11] <technoweenie> puts 'hello world'
+[17:11] <creationix> sechrist: mape made one for conenct
+[17:11] <k23z> sechrist:  what does teh rubeh have to do with thes ?
+[17:11] <sechrist> creationix: made what, deployment steps?
+[17:11] mape has joined the channel
+[17:12] <sechrist> k23z: I suggest diving into socket.io yourself
+[17:12] <sechrist> rather than use me for documentation
+[17:12] <felixge> sechrist: I don't really know ruby either, but learning the basics of rake & running sh commands from it takes like 5min
+[17:12] <sechrist> ah okay
+[17:13] <tjholowaychuk> blah rake
+[17:14] kevwil has joined the channel
+[17:14] <technoweenie> an evented server system like capistrano would be cool
+[17:14] <creationix> sechrist: a middleware that combines and minifies accets
+[17:14] <creationix> *assets
+[17:14] <technoweenie> is there a sweet ssh lib in node
+[17:14] <creationix> (not sure what 'deployment steps' is)
+[17:15] <tjholowaychuk> technoweenie: not that i know of
+[17:15] <sechrist> well when you have "real" web applications, you have to send stuff to cdns, configure CDN proxies, and all sorts of stuff
+[17:15] <sechrist> you can't just plop assets up on your server
+[17:15] <technoweenie> creationix: i took that as the other deployment stuff: pushing code to the server, restarting processes, etc
+[17:15] <technoweenie> sechrist: github isnt a real web app then
+[17:16] <technoweenie> cdn's, bah
+[17:16] <creationix> ahh, so something like cap
+[17:16] <technoweenie> course you could just shell out to ssh like vlad
+[17:16] <technoweenie> sechrist: coffeescript comes with cake too
+[17:17] <technoweenie> coffeescript version of rake
+[17:18] <ncb000gt> JimBastard: seems best to just let it go now imo
+[17:18] visnup has joined the channel
+[17:18] charlesjolley- has joined the channel
+[17:20] <JimBastard> ncb000gt: im done with it. it would be nice to let people know the reality of the situation, but im not gonna going to post that shit anywhere aside from the IRC on principle 
+[17:20] <creationix> technoweenie: for howtonode.org I just git push to my repo on linode and it re-pushes to github in a hook
+[17:20] <creationix> though, if I change the source to wheat itself, then I have to push it manually and restart processes
+[17:20] <JimBastard> i did send an email to the badassjs blogger guy, if he runs a blog and is gonna post info about me on his site and twitter he should be responsibly informed 
+[17:20] <sechrist> technoweenie: nah its not, github is a toy
+[17:20] <sechrist> like node.js
+[17:21] stevendavie has joined the channel
+[17:21] <technoweenie> creationix: yea i think thats essentially what github does too
+[17:21] <tjholowaychuk> well that is a bold statement lol
+[17:21] <k23z> here's some screenshots of my node.js + qooxdoo app -> http://i.imgur.com/6OAzB.png   http://i.imgur.com/T0991.png    http://i.imgur.com/102zJ.png
+[17:21] <tjholowaychuk> last time i checked github was sweet
+[17:21] <sechrist> technoweenie: you guys have asset1-X servers. that's totally a "deployment step"
+[17:22] <technoweenie> sechrist: thats just an nginx config :)
+[17:22] <JimBastard> hey k23z do you need any nodejs hosting? im running a close beta right now for www.nodejitsu.com
+[17:22] <sechrist> what i meant was you can't just throw crap up into /var/www
+[17:22] <technoweenie> cap still deploys assets to every app server which sucks
+[17:22] <JimBastard> its powering a bunch of sites, including asciimo.com. so it can handle a bit of traffic
+[17:22] <creationix> the vows website is pretty
+[17:22] <sechrist> JimBastard: I want in
+[17:22] <creationix> I wish I had that kind of design talent
+[17:22] <JimBastard> sechrist: sure thing
+[17:22] stevendavie1 has joined the channel
+[17:22] <technoweenie> those assets go into the nginx doc root of every app server.  that part is kind of lame, but oh well
+[17:23] <creationix> JimBastard: ohh, beta!
+[17:23] <JimBastard> shhhhh
+[17:23] <JimBastard> ;-)
+[17:23] <creationix> :)
+[17:23] <JimBastard> the new version has a rest api!
+[17:23] <JimBastard> huzaah!
+[17:24] stevendavie has joined the channel
+[17:24] stevendavie1 has joined the channel
+[17:25] _ollym has joined the channel
+[17:25] <creationix> tjholowaychuk: forgive my ignorance, but how does vows compare to expresso
+[17:25] <creationix> I assume they have different goals
+[17:26] <tjholowaychuk> oh yeah way different
+[17:26] <tjholowaychuk> i hate bdd for all this async stuff
+[17:26] <tjholowaychuk> does not fit well at all IMO
+[17:26] <tjholowaychuk> expresso is more the runner than anything else, i dont extend assert at all right now. so its pretty bare, which in turn is very flexible
+[17:27] <tjholowaychuk> no need to mock either really when your running parallel
+[17:27] <tjholowaychuk> our tests for Connect would probably take 15-20 seconds or more if it was sequential so that was important to me
+[17:28] <creationix> I see
+[17:29] <tjholowaychuk> sequential stuff is nice in some ways, you get all the nice eye candy, but when you have hundreds of tests like us, complete in ~150ms with no mocked servers etc you dont really want to go back
+[17:29] [[zz]] has joined the channel
+[17:29] <creationix> :)
+[17:30] <technoweenie> you use that for testing apps?  how do you deal with shared state
+[17:30] <technoweenie> i imagine that's not an issue in connect since each test is an isolated http request
+[17:30] stevendavie has joined the channel
+[17:30] <technoweenie> but i'm talking about an app, where you're testing a rest call that PUT /users/1 edits a specific usere
+[17:30] <tjholowaychuk> yeah its not really a problem in most cases, plus its easy enough to roll your own queued stuff
+[17:30] <tjholowaychuk> i do that in a few places
+[17:31] <tjholowaychuk> it is harder dont get me wrong but its worth it i think
+[17:31] <technoweenie> i like `exports['test async] = function(assert, beforeExit){`
+[17:31] <creationix> so we've got tools that fit everyone's taste, fabulous
+[17:32] <tjholowaychuk> technoweenie: my bad
+[17:32] <ryah> mikeal: where when is the redis meetup?
+[17:32] <tjholowaychuk> creationix: yo, if you have spidermonkey on your machine try this, weird but kinda cool: var { foo } = { foo: 'bar' }
+[17:32] <technoweenie> ?
+[17:33] cloudhead has joined the channel
+[17:33] <creationix> tjholowaychuk: yeah, I wish v8 had that
+[17:33] <creationix> it's really nice
+[17:33] <tjholowaychuk> me too
+[17:33] <creationix> took me a while to understand it when I first say it
+[17:33] <creationix> *saw
+[17:33] <tjholowaychuk> i was just like .. wtf.. js cant do that.. but yeah i guess in some VMs you can
+[17:34] <_announcer> Twitter: "node.js is just amazing.  from the build to the docs to the tech.  #doneright" -- douglasp. http://twitter.com/douglasp/status/16864837040
+[17:34] <ryah> i've been thinking this: we should have two different types of events
+[17:34] <ryah> events that come off the loop
+[17:34] <ryah> and events that are not off the loop
+[17:35] <creationix> ryah: what would be the difference (examples)?
+[17:35] <ryah> emit() will always be "not off the loop"
+[17:35] <ryah> watcher.callback will be "off the loop"
+[17:35] <_announcer> Twitter: "Calling it out: @3n needs to write "nodesql" a nosql on node.js where the query language is CSS selectors." -- Cliff Moon. http://twitter.com/moonpolysoft/status/16864919871
+[17:35] <ryah> and i think we should classify "off the loop" events into 4 categories
+[17:35] <creationix> right, since emit is synchronous 
+[17:35] <ryah> timer events, FD events, signal events, thread pool events.
+[17:35] <creationix> sounds good, why the classification
+[17:36] <ryah> for dtrace
+[17:36] <ryah> i want to have special probes for each of those
+[17:36] <ryah> also for error handling
+[17:37] <ryah> emit "not off hte loop" will throw if there is an error in the callback
+[17:37] <ryah> however, emit "off the loop" is at the bottom of the execution stack
+[17:37] <tjholowaychuk> that reminds me, creationix i wanted to add some cool utils to our repl middleware, so that you could fiddle around and intercept stuff during runtime
+[17:37] <ryah> so it should crash the VM
+[17:38] <ryah> i need better terms for "off the loop" and "not off the loop"
+[17:38] <ryah> but do you get what i'm talking about?
+[17:38] <creationix> ryah: nice, why not say sync and async
+[17:38] <creationix> or is it not that simple
+[17:38] <ryah> "off the loop" = called directly from libev
+[17:38] <ryah> "not off the loop" = called somewhere i the middle of the execution stack
+[17:39] <ryah> "real events" "fake events"
+[17:39] <ryah> shrug
+[17:39] away01 has joined the channel
+[17:44] <tmpvar> cascading data selectors, fun
+[17:44] <creationix> ryah: but from the point of view of the person writing the code, emit events will happen in the same 'tick' 
+[17:45] <creationix> or is that not true?
+[17:45] <ryah> creationix: all events happen in one tick
+[17:45] <ryah> but doing this will allow us to do really cool things
+[17:45] <creationix> well, I mean that the calling of "emit" and the fireing of the event and the calling of the event handlers both happen in the same tick?
+[17:45] <ryah> this = differenciating between the two types
+[17:45] <creationix> agreed
+[17:46] <ryah> for example, we can give a callback at the end of "off the loop" events to run nextTick callbacks
+[17:46] <ryah> so that they literally are the nextTick
+[17:46] <ryah> right now we use some IdleWatcher trickiness
+[17:46] dgathright has joined the channel
+[17:46] <ryah> obviously dtrace probes will be more viable
+[17:46] <ryah> probably other stuff i can't think of yet :)
+[17:46] <creationix> though, my particular use case in connect's static middleware, I need to know the exact semantics of emit
+[17:47] <creationix> or there is a race condition
+[17:47] <_announcer> Twitter: "@ Ricardolho to make the node.js" [pt] -- Carlos Alberto. http://twitter.com/euprogramador/status/16865646107
+[17:47] <ryah> for you, it will be the same
+[17:47] <ryah> that is emit() is a function call
+[17:47] <ryah> (off the loop emit will also be a function call)
+[17:48] <ryah> creationix: or.. does that answer your question?
+[17:48] <ryah> all listeners will be evaluated in order synchrously
+[17:48] <ryah> always
+[17:48] <Aikar> i caught note of earlier convo about rhinojs, is that something similiar to node? looked like it
+[17:48] <ryah> during the emit() function call
+[17:48] <tjholowaychuk> Aikar: its SSJS but on rhino
+[17:49] <Aikar> so same concept as node just diff js engine (instead of v8) right?
+[17:49] <tjholowaychuk> AFAIK way different concept
+[17:49] <tjholowaychuk> its probably sync, and very slow
+[17:50] <mjr_> ryah: all of this event type differentiation sounds kind of complicated.
+[17:50] <Aikar> well i meant concept as in SS JS
+[17:50] <tjholowaychuk> that part yup
+[17:50] <ryah> mjr_: hm - it shouldn't be
+[17:50] <ryah> mjr_: basically one is for inside c++ and one is for js
+[17:50] <Aikar> wow
+[17:51] <Aikar> "implementation of javascript written in java"
+[17:51] <Aikar> yeah, id say thatll prolly be slow
+[17:51] <ryah> okay - gtg
+[17:51] <tjholowaychuk> Aikar: my experiences with Rhino have been insanely slow when compared to almost any VM I have used. to be honest I think it was the slowest
+[17:52] ph^ has joined the channel
+[17:58] <creationix> tjholowaychuk: to be fair, the worst part is the startup time
+[17:58] <creationix> but yeah, that's unberable
+[17:59] <sztanpet> and the memory usage?
+[18:02] <_announcer> Twitter: "@ Federicogalassi we have just deployed a first (small) project developed with node: 1886 requests per second # nodejs" [it] -- Marco Pracucci. http://twitter.com/pracucci/status/16866611559
+[18:04] <technoweenie> one instance uses all the cores though
+[18:05] <_announcer> Twitter: "Oh snap, @lovehasnologic (designer extraordinaire) is on board! One more Node.js backend dev and my team will be complete..." -- Chris Powers. http://twitter.com/chrisjpowers/status/16866788631
+[18:08] <bradleymeck> almost have ringo running through jni on node ... then java.scripting shall be ontop of that
+[18:08] javajunky has joined the channel
+[18:09] <_announcer> Twitter: "@poweredbysteam Check out http://nodeknockout.com/ It's a 48hr contest to see which team can create the best Web app using Node.js" -- Chris Powers. http://twitter.com/chrisjpowers/status/16866998000
+[18:09] <_announcer> Twitter: "async  javascript testing with vows: http://vows.heroku.com/   nice. #node.js" -- Ciaran Jessup. http://twitter.com/ciaran_j/status/16866998007
+[18:10] <cloudhead> felixge: I fixed the --watch mode problem, new version is up on npm
+[18:10] <cloudhead> let me know if you still have issues
+[18:11] <cloudhead> gotta run
+[18:13] piratepenguin has joined the channel
+[18:13] <JimBastard> so patorjk removed the reference to scott g's blog once he figured out what was going on
+[18:13] <JimBastard> http://imgur.com/HeMLn
+[18:13] <JimBastard> i got the SS though
+[18:14] <Aikar> O.o thats a name i havnt heard in years
+[18:14] <Aikar> patorjk
+[18:14] <Aikar> i remember using that Windows API spy app of his ages ago
+[18:14] richcollins has joined the channel
+[18:15] jxson has joined the channel
+[18:15] derferman has joined the channel
+[18:16] <bradleymeck> are the new RegExp routes working in connect anyone know?
+[18:16] <creationix> bradleymeck: they should
+[18:16] <creationix> I'm about to test it myself (but I'm in the closure branch)
+[18:16] <bradleymeck> so *.js here i come!
+[18:17] <tjholowaychuk> bradleymec: yup. you could also just use /*.js
+[18:17] <tjholowaychuk> I have splat support
+[18:17] <tjholowaychuk> or /:file.js or /:file.:format
+[18:17] <tjholowaychuk> etc
+[18:17] <bradleymeck> ooo
+[18:17] <tjholowaychuk> captures from the given RegExp will be in params.splat in the same order
+[18:18] mitkok has joined the channel
+[18:18] <tjholowaychuk> but the splats can span multiple segments, you can also have multiple splats like /public/*.*
+[18:18] <creationix> bradleymeck: what are you building with connect?
+[18:18] <creationix> if I may ask
+[18:18] <bradleymeck> im making a closure compiler api cache
+[18:19] <bradleymeck> so *.js can be compressed in memory or to a dir for production use when you enable the layer
+[18:19] <creationix> nice
+[18:19] bpot has joined the channel
+[18:19] agnat has joined the channel
+[18:19] <tjholowaychuk> i just pushed some changes too and add the "compiler" middleware, you *might* want to support that bradleymeck
+[18:20] demolithion has joined the channel
+[18:20] <_announcer> Twitter: "@JAAulde same here! between node knockout and js olympics, I am stoked!" -- Chris Williams. http://twitter.com/voodootikigod/status/16867636078
+[18:20] <tjholowaychuk> it is set up to support arbitrary compilation, little rough on the edges since its new but supports less / sass right now
+[18:20] <creationix> tjholowaychuk: I've been thinking to get rid of the whole filter/provider split
+[18:20] <tjholowaychuk> and writes to disk / detects changes so that static can handle it
+[18:20] <creationix> some things don't really fit into either
+[18:20] <tjholowaychuk> creationix: for sure im down, didnt really like that anyways
+[18:21] <creationix> ok, this closure merge is going to break everything :D
+[18:21] <tjholowaychuk> haha yeah when i wrote redirect i was like uhh.. what the hell do i call this
+[18:21] <tjholowaychuk> dont forget to rebase :d
+[18:21] <tjholowaychuk> :D
+[18:21] <tjholowaychuk> haha
+[18:21] <tjholowaychuk> we should get tests passing before merge though
+[18:21] <tjholowaychuk> let me know when your ready ill pull that branch down
+[18:23] <bradleymeck> just let me know when the compiler middleware is up
+[18:23] <tjholowaychuk> bradleymeck: its available in HEAD
+[18:23] <tjholowaychuk> bradleymeck: not quite as extensible as I want yet, but wanted to keep it simple too
+[18:23] charlesjolley- has joined the channel
+[18:25] Aria has joined the channel
+[18:25] charlesjolley- has joined the channel
+[18:27] <creationix> tjholowaychuk: is there a secret to rebase
+[18:27] <creationix> it gets real ugly and refuses to apply all sorts of things that I didn't even do
+[18:28] kersny has joined the channel
+[18:28] <creationix> tjholowaychuk: here come big fat commit!
+[18:28] <bradleymeck> tjholowaychuk, id recommend making the compilers themselves callable for options (i know i have a ton of args), but then how to check if a compiler is included twice...
+[18:28] <tjholowaychuk> hm works fine for me. AFAIK it basically just applies all the old commits, and re-applies your changes so you will still have some conflicts but less
+[18:29] <tjholowaychuk> bradleymeck: not sure what you mean, gist an example if you can
+[18:29] <creationix> tjholowaychuk: dunno, often I can do a regular pull without any comflicts, but a rebase will conflict on every commit I'm pulling
+[18:30] <tjholowaychuk> hm :S
+[18:30] <creationix> well, I won't worry till I'm done with the branch
+[18:30] <tjholowaychuk> lots of people seem to dothat. the stuff going into Mobile is like every second commit is merged this merged that
+[18:31] <bradleymeck> http://gist.github.com/450327 , basically setting compiler options etc (the current api i have is a bit ugly using 2 options but idea is sound)
+[18:32] <creationix> btw, what do you guys think about the new syntax? https://gist.github.com/fe8577f1e7c19cbb1641
+[18:32] <tjholowaychuk> ACTION grrr inflection bug
+[18:32] <tjholowaychuk> looks good to me
+[18:33] <tjholowaychuk> way less config-like
+[18:33] <tjholowaychuk> specially with filters / providers gone
+[18:33] <creationix> and internally it's just calling the use method for you
+[18:33] <bradleymeck> no more next?
+[18:33] <technoweenie> rock on
+[18:33] <technoweenie> next is 3rd argument, so its optional right
+[18:33] <creationix> bradleymeck: there is still next, it's just not needed in my example
+[18:33] <bradleymeck> whew
+[18:34] <creationix> js args are pretty loose
+[18:34] <creationix> but basically create server just takes a function (just like hode's http.Server)
+[18:35] <tjholowaychuk> shit sorry bradleymeck i cleared the screen and forgot to check out your gist
+[18:35] <creationix> if you supply more than one callback, it will chain them for you
+[18:35] <technoweenie> creationix: can you add them programmatically 
+[18:35] <bradleymeck> http://gist.github.com/450327
+[18:35] <creationix> technoweenie: yep
+[18:35] <tjholowaychuk> technoweenie: added use() for that a while back
+[18:35] <tjholowaychuk> we could rename it, doesnt matter to me
+[18:35] <technoweenie> creationix: rad, this is looking great
+[18:35] <creationix> and the built-in middlewares are all loaded onto the Connect library root as magic getters
+[18:36] <creationix> they're not required till you use them the first time
+[18:36] <technoweenie> magic getters?
+[18:36] <technoweenie> oh you mean Connect.logger()
+[18:36] <tjholowaychuk> like autoload
+[18:36] <tjholowaychuk> in ruby
+[18:36] <creationix> technoweenie: yep
+[18:36] <technoweenie> oh noes, magic
+[18:36] <tjholowaychuk> AHhHHhhHhhh
+[18:37] <creationix> Object.defineProperty(Connect, "logger", {get: function () { return require('connect/middlewares/logger')}})
+[18:37] <creationix> something like that
+[18:37] <tjholowaychuk> not that it matters much with how fast v8 is
+[18:37] <creationix> it's clean ECMA5, so I guess it's not that "magical"
+[18:37] danielharan has joined the channel
+[18:37] <creationix> tjholowaychuk: well, the reason I lazy load is that sometimes the middlewares require other libraries the user doesn't have installed
+[18:37] <creationix> (like the sass middleware)
+[18:38] tilgovi has joined the channel
+[18:38] <tjholowaychuk> true
+[18:38] <creationix> no sense loading things and crashing over stuff you'll never use
+[18:38] <tjholowaychuk> i booted the sass middleware anyways
+[18:38] javajunky has joined the channel
+[18:38] <technoweenie> yea, i despise the use of 'magic' when talking about programming.  buuuut anyways :)
+[18:38] <creationix> technoweenie: funny, I thought all ruby devs loved magic
+[18:38] <creationix> ;)
+[18:39] <tjholowaychuk> oh god
+[18:39] <tjholowaychuk> ruby is a clusterfuck of random shit behind the scenes
+[18:39] <technoweenie> calling it 'magic' means you just dont know how it works
+[18:39] <technoweenie> you can do some nasty shit in javascript and ruby for sure
+[18:39] <bradleymeck> most scripting languages like the mystique of it just working
+[18:39] <creationix> or what I mean by "magic" is that most people don't understand how it works
+[18:40] <tjholowaychuk> yeah thats what i mean when i say magic, is that its not necessarily working how they might originally think
+[18:40] <bradleymeck> following the principle of least surprise?
+[18:40] <creationix> well either way, maybe I shouldn't call js getters as magic
+[18:40] <tjholowaychuk> nah
+[18:40] <creationix> it's just that most js devs don't even know the feature exists since you can't get away with it in the browser
+[18:40] <tjholowaychuk> people just need some time to get used to SSJS features that we cant really take advantage of yet in browsers
+[18:41] <creationix> since IE didn't have it
+[18:41] <creationix> tjholowaychuk: what's the name of that assignment feature you posted earlier
+[18:41] <creationix> decomposition?
+[18:41] <creationix> I'm trying to find it in the mdc, I know it's there
+[18:41] <_announcer> Twitter: "Usually I'm a complete nutjob, but maybe coffeescript + node.js + mongodb is just too much for a production system" -- Maurice Machado. http://twitter.com/mauricemach/status/16868923731
+[18:42] <technoweenie> he needs some magic ^
+[18:42] <tjholowaychuk> creationix: no clue, i cant find it either
+[18:42] <tjholowaychuk> ill crack open the spidermonkey source
+[18:43] <sechrist> would there be any advantage of couchdb moving to v8 instead of spidermonkey?
+[18:43] <sechrist> I doubt it would speed the map/reduces up that much
+[18:43] <sechrist> but who knows
+[18:44] <_ollym> i've heard the new spidermonkey engine is faster than v8
+[18:44] <_ollym> and btw tjholowaychuk i worked out what was wrong
+[18:44] <creationix> tjholowaychuk: found it! https://developer.mozilla.org/en/new_in_javascript_1.7#Destructuring_assignment_(Merge_into_own_page.2fsection)
+[18:45] <tjholowaychuk> just found that in the source
+[18:45] <tjholowaychuk> 1870 typedef struct FindPropValData {
+[18:45] <tjholowaychuk> 1871     uint32          numvars;    /* # of destructuring vars in left side */
+[18:45] <tjholowaychuk> 1872     uint32          maxstep;    /* max # of steps searching right side */
+[18:45] <tjholowaychuk> 1873     JSDHashTable    table;      /* hash table for O(1) right side search */
+[18:45] <tjholowaychuk> 1874 } FindPropValData;
+[18:45] <tjholowaychuk> 1875 
+[18:45] fowlduck has joined the channel
+[18:45] <BrianTheCoder> so if I wanted to offset long polling requests from my app to node, what would be the best way to route those specific requests?
+[18:45] <tjholowaychuk> dope
+[18:45] <BrianTheCoder> nginx rules? subdomain?
+[18:46] <sechrist> Is there any reason I should use nginx over lighttpd
+[18:46] <sechrist> I'm so used to lighttpd -- i've never even compiled nginx
+[18:46] <gerad> BrianTheCoder: depends on lots-a-things
+[18:47] <bradleymeck> mmm cant find any ref that the new spidermonkey is faster than v8, would be impressive since v8 has a jit assembler
+[18:47] <BrianTheCoder> gerad: any recommendations or guides to figure out the best way?
+[18:47] <gerad> BrianTheCoder: subdomain is kinda gross, you need to do document.domain = document.domain in your javascript to work around cross site
+[18:47] <Aikar> bradleymeck: ironjs site i saw other day benchmarks showd it faster 
+[18:47] <sechrist> node 0.2 moves to spidermonkey! everybody floods to RingoJS
+[18:48] <BrianTheCoder> gerad: yeah, not my first choice, but handling a number of routes via nginx rules would be ugly
+[18:48] <gerad> BrianTheCoder: best is different folder on the same domain f you can do it
+[18:48] <BrianTheCoder> gerad: its a ruby app, so I thought about some rack middleware
+[18:48] <sechrist> that's too bloated for longstanding requests
+[18:48] <sechrist> don't do that
+[18:48] jakehow has joined the channel
+[18:48] <gerad> BrianTheCoder: yeah, you want to do it at the nginx level
+[18:49] <gerad> BrianTheCoder: or above
+[18:49] <danielharan> trying to clone node.js on github, I'm getting an error: http://gist.github.com/450376
+[18:49] <sechrist> haproxy otherwise?
+[18:49] <gerad> BrianTheCoder: yeah, that's it haproxy
+[18:49] dgathright has joined the channel
+[18:49] Ori_P has joined the channel
+[18:49] <gerad> i think nginx can likely do it too, as it's evented
+[18:49] <danielharan> anyone know what's going on? (sorry if I'm asking in the wrong place)
+[18:50] <BrianTheCoder> gerad: I could just use node as middleware and either accept the request or forward it to the app
+[18:50] <gerad> BrianTheCoder: also an option
+[18:50] <BrianTheCoder> gerad: well the nginx would be ideal, but handling routes in it is ugly
+[18:50] <gerad> BrianTheCoder: that's nice 'cause it allows websockets
+[18:50] <gerad> BrianTheCoder: nginx would preclude websockets
+[18:51] <BrianTheCoder> gerad: true, now I just need to finish up my node lode balancer :P
+[18:51] <bradleymeck> aikar, idk about that benchmark, not too much info besides a graphic
+[18:51] <gerad> BrianTheCoder: node knockout idea!
+[18:51] <technoweenie> danielharan: eh that suuucks
+[18:51] <technoweenie> danielharan: lets take this to #github
+[18:52] <danielharan> technoweenie: will do
+[18:52] <BrianTheCoder> gerad: well its almost done http://github.com/BrianTheCoder/proxy-js/blob/master/fair_balancer.js, just trying to track down why it blows up after a few requests
+[18:53] <BrianTheCoder> I thought about spawn child processes to handle the client connections, that way they're persistent and not created everytime
+[18:53] danielharan has left the channel
+[18:54] <bradleymeck> does seem that tracemonkey destroys v8 in function calls that dont use all the args though
+[18:54] gerad1 has joined the channel
+[18:55] oleg__ has joined the channel
+[18:55] agnat has joined the channel
+[18:56] mostlygeek has joined the channel
+[18:56] <javajunky> finally started to publish my nodejs stuff on npm
+[18:57] <javajunky> npm's come on a long way, nice one isaacs :)
+[19:04] saikat has joined the channel
+[19:14] Aria has joined the channel
+[19:14] sanderjd has left the channel
+[19:16] Aredridel has joined the channel
+[19:16] eggsby has joined the channel
+[19:17] <eggsby> hello #node.js
+[19:17] nrstott has joined the channel
+[19:17] agnat has joined the channel
+[19:17] <javajunky> hey
+[19:17] <eggsby> node.js is exciting :D
+[19:17] <eggsby> coooomeeetttt
+[19:18] <bradleymeck> ello
+[19:18] <LOLWUT_> websocketttttt
+[19:19] <eggsby> Just started playing with node last night
+[19:19] <eggsby> any good resources? I read some quick writeup, looking over the node by example stuffs
+[19:21] <bradleymeck> ummm npm, howtonode, what are you looking for?
+[19:22] <javajunky> I wrote a 'conventional' how to write a blog type article http://howtonode.org/express-mongodb  but there's other good ones there.
+[19:23] <eggsby> nothing really in particular, just overview getting started stuff, my eventual goal is to get some sort of simple comet system for chat and similar stuffs
+[19:23] jxson_ has joined the channel
+[19:23] <eyzn> nvm (or nave) are also good to know - both enable u running multiple versions of node and both can be found on github
+[19:23] <eggsby> I'm using django as my main framework right now and hoped to just use node as the comet server
+[19:24] <skampler> eggsby: http://nodejs.org/api.html
+[19:24] steadicat has joined the channel
+[19:24] <mape> eggsby: look at the chat example? :)
+[19:24] <eggsby> :p
+[19:25] <eggsby> I am actually learning js ins and outs just for node :3
+[19:26] <derferman> ebbsby: It's worth it
+[19:26] <derferman> Javascript is such a great language when you don't have to worry about browsers
+[19:26] <derferman> and all of their incompatibilities
+[19:26] <bradleymeck> js is just fine except for looping with closures T_T
+[19:26] ceej has joined the channel
+[19:27] <eggsby> I've used javascript regularly to tinker with jquery and stuff, but never actually felt a reason to sit down and learn it until now
+[19:28] maushu has joined the channel
+[19:28] _announcer has joined the channel
+[19:31] <_announcer> Twitter: "Does anyone who reads my tweets have a Node.js opinion about Express vs. Geddy vs. some other web framework? Which is most "mature"?" -- Russell Beattie. http://twitter.com/RussB/status/16871782505
+[19:32] callen has joined the channel
+[19:33] bpot has joined the channel
+[19:34] cloudhead has joined the channel
+[19:35] <LOLWUT_> eggsby: same here 
+[19:35] <LOLWUT_> years ago I stated I'd actually get into js if it went server-side
+[19:35] <LOLWUT_> and here I am
+[19:35] <eggsby> ;)
+[19:35] <eggsby> seeing all the cool stuff people are doing with node.js almost makes me want to leave django
+[19:35] <bradleymeck> eh the template libs are still a lil lacking for now i think
+[19:36] <LOLWUT_> oh heck, run and don't look back
+[19:36] <LOLWUT_> ;3
+[19:36] <technoweenie> eggsby: you dont have to leave django, the two complement each other
+[19:36] <technoweenie> eggsby: i think node.js is still a ways away from the kind of productivity you'd get in django/python
+[19:36] <LOLWUT_> it could have been the machines I've seen it deployed on, or old versions
+[19:36] <LOLWUT_> but having stress tested web apps built on top of django
+[19:36] <LOLWUT_> it's not terribly encouraging
+[19:37] <eggsby> eh that sort of stuff depends on how you're deploying
+[19:37] <eggsby> wsgi, mod_python or fastcgi
+[19:37] <LOLWUT_> yeah
+[19:37] <LOLWUT_> I don't know what all went into these setups
+[19:37] <LOLWUT_> all I know is I was able to topple large corporate web application x
+[19:37] <LOLWUT_> by making excessive queries
+[19:37] <_announcer> Twitter: "Looking at Node, but I'm not sure which web framework is faster/cleaner/more supported/stable, etc. Express, Geddy or...? #nodejs" -- Russell Beattie. http://twitter.com/RussB/status/16872125638
+[19:37] <LOLWUT_> etc
+[19:38] BrianTheCoder has joined the channel
+[19:38] <eggsby> javajunky: heh, I was reading that one last night :p
+[19:39] <LOLWUT_> you know, I honestly wonder if node NEEDS web app frameworks
+[19:39] <LOLWUT_> most of the components are already there
+[19:39] <eggsby> It's mostly for the API I imagine
+[19:39] <LOLWUT_> ah I suppose
+[19:39] <LOLWUT_> I dunno, when I think framework
+[19:39] <LOLWUT_> I think "half done web app, just add code"
+[19:40] <technoweenie> api, having a lot of the common/boring stuff done for you so you can focus on app logic
+[19:40] <LOLWUT_> yea
+[19:40] <technoweenie> its more about developer productivity than raw server speed
+[19:40] <LOLWUT_> I guess that's where my priorities differ then :P
+[19:41] <LOLWUT_> if it's not fast and not secure it's not worth writing
+[19:41] <eggsby> I'm really impressed by that game engine that was written with node
+[19:41] <javajunky> there are various reasons for being interested in node.js , my main reason is common across all the server side javascript runtimes, and thats the actual language, so having web frameworks where I can write a top to bottom stack in pure Javascript is nice ;)
+[19:41] <eggsby> or at least heavily using node
+[19:42] <eggsby> funny how python and js are on the rise
+[19:42] <LOLWUT_> javascript is probably my least known language, so my main motivating factors are being able to write server implementations that take care of events and concurrency
+[19:42] agnat has joined the channel
+[19:42] <LOLWUT_> without having to hack it in
+[19:42] <LOLWUT_> and the performance increase you get with using node
+[19:42] <eggsby> when they've usually been portrayed as throwaway or toy languages
+[19:42] <LOLWUT_> yah, it's pretty interesting
+[19:42] <eggsby> 8)
+[19:43] <eggsby> you guys use jquery for your json?
+[19:43] <LOLWUT_> I have a terrible aversion to json
+[19:43] <LOLWUT_> I'm still stuck in the 90s
+[19:43] <LOLWUT_> with my proprietary data packing 
+[19:43] <LOLWUT_> old habits die hard
+[19:44] <technoweenie> jquery for our json?
+[19:44] <technoweenie> in node?
+[19:44] JimBastard has joined the channel
+[19:45] gerad has joined the channel
+[19:47] <mAritz> GOOOAAAALLLLL!
+[19:47] <mAritz> :D
+[19:47] <mAritz> finally... now i can continue coding some stuff again in a relaxed state
+[19:48] <_announcer> Twitter: "Finally installed #nodejs . Ran "hello node". Dancing with delight. This is my new favorite thing. #node #javascript #awesome" -- rick waldron. http://twitter.com/rwaldron/status/16872727655
+[19:49] oleg__ has joined the channel
+[19:49] <_announcer> Twitter: "Help me decide, @twitter: C, erlang, nodejs, {other}." -- Danny Tatom. http://twitter.com/dannytatom/status/16872838453
+[19:50] <JimBastard> yo why is fictorial being a hater
+[19:50] <JimBastard> >.<
+[19:50] <maushu> JimBastard, wut.
+[19:51] kevwil has joined the channel
+[19:52] <JimBastard> maushu: can i have all your graphnode code, i cant write javascript and need a hosting platform
+[19:52] <JimBastard> also can i borrow 100 bucks
+[19:52] sanderjd has joined the channel
+[19:52] <LOLWUT_> lol
+[19:52] <maushu> ...
+[19:53] <maushu> Yes, you can but since you left...
+[19:53] <maushu> Oh well.
+[19:53] markwubben has joined the channel
+[19:53] <mscdex> ouch, that's cold
+[19:53] <mscdex> huhu
+[19:54] <maushu> mscdex, so what happened with fictorial?
+[19:55] <mscdex> i don't know?
+[19:56] phiggins has joined the channel
+[19:58] <_announcer> Twitter: "@brianleroux i'm now obsessed with node.js - have any really really awesome resources I should check out?" -- rick waldron. http://twitter.com/rwaldron/status/16873324603
+[19:58] sechrist has joined the channel
+[19:58] <_announcer> Twitter: "@rwaldron delicious.com/sonofbluerobot/nodejs" -- jalbertbowdenii. http://twitter.com/jalbertbowdenii/status/16873377118
+[20:02] <_announcer> Twitter: "@RussB Is node.js mature enough security wise to put directly on the internet? Thought that still wasn't recommended" -- Michael Buckbee. http://twitter.com/mbuckbee/status/16873608280
+[20:02] <_announcer> Twitter: "@node_knockout also, you might want to see about getting some link love from nodejs.org - maybe a logo link in the upper-right?" -- hexlib. http://twitter.com/hexlib/status/16873612602
+[20:03] <technoweenie> security wise?  has someone hacked a node app?
+[20:03] <sechrist> he's probably referring to ryan's yahoo talk
+[20:04] <sechrist> where ryah said not to put it right on 80
+[20:04] <sechrist> because you could go to http://localhost/ryan and get root
+[20:04] <sechrist> but nah I haven't heard of node exploits -- but that's purely because of lack of security research with it I'm sure. If there are any I would expect Buffer() to be the first to get it
+[20:05] <technoweenie> awesome
+[20:05] <maushu> sechrist, localhost/ryan? What the hell.
+[20:05] <sechrist> did you listen to his talk
+[20:05] <sechrist> he made a joke
+[20:05] <technoweenie> http://www.yuiblog.com/blog/2010/05/20/video-dahl/ ?
+[20:05] <maushu> Ah.
+[20:05] <sechrist> yah
+[20:05] kevwil has joined the channel
+[20:05] <sechrist> he made a comment that it shouldn't live on 80 but that was months ago
+[20:05] <sechrist> I would trust it
+[20:06] <sechrist> just don't give out Server tags in your header and who will know?
+[20:06] <maushu> My http server has been on 80 for some time and I still don't had problems with it.
+[20:07] <maushu> I need to make it streaming though.
+[20:07] <sechrist> it takes 3 cycles to access the l1 cache?
+[20:07] <sechrist> that's SLOWWW
+[20:07] <sechrist> lulz
+[20:08] jxson has joined the channel
+[20:09] visnup has joined the channel
+[20:12] visnup_ has joined the channel
+[20:14] <bradleymeck> tlb takes 1 even :/
+[20:15] sztanpet has joined the channel
+[20:16] liucougar has joined the channel
+[20:18] <sechrist> woah I just noticed that when you press in keys on the macbook keyboard they become flush with the chassis
+[20:18] <sechrist> well on blackkey
+[20:22] gerad has joined the channel
+[20:23] <technoweenie> hey felixge did you ever get that jsconf video that we recorded for you during jed's talk
+[20:23] <LOLWUT_> most node exploitation I could see happening off the top of my head is something like code injection if the user mishandles script class stuff
+[20:24] <technoweenie> LOLWUT_: yea but is that a node.js exploit or a node.js app exploit
+[20:24] <LOLWUT_> truth
+[20:24] <technoweenie> i mean, i can write some bad code that lets you upload and run arbitrary files
+[20:24] <LOLWUT_> oh I know
+[20:24] <LOLWUT_> just saying I think most exploitation will result from user error
+[20:24] <LOLWUT_> rather than nodejs itself
+[20:28] gerad1 has joined the channel
+[20:29] kersny has joined the channel
+[20:30] <creationix> LOLWUT_: I think ryah's point is that there could be unknown security exploits in the c code that allow an attacker to gain root powers and execute arbitrary code as root.  It's never to safe to assume this isn't possible with c code
+[20:30] <creationix> the language is inherently unsafe
+[20:31] <creationix> that being said, it's not hard to change uid after binding to port 80
+[20:34] <sechrist> btw technoweenie, in the yui talk his comment is about 37:00
+[20:34] <technoweenie> cool
+[20:35] <sechrist> I'm a little concerned with proxying everything though
+[20:35] <sechrist> that requires additional FDs to be reserved right?
+[20:35] <sechrist> can't posix systems run out of FDs?
+[20:35] <LOLWUT_> creationix: yeah, may be interesting to take at how various buffers are manipulated. at this point though I'd say I'm more interested in learning how the whole thing works ;)
+[20:35] <sechrist> and isn't there buffers that could fill up
+[20:35] <maushu> creationix, do tell about changing the ui. I'm using upstart.
+[20:35] dgathright has joined the channel
+[20:36] <creationix> in upstart, I think it's just a config directive
+[20:36] tmpvar has joined the channel
+[20:36] <creationix> or just use process.setuid in your script
+[20:36] <maushu> But wouldn't that prevent the 80 binding?
+[20:36] <creationix> just do it after binding
+[20:36] <sechrist> creationix: can I call process.setuid at any time in the code?
+[20:36] <creationix> once bound it doesn't matter who you are
+[20:36] <sechrist> that's sick
+[20:36] <_announcer> Twitter: "The successor to Helma and now competing with nodejs- RingoJS http://www.ringojs.org/wiki/.  Runs on GAE too!" -- Jake Suntheimer. http://twitter.com/jsuntheimer/status/16875683140
+[20:37] lukus has joined the channel
+[20:37] <maushu> Yeah, I was talking about the config directive.
+[20:37] <sechrist> competing with nodejs?rawr
+[20:37] richcollins has joined the channel
+[20:37] jashkenas has joined the channel
+[20:37] <maushu> RingoJS is on Java.
+[20:37] <maushu> No thanks.
+[20:37] <sechrist> yeah fuck that shit
+[20:38] KungFuHamster has joined the channel
+[20:38] <sechrist> also technoweenie he mentions potential h4x at 40:50
+[20:38] <JAAulde> ^^ what he said
+[20:38] <sechrist> I just skimmed the video for reference
+[20:38] <technoweenie> cool
+[20:38] <maushu> creationix, thanks for the setuid hint.
+[20:38] <creationix> :)
+[20:39] <technoweenie> hopefully ryan and/or the v8 devs will be right on top of any released exploits
+[20:39] <sechrist> oh of course
+[20:39] <sechrist> i'm not worried about it
+[20:39] <creationix> no, the only real danger is that we say it's safe, then something terrible happens and our credibility is shot
+[20:40] <sechrist> but any hardened admin has firewalls and works to debrand stuff
+[20:40] <creationix> I don't expect anything to happen
+[20:40] <sechrist> credibility is important -- I mean look at haproxy and bsd
+[20:40] <sechrist> but still
+[20:41] <skampler> having a node suid binary, setuid 0 for binding to 80 and then setuid back, is safe
+[20:42] <creationix> sechrist: yes credibility does matter, that's why we need to get caught up in flame wars ;)
+[20:42] <sechrist> of course!
+[20:42] <creationix> and not act like fanboys
+[20:42] <atmos> there's plenty of good writing about how to properly bind ot privileged ports
+[20:42] <creationix> (I'm not accusing anyone of anything, even Marak)
+[20:42] <sechrist> we are passionate
+[20:42] <sechrist> that's all
+[20:42] <creationix> yeah, passionate is good, otherwise it's boring
+[20:43] <creationix> just keep it friendly
+[20:43] <sechrist> I mean that guy earlier just flamed node.js
+[20:43] <sechrist> called it a toy
+[20:43] <sechrist> >:(
+[20:43] <creationix> he did, it was troll bait
+[20:43] <technoweenie> dont feed the trolls
+[20:43] <creationix> and said Ryan is the same as DHH
+[20:44] <creationix> I mean ryah doesn't even want the hype, he just wants a solid platform so programming habits can be changed
+[20:45] oleg__ has joined the channel
+[20:46] agnat has joined the channel
+[20:47] <creationix> too bad strings aren't mutable
+[20:47] <creationix> I want to store properties on them
+[20:47] <LOLWUT_> node.js as a toy? laughable.
+[20:47] <creationix> toy, no, experiment, yes
+[20:47] <creationix> but one that is getting fairly mature
+[20:47] <LOLWUT_> I'd say great success
+[20:47] <LOLWUT_> but that's just me.
+[20:48] <LOLWUT_> has anyone fuzzed nodejs?
+[20:48] <maushu> fuzzed?
+[20:48] <LOLWUT_> yeah
+[20:48] <LOLWUT_> hitting inputs
+[20:48] <LOLWUT_> with all sorts of data
+[20:48] <javajunky> I think someone on the mailing list a while back talked about fuzzing the http server yeah
+[20:48] <LOLWUT_> to see what breaks
+[20:48] <LOLWUT_> if anything
+[20:48] <LOLWUT_> well, this is the type of stuff I do professionally
+[20:48] <LOLWUT_> perhaps if I can free up some time
+[20:48] <maushu> http usually disconnects when the client deviates from the protocol.
+[20:48] <LOLWUT_> I can get to trying to fuzz test portions of nodejs
+[20:49] <LOLWUT_> yeah
+[20:49] <LOLWUT_> http is generally pretty solid in most applications
+[20:49] <LOLWUT_> since the protocol is fairly strict
+[20:50] <LOLWUT_> maybe that could be a fun project for me
+[20:50] <LOLWUT_> a nodejs fuzzer
+[20:50] <LOLWUT_> done in nodejs
+[20:51] zlajo has joined the channel
+[20:51] <creationix> LOLWUT_: feel free to test against howtonode.org too (though you can't see the backend, so how will you know if it crashes)
+[20:51] <LOLWUT_> anyway, that's probably the best way to get a baseline of where security/stability is at
+[20:51] <creationix> just don't eat up all my bandwidth got the month
+[20:51] <LOLWUT_> oh ok :)
+[20:51] Tim_Smart has joined the channel
+[20:52] <LOLWUT_> what I think i'd probably start with
+[20:52] <LOLWUT_> is input that causes unrecoverable exceptions
+[20:53] <LOLWUT_> because that seems to be a "weak" point, not really in node itself, but could be effective in denial of service
+[20:54] Aria has joined the channel
+[20:55] isaacs has joined the channel
+[20:57] jakehow has joined the channel
+[20:58] Aria has joined the channel
+[20:58] agnat has left the channel
+[20:59] <zaach> LOLWUT_: nice list of fuzzers http://www.infosecinstitute.com/blog/2005/12/fuzzers-ultimate-list.html
+[21:00] Ori_P has joined the channel
+[21:00] ollym has joined the channel
+[21:00] <bradleymeck> runs on gae is a good point for ringojs, but then again
+[21:02] <LOLWUT_> zaach: OWASP has a great list too :)
+[21:03] <zaach> LOLWUT_: I found that list through OWASP :p
+[21:03] <LOLWUT_> well that explains a lot of the similar entries ;)
+[21:03] <LOLWUT_> hehehe
+[21:04] <LOLWUT_> I think my favorite fuzzing technique is piping /dev/urandom through netcat
+[21:04] <LOLWUT_> because when things break as a result it's hilarious
+[21:06] <Tim_Smart> mape: http://fostle.com/ hasn't crashed since you (tried) to benchmark it :D
+[21:07] <Tim_Smart> Yay for node not crashing
+[21:07] <mape> Tim_Smart: since no one visits it? :P
+[21:07] <Tim_Smart> Probably
+[21:08] ollym has joined the channel
+[21:08] Ori_P_ has joined the channel
+[21:13] sztanpet has joined the channel
+[21:14] mostlygeek has joined the channel
+[21:16] sudoer has joined the channel
+[21:17] sudoer has joined the channel
+[21:18] kevwil has joined the channel
+[21:19] <elliottcable> ryah: on the Contributor License Agreement; should the e-mail be the same one attached to the git commits? Or is it irrelevant?
+[21:21] <sechrist> tjholowaychuk: you there?
+[21:21] <tjholowaychuk> sechrist: yo
+[21:21] <_announcer> Twitter: "just signed the #NodeJS Contributor License Agreement; glad to see it that serious :D" -- elliottcable. http://twitter.com/elliottcable/status/16878047450
+[21:22] <sechrist> tjholowaychuk: I may just open an issue for this, but in the http lib for express it doesn't honor relative urls in location on redirects. it passes the relative url when it expects a full path
+[21:22] <sechrist> and thus 404s
+[21:22] <sechrist> I noticed it with a high rate of failing urls, confused me at first
+[21:23] <tjholowaychuk> ah, shit, good call.
+[21:23] <tjholowaychuk> that http lib might be going the way of the dodo though
+[21:23] <tjholowaychuk> not sure yet
+[21:24] <sechrist> tjholowaychuk: http://github.com/visionmedia/express/issues/issue/326
+[21:26] creationix has joined the channel
+[21:27] <sechrist> tjholowaychuk: ooh ignore the url_stack thing.. that's what I do to track the redirected urls
+[21:27] <sechrist> whoops
+[21:27] <Tim_Smart> Anyone played with Geddy here? Looks like a cool little framework
+[21:28] <tjholowaychuk> played with it a little
+[21:28] <creationix> geddy aims to be for the mass public
+[21:28] <creationix> rails for node
+[21:28] <sechrist> "rails for node" makes me cringe
+[21:28] <tjholowaychuk> ditto
+[21:28] <Tim_Smart> mde doesn't say that though
+[21:29] <creationix> well, he said more merb for node
+[21:29] <tjholowaychuk> which is now rails
+[21:29] <tjholowaychuk> so rails
+[21:29] <tjholowaychuk> lol
+[21:29] <_announcer> Twitter: "@tjholowaychuk Hrm, think I'll go with node then, since I already have an ok understanding of JS. Looking at erlang makes my brain hurt. :(" -- Danny Tatom. http://twitter.com/dannytatom/status/16878470304
+[21:29] <tjholowaychuk> they are more or less the same anyways
+[21:29] <sechrist> node.erl 
+[21:29] <tjholowaychuk> haha
+[21:30] <sechrist> yeah geddy looks cool but I'm waiting to see what frameworks get built on top of connect
+[21:30] <sechrist> connect looks very promising
+[21:30] <creationix> geddy might move to be on top of connect
+[21:30] <sechrist> that would rock
+[21:30] <tjholowaychuk> connect basically includes everything express used now, but it would be extremely easy to build upon
+[21:31] <Tim_Smart> Keeping things modular will win at the end of the day
+[21:31] <creationix> yep, connect is node-router merged with express and made more modular
+[21:31] markwubben_ has joined the channel
+[21:31] <Tim_Smart> Being able to use an ORM outside the framework it was build for mean you have done your job
+[21:31] <Tim_Smart> *built
+[21:32] <Tim_Smart> (As an example)
+[21:32] JimBastard has joined the channel
+[21:32] <technoweenie> having a range of web frameworks that work together is awesome too
+[21:32] <technoweenie> rack => sinatra => rails, node => connect => geddy?
+[21:35] <creationix> technoweenie: something like that
+[21:36] <tjholowaychuk> i think we will see more people crafting little frameworks out of connect chunks, even as far as mixing and matching routing styles
+[21:36] <tjholowaychuk> most of it is there
+[21:36] <tjholowaychuk> some stuff is not really middleware, like redirect but lots of little chunks like that make it a customizable framework
+[21:37] gerad has joined the channel
+[21:39] <sechrist> connect seems to be just providing common stuff that web devs do that shouldn't be in trunk
+[21:40] <JimBastard> hey sechrist http://news.ycombinator.com/item?id=1455706 lol
+[21:40] <tjholowaychuk> some of it yea, but its convenient, and like you said its common stuff
+[21:40] <technoweenie> upvoted
+[21:40] <sechrist> JimBastard: dude that code was total weaksauce
+[21:41] <sechrist> he doesn't know weaksauce from A1?
+[21:41] <JimBastard> im just glad i was able to get the project 100% OSS and support scott a bit
+[21:41] <JimBastard> scott is amazing at JS
+[21:41] <JimBastard> like seriously
+[21:41] <sechrist> I know a guy named marcel that is pretty amazing
+[21:41] <sechrist> works at FB, pioneered fbjs
+[21:41] <JimBastard> nice man
+[21:42] <creationix> sechrist: yeah, I'm not sure connect should come with everything it does
+[21:42] <creationix> not in the main repo atleast
+[21:42] <creationix> we'll probably break it into a few repos once it's more stabilized
+[21:42] jashkenas has left the channel
+[21:42] <technoweenie> if they're lazily loaded, whats the big deal
+[21:42] <creationix> and put it all on npm
+[21:42] <creationix> technoweenie: people are just adverse to downloading code they don't plan on using
+[21:42] <tjholowaychuk> creationix: yeah once our api is stable we could have the connect-contrib
+[21:42] <creationix> but yeah, it's all lazy loaded, nothing that will hurt performance
+[21:43] <sechrist> creationix: connect-configure - a la http://phpjs.org/packages/configure
+[21:43] <eggsby> sup avidal
+[21:43] <tjholowaychuk> pff
+[21:43] <sechrist> muahahah
+[21:43] <creationix> sechrist: hmm, that would be neat
+[21:43] <isaacs> tjholowaychuk: you know what would rock?  if there was a way to registry plugins for express without putting the code in the express tree
+[21:43] <isaacs> tjholowaychuk: like, require("express").registerPlugin(exports) or something
+[21:44] <tjholowaychuk> isaacs: you can have anything, just do use(require('yourplugin'))
+[21:44] <avidal> not much
+[21:44] <JimBastard> ahaha nice LOLWUT_ http://www.reddit.com/r/programming/comments/cib7n/followup_asciimo_where_have_i_seen_this_before/
+[21:44] <isaacs> tjholowaychuk: right... but it seems like some express plugins on github expect to be placed into the express folder.
+[21:44] <sechrist> plumber with a fireman's axeeee
+[21:45] <tjholowaychuk> isaacs: just some of the defaults
+[21:45] <isaacs> tjholowaychuk: hm.  i see.
+[21:45] <sechrist> JimBastard: he honestly thinks you changed IPs just to troll
+[21:45] <sechrist> JimBastard: what a retard
+[21:46] <sechrist> he closed comments
+[21:46] <sechrist> I was totally going to post http://github.com/scottgonzalez/figlet-js
+[21:46] <isaacs> tjholowaychuk: i think it was express-custom-errors or express-session-redis that wanted to work that way
+[21:47] <tjholowaychuk> hm.. i did not write those
+[21:47] <isaacs> tjholowaychuk: the more i think about it, the more i think that even going down that road is a path to spaghetti
+[21:47] <tjholowaychuk> its possible they set it up that way
+[21:47] <JimBastard> sechrist: yeah he closed comments
+[21:47] <sechrist> pusssssssss
+[21:47] <LOLWUT_> yup
+[21:47] <LOLWUT_> lol
+[21:47] <LOLWUT_> well, even pussier, posted with them disabled
+[21:48] <LOLWUT_> so no one could respond
+[21:48] <LOLWUT_> at all
+[21:48] <tjholowaychuk> isaacs: that is a ruby idiom to have for example ./rack and then the rack-contrib lib has ./rack/contrib so you require 'rack' / require 'rack/contrib'
+[21:48] <tjholowaychuk> so they might be doing that
+[21:48] <isaacs> tjholowaychuk: yeah
+[21:48] <isaacs> tjholowaychuk: so i think the answer might just be "node isn't ruby.  ruby idioms won't work."
+[21:49] <tjholowaychuk> isaacs: i was wondering about that though, is it possible with npm to have the lib dir unshifted to require.paths? what if you have 'connect/utils' and you want it
+[21:49] <JimBastard> if i wanted to sockpuppet someone, id be way more tactful
+[21:49] <JimBastard> sockpuppeting is an art
+[21:49] bmizerany has joined the channel
+[21:49] <JimBastard> and only to be used against proper enemies
+[21:49] <JimBastard> real trolls can use one handle and just keep it real
+[21:49] <tjholowaychuk> nvm
+[21:49] <tjholowaychuk> isaacs: nvm im dumb
+[21:49] <isaacs> hehe
+[21:49] gerad has joined the channel
+[21:50] <isaacs> ACTION was wondering where you were goin with that...
+[21:50] <creationix> tjholowaychuk: I read that as "nvm is dumb"
+[21:50] <creationix> ACTION was about ti bring out the baseball bat
+[21:50] <tjholowaychuk> hahaha
+[21:51] jashkenas has joined the channel
+[21:51] <jashkenas> http://news.ycombinator.com/item?id=1456384
+[21:51] <jashkenas> Holy Crap. IE9 gets Array.prototype.indexOf
+[21:51] tmpvar has joined the channel
+[21:51] <tjholowaychuk> isaacs: but yeah dont worry about the architecture of express it sucks, and will be re-done... soon? i hope lol
+[21:51] <jashkenas> This is huge.
+[21:51] <ryah> yey
+[21:51] <tjholowaychuk> oOoOo
+[21:51] <LOLWUT_> JimBastard: exactly
+[21:51] <isaacs> hooray!
+[21:51] gerad1 has joined the channel
+[21:51] <LOLWUT_> though honestly
+[21:51] <LOLWUT_> I did choose some of your wording
+[21:51] <LOLWUT_> to make him paranoid lol
+[21:51] <JimBastard> ahahaha
+[21:52] <LOLWUT_> so they don't see me rollin..
+[21:52] <_announcer> Twitter: "@derickbailey @hhariri at @ObtivaCorp we are very committed to Ruby, but also proactively pursue clojure, node.js, lean dev, community, etc." -- Michael D. Hall. http://twitter.com/just3ws/status/16879718962
+[21:52] <Tim_Smart> Microsoft still can't redeem themselves, but at least we now have a reason to applaud them
+[21:53] <LOLWUT_> because they're not apple?
+[21:53] <tjholowaychuk> because they suck at life
+[21:53] <sechrist> LOLWUT_: apple rocks, LOLWUT_
+[21:53] <sechrist> well they're just too large
+[21:53] <tjholowaychuk> seriously, take a whole 5 minutes for someone to write indexOf() but noooo
+[21:53] <sechrist> any company that large has problems
+[21:53] <LOLWUT_> apple machines, maybe
+[21:53] <LOLWUT_> apple the company, definitely not
+[21:53] jashkenas has left the channel
+[21:53] <tjholowaychuk> ACTION wishes consumers saw MS like devs did
+[21:53] <sechrist> I mean MS being too large
+[21:54] <LOLWUT_> ya, forget the term for it..
+[21:54] <sechrist> but it amazes me that they can't produce a decent browser, IE 9 has been so slowly developed
+[21:54] <LOLWUT_> but there's some group dynamic where after a certain number of people
+[21:54] <LOLWUT_> productivity and such degrade
+[21:54] <tjholowaychuk> yeah no doubt, version 9 and it still sucks..
+[21:54] <tjholowaychuk> they should force updates for their old crap already
+[21:54] <sechrist> kill ie 6
+[21:54] <LOLWUT_> and stop promising to support their products
+[21:54] <sechrist> or create their own chromeframe
+[21:54] <LOLWUT_> til the end of eternity
+[21:55] <sechrist> LOLWUT_: that's how you win the enterprise
+[21:55] <sechrist> which is totally their market
+[21:55] <LOLWUT_> yeah I know
+[21:55] <sechrist> exchange is used by almost every company ever
+[21:55] <LOLWUT_> I just wish more enterprise businesses had just one IT guy on staff
+[21:55] <sechrist> I bet apple uses it internally
+[21:55] <LOLWUT_> in the boardroom
+[21:55] <LOLWUT_> we use jabber
+[21:55] <LOLWUT_> and google apps
+[21:55] <sechrist> for email?
+[21:55] <sechrist> ah ok
+[21:56] <LOLWUT_> ya
+[21:56] <LOLWUT_> but we're kind of an oddballish company
+[21:56] <LOLWUT_> so I guess it makes sense
+[21:56] <sechrist> well giving google control of company emails is an issue for some
+[21:56] <LOLWUT_> oh definitely
+[21:57] <sechrist> k well bbl guyz
+[21:57] <LOLWUT_> sure thing
+[21:57] <LOLWUT_> catch ya later
+[21:58] liucougar has joined the channel
+[22:02] sztanpet has joined the channel
+[22:03] rictic has joined the channel
+[22:04] <_announcer> Twitter: "New blog post: http://blog.izs.me/post/729604080/nodejs-and-empowering-n00bz #nodejs" -- Ⓘⓢⓐⓐⓒ. http://twitter.com/izs/status/16880400651
+[22:04] dgathright has joined the channel
+[22:04] <isaacs> jesus christ that _announcer thing is fast.
+[22:04] <Aria> Isn't that freaky?
+[22:04] <isaacs> it gets my tweets before tweetie does, and i'm posting the tweet using tweetie.
+[22:05] <Aria> Hehe. Yeah.
+[22:05] <isaacs> how is that even remotely possible?  i don't get it.
+[22:05] <Aria> Long poll on twitter searches maybe?
+[22:05] <Tim_Smart> streaming api
+[22:05] <Aria> Vs tweetie's short polling?
+[22:05] <Aria> It usually gets me about the time I lift the finger from the enter key.
+[22:05] <Aria> Feels rather like an earthquake does. Something moving underneath you.
+[22:05] <isaacs> well, i think tweetie is waiting for the confirmation that it got posted, whereas it probably actually shows pu in twitter's streaming api a bit sooner than the conf gets sent
+[22:06] <creationix> isaacs: sounds right
+[22:06] <isaacs> still
+[22:06] <isaacs> i'ts like getting a reply to a message before you're done sending the message.  it's like time travel or something.
+[22:06] <isaacs> we should get maushu to add a timeout or something to it.  it's too fast!
+[22:07] <Tim_Smart> naw, its the chill factor that makes node awesome
+[22:07] <maushu> ACTION hides is timetravel.js
+[22:07] <isaacs> hehe
+[22:10] _utility has joined the channel
+[22:10] <bradleymeck> finally... short testing thing, sorry for a bit all
+[22:10] <bradleymeck> @repl 1 + 1
+[22:10] <_utility> 2
+[22:11] <bradleymeck> @set author bradleymeck
+[22:11] <bradleymeck> @get author
+[22:11] <_utility> bradleymeck
+[22:11] <tjholowaychuk> @repl "wtf"
+[22:11] mitkok has joined the channel
+[22:11] <tjholowaychuk> asshole
+[22:11] <tjholowaychuk> lol
+[22:11] <Tim_Smart> There have been a few repls in here before
+[22:11] <bradleymeck> you dont have admin priv to use repl XD
+[22:11] <creationix> isaacs: http://foohack.com/about/ says you still work for yahoo
+[22:11] <isaacs> creationix: huh.  i should change that i guess
+[22:14] visnup has joined the channel
+[22:16] <JimBastard> mikeal: wtf lol, why you posting that shit
+[22:16] <mikeal> haha
+[22:16] <mikeal> yours came right after
+[22:16] <JimBastard> you told me to rewrite that shit, its been legit since monday night man
+[22:17] <mikeal> yeah, i didn't know that yet
+[22:17] <mikeal> but still dude
+[22:17] <mikeal> *your* code doesn't have a license on it
+[22:17] <mikeal> :)
+[22:17] <JimBastard> i dont understand how people can get soo into something without bothering to research the context
+[22:17] <JimBastard> yes it does
+[22:17] <mikeal> where?
+[22:17] <JimBastard> IN THE REPO
+[22:17] <JimBastard> where are you looking ? lol
+[22:17] <mikeal> i looked before i sent that
+[22:17] <mikeal> no LICENSE file and nothing in the readme
+[22:17] <JimBastard> http://github.com/Marak/asciimo/tree/master/lib/
+[22:17] <Tim_Smart> mikeal: Look at the code headers
+[22:17] <mikeal> oh dude, it's in lib
+[22:18] <mikeal> put that shit in the root 
+[22:18] <JimBastard> http://github.com/Marak/asciimo/blob/master/lib/asciimo.js
+[22:18] <mikeal> and in the readme
+[22:18] <mikeal> dual licensed MIT/GPL?
+[22:18] <JimBastard> yeah, scott wanted that lic mikeal 
+[22:19] <mikeal> interesting….. 
+[22:19] <JimBastard> i really could care less about software lics
+[22:19] <mikeal> i'm a big fan of the dual license
+[22:19] gerad has joined the channel
+[22:19] <mikeal> it's the "fuck off i don't care" option
+[22:19] <konobi> isaacs: ping
+[22:19] <JimBastard> mikeal would you mind just like saying a quick oops sorry on the mailing list?
+[22:19] <JimBastard> i dont want people to start up with the ignorant hating again
+[22:19] <Aria> That's an odd one, since GPL is a subset of MIT rights.
+[22:19] ollym has joined the channel
+[22:19] <JimBastard> i dont mind informed hating at all
+[22:19] <Aria> But I suppose it waves the "Keep it free" flag.
+[22:19] <isaacs> konobi: yo
+[22:21] <mikeal> JimBastard: sent
+[22:22] <JimBastard> thanks man
+[22:22] <mikeal> Aria: hahaha, please don't start this :)
+[22:22] <JimBastard> id just like to point out another time how trivial and stupid this guys code is
+[22:22] JAAulde has joined the channel
+[22:22] <JimBastard> i know the law doesnt care about that, but i fucking do
+[22:22] <JimBastard> ACTION has his own moral compass 
+[22:23] <mikeal> well, if you were willing to pay an absurd cost in legal fees you could get the copyright invalidated if it's that trivial
+[22:23] <mikeal> but the amount of money you would need to pay would *not* be trivial :)
+[22:23] <JimBastard> mikeal: i didnt have to
+[22:23] <JimBastard> his parser parsed malformed figlet fonts
+[22:23] <JimBastard> he went offspec
+[22:23] <JimBastard> its apples and oranges
+[22:23] <JimBastard> his code is for parsing apples
+[22:23] <JimBastard> i parse oranges
+[22:24] <JimBastard> just because they both grow from seeds and are tasty dont mean shit
+[22:24] <tjholowaychuk> hahah
+[22:25] voodootikigod has joined the channel
+[22:25] <mikeal> can we have the same "please close this thread now" attitude on the testing thread
+[22:25] <mikeal> you know what works well for testing
+[22:25] <mikeal> writing tests
+[22:25] <mikeal> you can shut up now
+[22:25] keyvan has joined the channel
+[22:26] <tjholowaychuk> me?
+[22:26] <mikeal> no, not you
+[22:26] <mikeal> you're like "BBD sucks"
+[22:26] <mikeal> and i'm in agreement :)
+[22:26] <mikeal> but this has gone on long enough
+[22:26] <tjholowaychuk> ah. gotcha. oh well who cares its just a discussion
+[22:27] admc has joined the channel
+[22:27] <mikeal> the reason people love to talk about test frameworks is that they are really trivial to write so everyone can have an opinion about them
+[22:27] <mikeal> you see it all over
+[22:27] <JimBastard> hey voodootikigod , watching your goruco talk. good stuff
+[22:27] <JimBastard> i wanna be as good as speaking as you are one day
+[22:27] <mikeal> especially in Rubyland
+[22:28] <JimBastard> if only it were acceptable to do JS talks in rap form
+[22:28] <JimBastard> with beats
+[22:28] <Tim_Smart> JimBastard: How come Scott took his parser off GitHub?
+[22:28] <mikeal> honestly, node testing is so much easier *without* a framework
+[22:28] <mikeal> the unittests are so simple
+[22:28] <JimBastard> Tim_Smart: he didnt?
+[22:28] <maushu> Use MIT.
+[22:28] <Tim_Smart> nvm
+[22:28] <JimBastard> http://github.com/scottgonzalez/figlet-js
+[22:28] <creationix> anybody want a real challenge... Make node enterprise friendly without alienating the hard-core hacker community
+[22:28] <maushu> I will rip your heart out with a rusty spoon.
+[22:28] <Tim_Smart> Your link to Scott is bad
+[22:28] <JimBastard> creationix: give it a couple more years
+[22:28] ollym has joined the channel
+[22:29] <mikeal> creationix: easy, port it to the JVM
+[22:29] <maushu> creationix, define "enterprise friendly".
+[22:29] <mikeal> and DONE!
+[22:29] <JimBastard> creationix: as soon as node stabilizes and the hard problems are solved the hard core hackers will drift away anyway
+[22:29] <Aria> Port the node APIs to Rhino ;-)
+[22:29] <creationix> enterprise friendly means something people would use to replace their java 
+[22:30] <maushu> JimBastard, there will always stuff to do. Like modules or the changing http protocol.
+[22:30] <creationix> mikeal: ask the jruby guys about that plan, didn't work very well
+[22:30] <JimBastard> maushu: im gonna do my best to write every module needed ever
+[22:30] <JimBastard> :p
+[22:30] piratepenguin has left the channel
+[22:30] <maushu> By module I mean c modules.
+[22:30] <JimBastard> i think i can get like 20 more modules out of patorjks website
+[22:30] <JimBastard> no, me too
+[22:30] piratepenguin has joined the channel
+[22:30] <maushu> Like .node's
+[22:31] <JimBastard> there is GOLD up there
+[22:31] <Tim_Smart> http://www.ringojs.org/ runs on Rhino aka JVM
+[22:31] <mikeal> am i the only person totally unconcerned with the enterprise?
+[22:31] <JimBastard> we can make VB interfaces work in node
+[22:31] <maushu> Could you *please* ask him first?
+[22:31] <JimBastard> mikeal: i dont care either
+[22:31] <mikeal> the dominant technologies at startups for the last 10 years haven't been adopted by enterprise
+[22:31] <JimBastard> maushu: patorjk actually owns the copyright to VB6
+[22:31] <Aria> Nor I. I consider my enterprise much better served by running some small processes on bare metal.
+[22:31] <JimBastard> Cold Fusion = enterprise......LOOOL
+[22:32] <maushu> We need something like http://www.ringojs.org/wiki/debugger/
+[22:32] <Aria> c'mon, WO 5.
+[22:32] <mikeal> you know what's really big in the enterprise, Windows
+[22:32] <mikeal> so really, who cares?
+[22:32] <mde|afk> mikeal: We are an interesting experiment at Yammer. We're being adopted by big enterprises, but our tech isn't enterprisey.
+[22:32] <mikeal> are any of us ever gonna work there?
+[22:32] <LOLWUT_> JimBastard: lol
+[22:32] kodisha has joined the channel
+[22:32] <mikeal> mde|afk: but you write stuff like Windows Sharepoint connectors :)
+[22:33] _utility has joined the channel
+[22:33] <JimBastard> i for one welcome our new JimBastard internet friend, LOLWUT_
+[22:33] <mikeal> so you integrate with all that legacy enterprise crap 
+[22:33] <LOLWUT_> thank you sir
+[22:33] <maushu> Is it possible to do steps? I thought it would be possible using v8.
+[22:33] <LOLWUT_> I for one would like to state that vb6 = totally relevant.
+[22:33] <Aria> Heh. I'm sitting in an airport, flying to Texas for four days to work on a VB6 app.
+[22:33] <maushu> Oh right, completely forgot --debug.
+[22:33] <bradleymeck> @grant JimBastard repl
+[22:34] <mde|afk> mikeal: Yeah, we have windowsy guys here who integrate it with Sharepoint and shit. 
+[22:34] <mde|afk> Poor bastards.
+[22:34] <LOLWUT_> honestly the last time I touched vb
+[22:34] <LOLWUT_> was when I wrote an aol punter
+[22:34] <LOLWUT_> so yeah
+[22:34] <mde> But we're a Ruby/JS/Postgres shop, mostly.
+[22:35] <mikeal> the DirectV guy is installing this satellite
+[22:35] ollym has joined the channel
+[22:35] <mikeal> or as I call it "SoccerVision"
+[22:35] <LOLWUT_> or as I call it BZZZZZZZZZZZZZZZZZZZZZZZZZZZ
+[22:35] <mikeal> haha
+[22:35] <mikeal> i'm gonna get all the euro league games now
+[22:36] <mikeal> no buzzing :)
+[22:36] <LOLWUT_> vuvuzelas are easily the best thing to happen to a sporting event
+[22:36] <LOLWUT_> if you can couple sports with trolling
+[22:36] <LOLWUT_> I'm all over it
+[22:36] <LOLWUT_> I hear people have developed noise cancelling techniques for the
+[22:36] <LOLWUT_> m
+[22:36] <LOLWUT_> which is amusing
+[22:36] <mikeal> the african teams are used to it
+[22:37] <LOLWUT_> haha
+[22:37] <LOLWUT_> yeah
+[22:37] <mikeal> that's why the do it during all the games, to give the african teams an advantage
+[22:37] <JimBastard> whats up bradleymeck 
+[22:37] <mikeal> it's clearly not working
+[22:37] <mikeal> the only african team that is going to advance is Ghana
+[22:37] <LOLWUT_> we have to keep in mind that most african countries still earnestly believe in witchcraft
+[22:37] JAAulde has left the channel
+[22:37] <LOLWUT_> so that's not terribly surpriseing
+[22:37] <LOLWUT_> *surprising
+[22:38] <mikeal> not really
+[22:38] <mikeal> the African league is huge
+[22:38] <LOLWUT_> as a matter of fact
+[22:38] <LOLWUT_> I can't remember which country
+[22:38] <bradleymeck> messing with a new irc bot, trying to get it to stay logged into google groups so can eventually do something like, @respond urltotopic "blah blah", oh and you now can use @repl expression while _utility is here
+[22:38] <LOLWUT_> a soccer game erupted into violence
+[22:38] <JimBastard> nice bradleymeck 
+[22:38] <LOLWUT_> due to one of the players on field being accused of witchcraft
+[22:38] <JimBastard> i want to see the old school fserve syntax working in node.js irc
+[22:38] <LOLWUT_> started a riot, and a few dead afterwards
+[22:38] <bradleymeck> dont even know that syntax
+[22:39] <JimBastard> bradleymeck: do you have a syntax / spec yet?
+[22:39] <JimBastard> yeah
+[22:39] <JimBastard> so !trigger
+[22:39] <mikeal> that's nothing, a qualifying game between Brazil and Argentina started a war
+[22:39] <JimBastard> i would do !trigger, and @user
+[22:39] <LOLWUT_> that's because european soccer is srs bsns
+[22:39] <LOLWUT_> watch out for potatos w/razors in them
+[22:39] <JimBastard> if that makes sense
+[22:39] <bradleymeck> dont have one fleshed out, t he trigger seems odd
+[22:40] <bradleymeck> since its already kinda used by announcer
+[22:40] <JimBastard> bradleymeck: its just remnant from IRC yore 
+[22:40] <LOLWUT_> I firmly believe that if the europeans acted like every day was a soccer event america would think twice before ever mouthing off
+[22:40] <JimBastard> you could trigger an fserve with a !foo command
+[22:40] <bradleymeck> using @ for now
+[22:40] <bradleymeck> @repl 1+3
+[22:40] <_utility> 4
+[22:40] <_announcer> Twitter: "nice! vows: asynchronous behaviour driven development for node http://vows.heroku.com/  #nodejs" -- Régis Gaidot. http://twitter.com/rgaidot/status/16882468289
+[22:40] <LOLWUT_> what, too good for xdcc? ;3
+[22:41] <JimBastard> i dont really mind either syntax, i just think that @ seems more like its for targetting a user...like how people use @ with twitter
+[22:41] <JimBastard> either way, im really glad to see someone working on node irc stuff
+[22:41] <LOLWUT_> yeah for sure
+[22:41] <JimBastard> good work man
+[22:41] <bradleymeck> anywho email me something if you want it
+[22:41] <LOLWUT_> most of the fserves I remember were originally !
+[22:41] creationix has left the channel
+[22:41] creationix has joined the channel
+[22:41] creationix has left the channel
+[22:41] <JimBastard> bradleymeck: you got a project link up
+[22:41] <JimBastard> ?
+[22:41] <technoweenie> gtfo
+[22:41] gerad has joined the channel
+[22:41] technoweenie has left the channel
+[22:41] jxson has joined the channel
+[22:41] creationix has joined the channel
+[22:42] visnup has joined the channel
+[22:42] <bradleymeck> not putting it up as a project for a while, since im going to have login credentials running on it, dont want a leak to be easier of those
+[22:42] richcollins has joined the channel
+[22:43] <JimBastard> yeah i feel that bradleymeck , i had that same problem
+[22:43] <JimBastard> i would suggest making a config file
+[22:43] <JimBastard> and keep it in gitignore
+[22:43] <JimBastard> then make a dummy config with a wrong name
+[22:43] ollym has joined the channel
+[22:43] <JimBastard> example.foo.json
+[22:43] <JimBastard> does that make sense?
+[22:43] <bradleymeck> yea
+[22:43] <JimBastard> (of course im sure you are focusing on real features for now)
+[22:43] <bradleymeck> prolly put it up in next 24 once google lets me login, im keeping its darn cookies
+[22:43] <JimBastard> let me know if you make public, i will check out
+[22:44] <LOLWUT_> disinformation
+[22:44] <LOLWUT_> good stuff
+[22:44] <LOLWUT_> well I suppose that would be misdirection.
+[22:44] <JimBastard> LOLWUT_: its a pretty standard practice. you want to hide your own config info, but not confuse users who are downloading your software
+[22:44] <JimBastard> the software wont run until the user renames the config
+[22:44] <JimBastard> aka, reads the installation docs
+[22:45] <LOLWUT_> oh definitely
+[22:45] <LOLWUT_> I've seen the opposite happen on the job far too often
+[22:46] <LOLWUT_> "So what if the exceptions generate all config data including credentials to the sql database? what's anyone going to do with that?"
+[22:46] joshbuddy has joined the channel
+[22:46] sztanpet has joined the channel
+[22:48] <creationix> who here things Object.prototype.forEach should be in node or in a library
+[22:48] phiggins has joined the channel
+[22:48] <creationix> it's so little and so useful that I think it would be better in core
+[22:48] <mikeal> sweet, the (fab) talk is up on the jsconf podcast feed
+[22:48] <creationix> and faster than the native for..in loop
+[22:49] <hober> creationix: It's in ECMAScript 5, so I would expect it to be provided by V8
+[22:49] <creationix> hober: not Array.prototype, Object.prototype
+[22:49] <hober> ahh, indeed, sorry
+[22:49] visnup has joined the channel
+[22:49] gerad has joined the channel
+[22:50] <creationix> but yeah, it works the same as the Array one
+[22:50] <LOLWUT_> foreach should be a staple of everything
+[22:50] <LOLWUT_> imo
+[22:50] <creationix> so that you can iterate over json objects
+[22:50] <creationix> not just arrays
+[22:51] <creationix> http://github.com/creationix/proto/blob/master/lib/proto.js#L29
+[22:51] <mikeal> v8 optimizations freak me out
+[22:51] <mikeal> things are faster than other things that you would never think
+[22:51] hdon has joined the channel
+[22:51] <creationix> well, the userland forEach being faster than for..in makes sense
+[22:52] <creationix> for..in, by definition, has to loop up the inheritance chain for each property
+[22:52] <creationix> but my forEach uses Object.keys to shortcut to the local keys
+[22:52] <_announcer> Twitter: "I have to say that since node.js has become so good there are good reasons to only learn javascript as a webdeveloper." -- Soeren Roerden. http://twitter.com/soeren_roerden/status/16883131280
+[22:52] kersny has joined the channel
+[22:52] <mikeal> the one that freaks me out is actually var x = new MyOb(); being faster than var x = {}
+[22:53] <creationix> mikeal: that's strange
+[22:53] <creationix> agreed
+[22:53] <mikeal> isaacs benchmarked it
+[22:53] <mikeal> the constructor is inlined
+[22:53] <mde> Freaky, yeah.
+[22:53] <Tim_Smart> mikeal: Also, Array#concat is slow than Array#push.apply
+[22:53] <creationix> good, I uses concat all over the place
+[22:54] <Tim_Smart> creationix: my_array.push.apply(my_array, other_array); is a lot faster than concat
+[22:54] <Tim_Smart> I benched that one
+[22:54] <creationix> oh, slower
+[22:55] <creationix> so how does that work, does push take abritrary number of args?
+[22:55] <Tim_Smart> Trade-off is that it modifies the original array
+[22:55] <Tim_Smart> creationix: yes
+[22:55] <isaacs> Tim_Smart: right, but it's not quite the same, since push mutates the original, and concat returns a new array
+[22:55] <isaacs> Tim_Smart: so the savings is in creating the new array
+[22:55] <creationix> which is why it's faster I'm guesing
+[22:55] <isaacs> suresure
+[22:55] <creationix> sweet, most the time I want to modify the array in place, not replace it
+[22:56] <_announcer> Twitter: "[Watch] Writing modules for node.js: We have already seen an introduction to node.js. In this paper, we al ... http://bit.ly/cl1fkv" [fr] -- Camille Roux. http://twitter.com/camilleroux/status/16883369659
+[22:56] <creationix> ACTION learns something every day
+[22:57] <Tim_Smart> @repl Object.getOwnPropertyNames(Array)
+[22:57] gerad1 has joined the channel
+[22:57] <Tim_Smart> bradleymeck: Fix it
+[22:57] <LOLWUT_> oh good, english tweet, french article, thanks poster. (@tweet above)
+[22:58] visnup_ has joined the channel
+[22:58] <Tim_Smart> LOLWUT_: It was auto-translated
+[22:58] <LOLWUT_> ahhhhh
+[22:58] <LOLWUT_> you and your magicks
+[22:58] <Tim_Smart> Hence the [fr] on the end
+[22:58] <LOLWUT_> good to know :)
+[22:58] <creationix> I wonder why it translated article to paper
+[22:59] <bradleymeck> @grant Tim_Smart repl
+[22:59] <Tim_Smart> @repl Object.getOwnPropertyNames(Array.prototype)
+[22:59] <mscdex> there ought to be a wiki page with all these notes about v8's optimizations
+[22:59] <bradleymeck> woops forgot wasnt in channel.. T_T
+[22:59] <mscdex> is there one?
+[23:00] _utility has joined the channel
+[23:00] <bradleymeck> @repl Object.getOwnPropertyNames(Array.prototype)
+[23:00] <_utility> [ 'length'
+[23:00] <creationix> mscdex: don't think so
+[23:00] <mscdex> :\
+[23:00] <bradleymeck> thats interesting
+[23:00] SteveDekorte has joined the channel
+[23:01] <Tim_Smart> bradleymeck: I'll see if I can find my old irc repl bot
+[23:02] creationix has left the channel
+[23:02] kodisha has joined the channel
+[23:05] <bradleymeck> seems an oddity w/ my irc lib
+[23:05] <_announcer> Twitter: "[The] [from pdorrell] RingoJS vs. NodeJS: http://url4.eu/4w48H" [ca] -- sldfjd ldajds. http://twitter.com/sldfjd/status/16883911992
+[23:07] <maushu> Do we have any debugger? I mean, one with steps and everything.
+[23:08] <Tim_Smart> maushu: With eclipse, yes
+[23:08] <maushu> I was thinking in a web one.
+[23:09] <maushu> I found this v8 debugger protocol but it doesn't work. ;_; I send the json commands and nothing happens.
+[23:13] bradleymeck has joined the channel
+[23:13] chakrit has joined the channel
+[23:13] <_announcer> Twitter: "What is #nodejs good for? Watching http://developer.yahoo.com/yui/theater/video.php?v=dahl-node" -- Alexandre Brina. http://twitter.com/alexbrina/status/16884406541
+[23:15] joshbuddy_ has joined the channel
+[23:17] <maushu> _announcer is feeling really lonely in my vps with only the small http server making company.
+[23:17] <LOLWUT_> lol
+[23:18] linuxsable has joined the channel
+[23:21] <_announcer> Twitter: "Man,... nearly half 12 already,.... must have been stuck in node.js land for a while" -- Gary Rafferty. http://twitter.com/gary_rafferty/status/16884842494
+[23:23] mklappstuhl has joined the channel
+[23:23] <mklappstuhl> hey ppl
+[23:24] <mklappstuhl> im wondering whether its possible to modify requested files on the fly?
+[23:24] <mklappstuhl> any ideas?
+[23:24] <maushu> requested files?
+[23:26] [[zz]] has joined the channel
+[23:26] <mklappstuhl> maushu: when i use node as a webserver
+[23:27] <mklappstuhl> lets say i want to insert an additional <script>-tag to a requsted HTML-file
+[23:27] <maushu> Yes...? You send data back to the client, just change the data before sending? I don't see what is the problem.
+[23:28] <maushu> Read the html file to a var, change it, send it to client.
+[23:28] <Tim_Smart> Use regex or jsdom
+[23:28] <Tim_Smart> But you don't really want to convert to dom... go regex
+[23:28] <Tim_Smart> *so regex
+[23:29] <mklappstuhl> ok, didnt thought its that simple :P
+[23:30] sztanpet has joined the channel
+[23:32] creationix has joined the channel
+[23:37] JimBastard has joined the channel
+[23:40] Aria has joined the channel
+[23:42] gerad has joined the channel
+[23:44] visnup has joined the channel
+[23:47] hpoydar has joined the channel
+[23:47] <_announcer> Twitter: "Post new about node.js in http://dev.com.mx/node-js" [es] -- Marcel Miranda. http://twitter.com/devcommx/status/16886412981
+[23:48] hpoydar has joined the channel
+[23:48] <_announcer> Twitter: "Any Node hackers want to enter http://nodeknockout.com with me? #nodejs" -- James Coglan. http://twitter.com/jcoglan/status/16886447655
+[23:48] twomashi has joined the channel
+[23:49] <_announcer> Twitter: "I'm proud to be one of the judges at this year's Node.js Knockout: http://nodeknockout.com/judging — Node devs, sign up!" -- David Kaneda. http://twitter.com/DavidKaneda/status/16886485719
+[23:49] JAAulde has joined the channel
+[23:51] <JAAulde> is 'global' to node what 'window' is to browser js?
+[23:51] <visnup> ryah: someone asked what version of node we think we're targeting for knockout and/or if the api is expected to greatly change before then. any input?
+[23:51] <JAAulde> I tried referencing global.require but it bombed, so it made me wonder
+[23:53] <visnup> ryah: it'll help inform how joyent wants to setup the smartmachines and we can prod heroku to make sure they're at the same version.
+[23:54] <joshthecoder> visnup: any idea when heroku will make node.js public?
+[23:55] <visnup> joshthecoder: I don't have specifics. we've only talked with them insofar as making sure we can get accounts for knockout
+[23:55] <joshthecoder> I'd like to try them out for the contest, but would be nice if we could play with it before hand
+[23:55] <JAAulde> visnup: are you with heroku?
+[23:55] <visnup> joshthecoder: ah, good point. 
+[23:56] <visnup> JAAulde: nope, just a knockout organizer
+[23:56] <JAAulde> ah, cool
+[23:56] <visnup> going to try to meet with heroku next week and bring those things up.
+[23:56] <JAAulde> neat
+[23:56] <JAAulde> i have a heroku acct and was just messing with it
+[23:56] robrighter has joined the channel
+[23:57] <visnup> joshthecoder: getting in on the private beta is pretty easy though.
+[23:57] <joshthecoder> I have never used them (not a ruby dev), but I think it would be a nice platform for node
+[23:57] <JAAulde> i never get time to do anything with it though
+[23:57] <joshthecoder> visnup: cool maybe I'll try emailing them to get in then
+[23:57] <JAAulde> joshthecoder: i don't do any ruby either, but i had set up an acct months ago in hoping to get time to learn ruby
+[23:57] <JAAulde> then they rolled out the node beta and I jumped on it
+[23:58] joshbuddy has joined the channel
+[23:58] <joshthecoder> really need to work on my node skills before the contest :)
+[23:58] <JAAulde> heh
+[23:58] <visnup> joshthecoder: try nodejs@heroku.com along with heroku.com/contact
+[23:59] <JAAulde> what OS you run?
+[23:59] <joshthecoder> visnup: thanks

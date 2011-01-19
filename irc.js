@@ -9,7 +9,6 @@ var eyes = require('eyes'),
 
 eyes.inspect(options);
 
-
 for(loopTime = options.startTime; loopTime < options.endTime; loopTime += 86400000)
 {
   var date = new Date(loopTime),
@@ -26,23 +25,14 @@ for(loopTime = options.startTime; loopTime < options.endTime; loopTime += 864000
   }
   
   var str = year + '-' + month + '-' + day + '.txt';
-  //var str = date.getYear().toString() + date.getDay().toString() + date.getMonth().toString();
-//  console.log(str);
-  
   
   // check if we already have a log file for this entry
-  
   (function(str){
-  
    fs.stat('./logs/' + str, function(err, result){
-     
-     
      if(err == null){
        return;
      }
-     
      console.log('trying to get ' + options.logSource + str);
-     
      request({
        uri: options.logSource + str,
        method: 'GET',
@@ -53,8 +43,6 @@ for(loopTime = options.startTime; loopTime < options.endTime; loopTime += 864000
           console.log('bad request');
           return false;
         }
-
-
       fs.writeFile('./logs/' + str, body, function(err, result){
         if(err){
           console.log('file NOT created ' + str);
@@ -63,15 +51,9 @@ for(loopTime = options.startTime; loopTime < options.endTime; loopTime += 864000
 
         console.log('file created ' + str);
       });
-
-
      });
    });
-  
-       })(str)
-
-
-
+})(str)
 
 }
 
